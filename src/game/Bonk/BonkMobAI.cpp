@@ -328,7 +328,9 @@ void BonkMobAI::Install(Creature* creature)
 
 Player* BonkMobAI::GetOwner() const
 {
-    return m_creature->GetMap()->GetPlayer(m_ownerGuid);
+    Player* owner = m_creature->GetMap()->GetPlayer(m_ownerGuid);
+    BonkRun* run = owner ? owner->GetBonkPlayer()->GetRun() : nullptr;
+    return run && run->IsCoop() ? run->GetCoopTarget(m_creature) : owner;
 }
 
 void BonkMobAI::Setup(BonkSpawnKind kind)
@@ -1542,6 +1544,23 @@ void BonkMobAI::ResolveArea(Player* owner)
         }
         else
             Cast(*ability, owner, true);
+
+        BonkRun* partner = run ? run->GetCoopPartner() : nullptr;
+        Player* friendHero = partner ? partner->GetHero() : nullptr;
+        if (friendHero && friendHero->GetMap() == owner->GetMap() && friendHero->IsAlive() &&
+            !friendHero->GetBonkPlayer()->IsDashInvulnerable())
+        {
+            PredictPlayer(friendHero, 0, x, y, z);
+            if ((ability->shape == BONK_SHAPE_CONE || ability->shape == BONK_SHAPE_NOVA) &&
+                IsInBonkTelegraph(GetHeldShape(ability->shape), m_areaX, m_areaY, m_areaOrientation, ability->size, x, y))
+                StrikeOwner(friendHero, *ability, x, y, z);
+            else if ((ability->shape == BONK_SHAPE_SHOCKWAVE || ability->shape == BONK_SHAPE_SPOKES) && IsInLines(x, y))
+            {
+                StrikeOwner(friendHero, *ability, x, y, z);
+                if (friendHero->IsAlive())
+                    KnockBackHero(friendHero, std::atan2(y - m_areaY, x - m_areaX));
+            }
+        }
     }
 
     ResumeChase(owner);
@@ -1640,6 +1659,7 @@ void BonkMobAI::Dash(Player* owner)
     m_dashFromX = m_creature->GetPositionX();
     m_dashFromY = m_creature->GetPositionY();
     m_dashHit = false;
+    m_coopDashHit = false;
     m_creature->SendPlaySpellVisualKit(BONK_KIT_CHARGE_TRAIL);
     m_creature->GetMotionMaster()->MovePoint(0, m_dashX, m_dashY, m_dashZ, MOVE_RUN_MODE | MOVE_FORCE_DESTINATION, BONK_CHARGE_SPEED);
 }
@@ -1647,23 +1667,32 @@ void BonkMobAI::Dash(Player* owner)
 void BonkMobAI::UpdateDash(Player* owner)
 {
     float const toX = m_creature->GetPositionX(), toY = m_creature->GetPositionY();
-    if (!m_dashHit && owner->IsAlive() && !owner->GetBonkPlayer()->IsDashInvulnerable())
+    auto strike = [&](Player* hero, bool& hit)
+    {
+    if (!hit && hero->IsAlive() && !hero->GetBonkPlayer()->IsDashInvulnerable())
     {
         float x, y, z;
-        PredictPlayer(owner, 0, x, y, z);
+        PredictPlayer(hero, 0, x, y, z);
         float const segX = toX - m_dashFromX, segY = toY - m_dashFromY;
         float const segLength2 = segX * segX + segY * segY;
         float const along = segLength2 > 0.0f ? std::max(0.0f, std::min(1.0f, ((x - m_dashFromX) * segX + (y - m_dashFromY) * segY) / segLength2)) : 0.0f;
         float const dx = x - (m_dashFromX + along * segX), dy = y - (m_dashFromY + along * segY);
         if (dx * dx + dy * dy <= BONK_CHARGE_CONTACT * BONK_CHARGE_CONTACT && std::fabs(z - m_creature->GetPositionZ()) < 3.0f)
         {
-            m_dashHit = true;
+            hit = true;
             int32 const damage = std::max(1, int32(GetMeleeHit() * m_chargeDamage));
-            m_creature->CastCustomSpell(owner, BONK_SPELL_CHARGE_HIT, damage, {}, {}, true);
-            if (owner->IsAlive())
-                KnockBackHero(owner, m_chargeAngle);
+            m_creature->CastCustomSpell(hero, BONK_SPELL_CHARGE_HIT, damage, {}, {}, true);
+            if (hero->IsAlive())
+                KnockBackHero(hero, m_chargeAngle);
         }
     }
+    };
+    Player* anchor = m_creature->GetMap()->GetPlayer(m_ownerGuid);
+    strike(anchor ? anchor : owner, m_dashHit);
+    BonkRun* run = anchor ? anchor->GetBonkPlayer()->GetRun() : nullptr;
+    if (BonkRun* partner = run ? run->GetCoopPartner() : nullptr)
+        if (partner->GetHero()->GetMap() == m_creature->GetMap())
+            strike(partner->GetHero(), m_coopDashHit);
     m_dashFromX = toX;
     m_dashFromY = toY;
 }
@@ -1696,7 +1725,8 @@ void BonkMobAI::DamageDeal(Unit* victim, uint32& damage)
     if (!damage || victim == m_creature)
         return;
 
-    if (victim->GetObjectGuid() == m_ownerGuid)
+    if (victim->IsPlayer() && static_cast<Player*>(victim)->GetBonkPlayer()->GetRun() &&
+        static_cast<Player*>(victim)->GetBonkPlayer()->GetRun()->OwnsEnemy(m_ownerGuid))
         if (BonkRun* run = static_cast<Player*>(victim)->GetBonkPlayer()->GetRun())
         {
             if (static_cast<Player*>(victim)->GetBonkPlayer()->IsDashInvulnerable())
@@ -1722,10 +1752,12 @@ void BonkMobAI::DamageTaken(Unit* attacker, uint32& damage)
     if (m_fleeing && m_blinks && damage && damage < m_creature->GetHealth() && m_blinkTimer <= 0)
         m_blinkPending = true;
 
-    if (!damage || !attacker || attacker->GetObjectGuid() != m_ownerGuid)
+    if (!damage || !attacker)
         return;
 
-    if (BonkRun* run = static_cast<Player*>(attacker)->GetBonkPlayer()->GetRun())
+    Player* hero = attacker->GetCharmerOrOwnerPlayerOrPlayerItself();
+    BonkRun* run = hero ? hero->GetBonkPlayer()->GetRun() : nullptr;
+    if (run && run->OwnsEnemy(m_ownerGuid))
     {
         run->ModifyHeroHit(m_creature, damage);
         run->OnWeaponDamage(std::min(damage, m_creature->GetHealth()));
@@ -1976,10 +2008,14 @@ void BonkMobAI::JustDied(Unit* killer)
     if (m_creature->HasStaticFlag(CREATURE_STATIC_FLAG_DESPAWN_INSTANTLY))
         m_creature->DespawnOrUnsummon(BONK_DEAD_REMOVE_MS);
 
-    Player* owner = GetOwner();
+    Player* owner = m_creature->GetMap()->GetPlayer(m_ownerGuid);
     if (!owner)
         return;
 
     if (BonkRun* run = owner->GetBonkPlayer()->GetRun())
+    {
+        if (run->IsCoopFollower() && run->GetCoopPartner())
+            run = run->GetCoopPartner();
         run->OnMobKilled(m_creature, m_kind, killer);
+    }
 }

@@ -48,6 +48,12 @@ class BonkPlayer
         bool StartSandbox(std::string& error);
         bool IsInSandbox() const;
         void StopRun();
+        bool IsCoopReady() const { return m_coopTier != 0; }
+        Player* GetCoopFriend() const;
+        void UpdateCoop(uint32 diff);
+        void SendCoopStatus();
+        bool CanStartRun(BonkTier const& tier, std::string& error, BonkRunChoice const& choice) const;
+        bool StartCoopRun(BonkTier const& tier, std::string& error, BonkRunChoice const& choice);
 
         static std::vector<BonkTier const*> GetTiersInOrder();
         uint32 GetBestStage(uint32 tierId) const;
@@ -197,7 +203,7 @@ class BonkPlayer
         void SetTestGod(bool on) { m_testGod = on; }
         bool IsTestGod() const { return m_testGod; }
 
-        void SetAddonReady() { m_addonReady = true; m_zoneArtSent = false; }
+        void SetAddonReady() { m_addonReady = true; m_zoneArtSent = false; m_coopStatus.clear(); }
         bool IsAddonReady() const { return m_addonReady; }
 
         void SendAddon(std::string const& line) const;
@@ -271,6 +277,13 @@ class BonkPlayer
 
         Player* m_player;
         std::unique_ptr<BonkRun> m_run;
+        uint32 m_coopTimer = 0;
+        uint32 m_coopReadyMs = 0;
+        uint32 m_coopTier = 0;
+        uint32 m_coopStartMap = 0;
+        uint32 m_coopDungeon = 0;
+        bool m_coopInvade = false;
+        std::string m_coopStatus;
         BonkTelegraphs m_previewTelegraphs;
         bool m_addonReady = false;
         mutable bool m_zoneArtSent = false;

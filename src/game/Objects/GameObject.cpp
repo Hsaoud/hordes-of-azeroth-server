@@ -1131,6 +1131,9 @@ void GameObject::SetVisible(bool b)
 
 bool GameObject::IsVisibleForInState(WorldObject const* pDetector, WorldObject const* viewPoint, bool inVisibleList) const
 {
+    if (pDetector->IsPlayer() && GetOwnerGuid().IsPlayer() && GetOwnerGuid() != pDetector->GetObjectGuid() &&
+        (GetEntry() == 900001 || GetEntry() == 900002 || GetEntry() == 900003 || GetEntry() == 900041 || GetEntry() == 900007 || GetEntry() == 900008))
+        return false;
     // Not in world
     if (!IsInWorld() || !pDetector->IsInWorld())
         return false;

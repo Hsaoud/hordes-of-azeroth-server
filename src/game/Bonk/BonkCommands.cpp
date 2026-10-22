@@ -122,7 +122,7 @@ bool ChatHandler::HandleBonkStartCommand(char* args)
 bool ChatHandler::HandleBonkStopCommand(char*)
 {
     BonkPlayer* bonk = m_session->GetPlayer()->GetBonkPlayer();
-    if (!bonk->GetRun())
+    if (!bonk->GetRun() && !bonk->IsCoopReady())
     {
         SendSysMessage("You are not in a run.");
         SetSentErrorMessage(true);

@@ -16,6 +16,7 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "SpellAuras.h"
+#include "TemporarySummon.h"
 #include "World.h"
 #include "WorldSession.h"
 
@@ -520,6 +521,8 @@ void BonkPlayer::RecordRun(uint32 stage, uint32 seconds, uint32 kills, uint32 go
 
 void BonkPlayer::WriteHeroScreenStats() const
 {
+    if (sConfig.GetBoolDefault("Bonk.Coop", false) && m_player->GetSession()->GetUsername() != "PLAYER")
+        return;
     std::string const path = sConfig.GetStringDefault("Bonk.GlueStatsFile", "");
     if (path.empty() || !m_goldLoaded)
         return;
@@ -1457,6 +1460,7 @@ void BonkPlayer::PreviewTelegraph(BonkTelegraphShape shape, float x, float y, fl
 
 void BonkPlayer::Update(uint32 diff)
 {
+    UpdateCoop(diff);
     if (m_campCheckPending && !m_player->IsBeingTeleported())
     {
         m_campCheckPending = false;
@@ -1635,6 +1639,23 @@ bool BonkPlayer::StartRun(BonkTier const& tier, std::string& error)
 
 bool BonkPlayer::StartRun(BonkTier const& tier, std::string& error, BonkRunChoice const& choice)
 {
+    if (sConfig.GetBoolDefault("Bonk.Coop", false))
+        return StartCoopRun(tier, error, choice);
+    if (!CanStartRun(tier, error, choice))
+        return false;
+
+    TrimPoolToggles();
+    m_run.reset(new BonkRun(m_player, tier, choice));
+    if (!m_run->Begin(error))
+    {
+        m_run.reset();
+        return false;
+    }
+    return true;
+}
+
+bool BonkPlayer::CanStartRun(BonkTier const& tier, std::string& error, BonkRunChoice const& choice) const
+{
     if (m_run)
     {
         error = "You are already in a run. Use .bonk stop to leave it.";
@@ -1671,13 +1692,6 @@ bool BonkPlayer::StartRun(BonkTier const& tier, std::string& error, BonkRunChoic
         return false;
     }
 
-    TrimPoolToggles();
-    m_run.reset(new BonkRun(m_player, tier, choice));
-    if (!m_run->Begin(error))
-    {
-        m_run.reset();
-        return false;
-    }
     return true;
 }
 
@@ -1685,6 +1699,14 @@ void BonkPlayer::StopRun()
 {
     if (m_run)
         m_run->Surrender();
+    else if (m_coopTier)
+    {
+        m_coopTier = 0;
+        Notify("You are no longer ready.");
+        SendCoopStatus();
+        if (Player* other = GetCoopFriend())
+            other->GetBonkPlayer()->SendCoopStatus();
+    }
 }
 
 std::vector<BonkTier const*> BonkPlayer::GetTiersInOrder()
@@ -1761,6 +1783,15 @@ void BonkPlayer::SendAddon(std::string const& line) const
         return;
 
     ChatHandler(m_player).SendSysMessage(("BONK~" + line).c_str());
+    if (m_run)
+    {
+        bool const shared = line.compare(0, 4, "mob~") == 0 || (!m_run->IsCoopFollower() &&
+            (line.compare(0, 9, "objective") == 0 || line.compare(0, 5, "beat~") == 0 ||
+             line.compare(0, 11, "eventtimer~") == 0 || line.compare(0, 8, "allydone") == 0 || line.compare(0, 5, "ally~") == 0));
+        if (shared)
+            if (BonkRun* partner = m_run->GetCoopPartner())
+                ChatHandler(partner->GetHero()).SendSysMessage(("BONK~" + line).c_str());
+    }
 }
 
 uint32 BonkPlayer::GetPoolToggleSlots() const
@@ -2141,6 +2172,15 @@ bool BonkPlayer::HasUnreadMail() const
 
 bool BonkPlayer::IsHiddenFrom(Creature const* creature, Player const* viewer)
 {
+    uint32 const entry = creature->GetEntry();
+    bool const personal = entry == BONK_ORB_SMALL || entry == BONK_ORB_LARGE || entry == BONK_ORB_HUGE || entry == BONK_ORB_GRAND ||
+        entry == BONK_HEAL_PICKUP;
+    if (personal && creature->IsTemporarySummon())
+    {
+        ObjectGuid const owner = static_cast<TemporarySummon const*>(creature)->GetSummonerGuid();
+        if (owner.IsPlayer() && owner != viewer->GetObjectGuid())
+            return true;
+    }
     return creature->GetEntry() == BONK_MAILBOX_BEACON && !viewer->GetBonkPlayer()->HasUnreadMail();
 }
 

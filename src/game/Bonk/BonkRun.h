@@ -94,6 +94,18 @@ class BonkRun
         bool IsInvasion() const { return m_invaderId != 0; }
 
         bool Begin(std::string& error);
+        void LinkCoop(ObjectGuid partner, bool follower);
+        BonkRun* GetCoopPartner() const;
+        bool IsCoop() const { return !m_coopPartner.IsEmpty(); }
+        bool IsCoopFollower() const { return IsCoop() && m_coopFollower; }
+        Player* GetHero() const { return m_player; }
+        bool OwnsEnemy(ObjectGuid owner) const;
+        Player* GetCoopTarget(Creature const* mob) const;
+        void SyncCoop();
+        void RefreshCoopPause();
+        void SetPausedLocal(bool paused);
+        void EndCoop(bool wentHome, bool abort = false);
+        void CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer);
         void Update(uint32 diff);
         void Abort();
         void Surrender();
@@ -962,6 +974,12 @@ class BonkRun
         std::set<uint32> m_playedMaps;
         State m_state = STATE_ENTERING;
         bool m_paused = false;
+        ObjectGuid m_coopPartner;
+        bool m_coopFollower = false;
+        bool m_coopPauseWanted = false;
+        bool m_coopPortalReady = false;
+        bool m_coopEnding = false;
+        float m_coopX = 0.0f, m_coopY = 0.0f, m_coopZ = 0.0f, m_coopO = 0.0f;
         bool m_wentHome = false;
 
         uint32 m_enterTimer = 0;

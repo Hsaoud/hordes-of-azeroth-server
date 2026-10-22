@@ -198,6 +198,7 @@ class BonkMobAI : public CreatureAI
         float m_dashX = 0.0f, m_dashY = 0.0f, m_dashZ = 0.0f;
         float m_dashFromX = 0.0f, m_dashFromY = 0.0f;
         bool m_dashHit = false;
+        bool m_coopDashHit = false;
         ObjectGuid m_boltTarget;
         uint32 m_boltSpell = 0;
         uint32 m_boltDamage = 0;
