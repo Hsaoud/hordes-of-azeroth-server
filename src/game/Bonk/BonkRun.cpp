@@ -1097,6 +1097,7 @@ void BonkRun::Update(uint32 diff)
     RefreshHeroPositionNow();
     if (m_runXpDirty)
         UpdateRunXp(false);
+    if (UpdateCoopRescue(diff)) return;
 
     if (m_paused)
         HoldAuraTimers(diff);
@@ -1251,7 +1252,7 @@ void BonkRun::StartStage()
         if (!m_sandbox)
         {
             GiveStartCard();
-            GiveStartLevels();
+            if (!IsCoopFollower()) GiveStartLevels();
             if (GetUtility(BONK_UTILITY_START_GLYPH) > 0.0f)
                 QueueGlyphPick();
         }
@@ -3831,6 +3832,7 @@ GameObject* BonkRun::PlaceObject(uint32 entry, float x, float y, float z, uint32
 
 bool BonkRun::SpawnChest(bool free, float x, float y, float z, uint32 choices)
 {
+    if (IsCoopFollower()) return GetCoopLeader()->SpawnChest(free, x, y, z, choices);
     GameObject* chest = PlaceObject(free ? BONK_GO_CHEST_FREE : BONK_GO_CHEST, x, y, z, BONK_OBJECT_LIFETIME_SEC);
     if (!chest)
         return false;
@@ -3960,6 +3962,7 @@ void BonkRun::SpawnPowerup(WorldObject const* at)
 
 GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, float z, uint32 lifetimeSeconds)
 {
+    if (IsCoopFollower()) return GetCoopLeader()->PlacePowerup(powerup, x, y, z, lifetimeSeconds);
     bool const lasting = powerup.effect == BONK_POWERUP_MAGNET;
     GameObject* go = PlaceObject(powerup.entry, x, y, z, lasting ? BONK_OBJECT_LIFETIME_SEC : lifetimeSeconds);
     if (!go)
@@ -4005,6 +4008,7 @@ bool BonkRun::PlacePowerupNow(uint32 entry, std::string& error)
 
 void BonkRun::UpdatePowerups(uint32 diff, bool spawn)
 {
+    if (IsCoopFollower()) return;
     m_powerupCheckTimer += diff;
     if (m_powerupCheckTimer < BONK_POWERUP_CHECK_MS)
         return;
@@ -4012,8 +4016,8 @@ void BonkRun::UpdatePowerups(uint32 diff, bool spawn)
     m_powerupCheckTimer = 0;
 
     Map* map = m_player->GetMap();
-    float heroX, heroY, heroZ;
-    GetHeroPositionNow(m_player, heroX, heroY, heroZ);
+    auto heroes = GetCoopRuns();
+    if (heroes.empty()) heroes.push_back(this);
     for (auto itr = m_powerups.begin(); itr != m_powerups.end();)
     {
         GameObject* go = map->GetGameObject(*itr);
@@ -4024,7 +4028,16 @@ void BonkRun::UpdatePowerups(uint32 diff, bool spawn)
             continue;
         }
 
-        if (GetHeroDistance(m_player, heroX, heroY, heroZ, go) > BONK_POWERUP_PICKUP_RANGE)
+        bool picked = false;
+        for (BonkRun* run : heroes)
+        {
+            Player* hero = run->m_player;
+            if (!hero->IsAlive() || hero->GetMap() != map || hero->IsBeingTeleported()) continue;
+            float x, y, z;
+            GetHeroPositionNow(hero, x, y, z);
+            if (GetHeroDistance(hero, x, y, z, go) <= BONK_POWERUP_PICKUP_RANGE) { picked = true; break; }
+        }
+        if (!picked)
         {
             ++itr;
             continue;
@@ -4040,7 +4053,7 @@ void BonkRun::UpdatePowerups(uint32 diff, bool spawn)
         {
             bool const thing = powerup->effect == BONK_POWERUP_MAGNET || powerup->effect == BONK_POWERUP_VALOR;
             m_player->GetBonkPlayer()->Notify("You picked up " + std::string(thing ? "a " : "") + name + "!");
-            UsePowerup(*powerup);
+            for (BonkRun* run : heroes) if (run->m_player->IsAlive()) run->UsePowerup(*powerup);
         }
     }
 
@@ -4154,8 +4167,11 @@ void BonkRun::RemoveObjective(uint32 id)
     }
 }
 
-void BonkRun::UseChest(GameObject* chest)
+void BonkRun::UseChest(GameObject* chest, BonkRun* opener)
 {
+    if (!opener) opener = this;
+    if (!opener->m_player->IsAlive() || opener->m_player->GetMap() != chest->GetMap()) return;
+    if (IsCoopFollower()) { GetCoopLeader()->UseChest(chest, opener); return; }
     if (m_state != STATE_RUNNING && m_state != STATE_PORTAL)
         return;
 
@@ -4163,42 +4179,48 @@ void BonkRun::UseChest(GameObject* chest)
     if (itr == m_chests.end())
         return;
 
-    BonkPlayer* bonk = m_player->GetBonkPlayer();
+    BonkPlayer* bonk = opener->m_player->GetBonkPlayer();
     if (chest->GetEntry() != BONK_GO_CHEST_FREE)
     {
-        uint32 const cost = GetChestPrice();
-        if (m_coins < cost)
+        uint32 const cost = opener->GetChestPrice();
+        if (opener->m_coins < cost)
         {
-            bonk->Notify("This chest costs " + std::to_string(cost) + " Valor. You have " + std::to_string(m_coins) + ".");
+            bonk->Notify("This chest costs " + std::to_string(cost) + " Valor. You have " + std::to_string(opener->m_coins) + ".");
             return;
         }
-        if (RollFreeChest())
+        if (opener->RollFreeChest())
             bonk->Notify("Your Arcanite Skeleton Key opened this chest for free!");
         else
         {
-            m_coins -= cost;
-            ++m_chestsBought;
+            opener->m_coins -= cost;
+            ++opener->m_chestsBought;
         }
-        sBonkQuests.OnProgress(m_player, BONK_QUEST_CHESTS_BOUGHT, 0, 1);
+        sBonkQuests.OnProgress(opener->m_player, BONK_QUEST_CHESTS_BOUGHT, 0, 1);
     }
 
     ForgetChestObjective(*itr);
     m_chests.erase(itr);
-    if (BonkGlyph const* rigged = GetGlyph(BONK_GLYPH_CHEST_TRAP))
-        if (roll_chance_f(rigged->values[0]) && m_player->IsAlive())
+    if (BonkGlyph const* rigged = opener->GetGlyph(BONK_GLYPH_CHEST_TRAP))
+        if (roll_chance_f(rigged->values[0]) && opener->m_player->IsAlive())
         {
-            m_player->SendPlaySpellVisualKit(BONK_KIT_CHEST_TRAP);
-            m_player->EnvironmentalDamage(DAMAGE_FIRE, std::max(1u, uint32(m_player->GetMaxHealth() * rigged->values[1] / 100.0f)));
+            opener->m_player->SendPlaySpellVisualKit(BONK_KIT_CHEST_TRAP);
+            opener->m_player->EnvironmentalDamage(DAMAGE_FIRE, std::max(1u, uint32(opener->m_player->GetMaxHealth() * rigged->values[1] / 100.0f)));
             bonk->Notify("Boom! That chest was rigged.");
         }
     auto choices = m_chestChoices.find(chest->GetObjectGuid());
-    m_pendingChestChoices.push_back(choices != m_chestChoices.end() ? choices->second : uint32(BONK_OFFER_SIZE));
+    uint32 const count = choices != m_chestChoices.end() ? choices->second : uint32(BONK_OFFER_SIZE);
     if (choices != m_chestChoices.end())
         m_chestChoices.erase(choices);
     chest->Delete();
 
-    UpdateOffers();
-    SendState();
+    auto runs = GetCoopRuns();
+    if (runs.empty()) runs.push_back(this);
+    for (BonkRun* run : runs)
+    {
+        run->m_pendingChestChoices.push_back(count);
+        run->UpdateOffers();
+        run->SendState();
+    }
 }
 
 bool BonkRun::IsOwnPortal(GameObject const* portal) const
@@ -9141,7 +9163,7 @@ bool BonkRun::SpawnOrb(float x, float y, float z, uint32 experience, BonkOrb col
         TEMPSUMMON_TIMED_DESPAWN, BONK_ORB_LIFETIME_MS, false, 0, &InstallOrbAI);
     if (!orb)
     {
-        GiveExperience(experience);
+        GiveCoopExperience(experience);
         return false;
     }
 
@@ -9281,6 +9303,7 @@ void BonkRun::FinishOrbMerge(OrbMerge const& merge)
 
 void BonkRun::UpdateOrbs(uint32 diff)
 {
+    if (IsCoopFollower()) return;
     UpdateOrbMerges(diff);
 
     m_orbTimer += diff;
@@ -9288,17 +9311,30 @@ void BonkRun::UpdateOrbs(uint32 diff)
         return;
     m_orbTimer = 0;
 
-    float const magnet = GetMagnetRange();
+    auto heroes = GetCoopRuns();
+    if (heroes.empty()) heroes.push_back(this);
     Map* map = m_player->GetMap();
-    float heroX, heroY, heroZ;
-    BonkPlayer const* bonk = m_player->GetBonkPlayer();
-    GetHeroChestPositionNow(m_player, !bonk->IsDashSettling(), heroX, heroY, heroZ);
-    bool const holdAim = bonk->IsDashMoving();
     uint32 collected = 0;
     for (auto itr = m_orbs.begin(); itr != m_orbs.end();)
     {
         Creature* orb = map->GetCreature(itr->guid);
-        float const distance = orb ? GetHeroDistance(m_player, heroX, heroY, heroZ, orb) : 0.0f;
+        float distance = 100000.0f, heroX = 0, heroY = 0, heroZ = 0, magnet = 0;
+        bool holdAim = false;
+        for (BonkRun* run : heroes)
+        {
+            Player* hero = run->m_player;
+            if (!hero->IsAlive() || hero->GetMap() != map || hero->IsBeingTeleported()) continue;
+            float x, y, z;
+            GetHeroChestPositionNow(hero, !hero->GetBonkPlayer()->IsDashSettling(), x, y, z);
+            float const range = orb ? GetHeroDistance(hero, x, y, z, orb) : 0.0f;
+            if (range < distance)
+            {
+                distance = range;
+                heroX = x; heroY = y; heroZ = z;
+                magnet = run->GetMagnetRange();
+                holdAim = hero->GetBonkPlayer()->IsDashMoving();
+            }
+        }
 
         if (!orb || distance <= BONK_ORB_PICKUP_RANGE)
         {
@@ -9332,11 +9368,12 @@ void BonkRun::UpdateOrbs(uint32 diff)
     }
 
     if (collected)
-        GiveExperience(collected);
+        GiveCoopExperience(collected);
 }
 
 void BonkRun::PullAllOrbs()
 {
+    if (IsCoopFollower()) { GetCoopLeader()->PullAllOrbs(); return; }
     Map* map = m_player->GetMap();
     float heroX, heroY, heroZ;
     GetHeroChestPositionNow(m_player, !m_player->GetBonkPlayer()->IsDashSettling(), heroX, heroY, heroZ);
@@ -9357,13 +9394,14 @@ void BonkRun::PullAllOrbs()
 
 void BonkRun::CollectAllOrbs()
 {
+    if (IsCoopFollower()) return;
     uint32 collected = 0;
     for (Orb const& orb : m_orbs)
         collected += orb.experience;
     m_orbsSinceXpSent += uint32(m_orbs.size());
     DespawnOrbs();
     if (collected)
-        GiveExperience(collected);
+        GiveCoopExperience(collected);
 }
 
 Creature* BonkRun::SummonCaravan(uint32 entry, float x, float y, float z, float orientation)
@@ -9752,11 +9790,13 @@ void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer)
     if (HasCard(BONK_CARD_KILL_POWER))
         ++m_cardKills;
 
-    if (kind != BONK_SPAWN_BOSS)
+    if (kind != BONK_SPAWN_BOSS && !IsCoopFollower())
     {
         uint32 const level = m_player->GetLevel() + m_overcapLevel;
         float const killsForLevel = 4.0f + 1.5f * level + 0.05f * level * level;
-        float const growth = 1.0f + GetPassiveTotal(BONK_PASSIVE_GROWTH) / 100.0f;
+        float growth = GetPassiveTotal(BONK_PASSIVE_GROWTH);
+        for (BonkRun* run : GetCoopRuns()) growth = std::max(growth, run->GetPassiveTotal(BONK_PASSIVE_GROWTH));
+        growth = 1.0f + growth / 100.0f;
 
         float experience = reward;
         if (kind == BONK_SPAWN_ELITE && GetGlyph(BONK_GLYPH_HUNT))
@@ -9778,7 +9818,7 @@ void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer)
     {
         if (!eventPaysChest && !m_sandbox)
         {
-            DropChest(mob, kind);
+            if (!IsCoopFollower()) DropChest(mob, kind);
             DropGear(mob, kind);
         }
         if (!IsCoopFollower())
@@ -9792,7 +9832,7 @@ void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer)
     if (!m_sandbox)
         DropShards(mob, kind);
     DropHeal(mob, kind);
-    if (kind == BONK_SPAWN_ELITE && GetGlyph(BONK_GLYPH_SCAVENGER) && !eventGroup)
+    if (!IsCoopFollower() && kind == BONK_SPAWN_ELITE && GetGlyph(BONK_GLYPH_SCAVENGER) && !eventGroup)
         SpawnPowerup(mob);
     OnGlyphKill(mob, kind);
     ObjectGuid const hiddenBoss = m_hidden.boss;
@@ -10309,6 +10349,11 @@ bool BonkRun::RefreshKeptOffer(Offer& offer) const
 
 bool BonkRun::OfferUpgrades(OfferSource source, std::vector<Offer> const* avoid, std::vector<Offer> const* kept, std::vector<Offer>* drawn)
 {
+    std::vector<Offer> partyAvoid = avoid ? *avoid : std::vector<Offer>();
+    for (BonkRun* run : GetCoopRuns())
+        if (run != this && run->m_offerSource == source)
+            partyAvoid.insert(partyAvoid.end(), run->m_offer.begin(), run->m_offer.end());
+    if (!partyAvoid.empty()) avoid = &partyAvoid;
     struct Candidate
     {
         Offer offer;
@@ -11246,6 +11291,8 @@ void BonkRun::SetPausedLocal(bool paused)
     if (m_paused == paused)
         return;
     m_paused = paused;
+    m_player->GetBonkPlayer()->SendAddon(std::string("pause~") + (paused ? "1" : "0"));
+    m_player->GetBonkPlayer()->SendDash();
     if (paused)
         m_pausedAtMs = WorldTimer::getMSTime();
     else
@@ -11436,6 +11483,11 @@ void BonkRun::Abort()
 
 void BonkRun::Surrender()
 {
+    if (HoldCoopDeath())
+    {
+        m_player->GetBonkPlayer()->Notify("An ally can revive you. Stay with the expedition until the party is defeated.");
+        return;
+    }
     if (m_sandbox)
         LeaveSandbox();
     else if (m_state == STATE_RUNNING)

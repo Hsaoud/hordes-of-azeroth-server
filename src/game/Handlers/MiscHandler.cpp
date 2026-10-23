@@ -45,11 +45,13 @@
 #include "Anticheat.h"
 #include "MasterPlayer.h"
 #include "Bonk/BonkPlayer.h"
+#include "Bonk/BonkRun.h"
 
 void WorldSession::HandleRepopRequestOpcode(NullClientPacket const& /*packet*/)
 {
     // recv_data.read_skip<uint8>(); client crash
 
+    if (_player->GetBonkPlayer()->GetRun() && _player->GetBonkPlayer()->GetRun()->HoldCoopDeath()) return;
     if (_player->IsAlive() || _player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST))
         return;
 

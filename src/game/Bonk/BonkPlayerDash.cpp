@@ -56,7 +56,10 @@ bool BonkPlayer::Dash()
     if (m_run && ((!m_run->IsActive() && !m_run->IsPortalOpen()) || m_run->IsPaused()))
         return false;
     if (m_dashSpent >= GetDashMaxCharges())
+    {
+        SendDash();
         return false;
+    }
     if (!m_player->IsInWorld() || !m_player->IsAlive() || m_player->IsBeingTeleported() || m_player->IsTaxiFlying())
         return false;
     if (m_player->HasUnitState(UNIT_STATE_STUNNED | UNIT_STATE_ROOT) || !m_player->movespline->Finalized() ||
@@ -185,5 +188,5 @@ void BonkPlayer::SendDash() const
     uint32 const maxCharges = GetDashMaxCharges();
     SendAddon("dash~" + std::to_string(maxCharges - std::min(m_dashSpent, maxCharges)) + "~" + std::to_string(maxCharges) + "~" +
         std::to_string(m_dashSpent ? m_dashRechargeMs : 0) + "~" + std::to_string(GetDashCooldownMs()) + "~" +
-        (m_run && m_run->IsBlinkDash() ? "1" : "0"));
+        (m_run && m_run->IsBlinkDash() ? "1" : "0") + "~" + (IsDashPaused() ? "1" : "0"));
 }

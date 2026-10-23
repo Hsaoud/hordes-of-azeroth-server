@@ -3,6 +3,7 @@
 #include "BonkMobAI.h"
 #include "Config/Config.h"
 #include "Creature.h"
+#include "GameObject.h"
 #include "Group.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -345,7 +346,7 @@ void BonkRun::RefreshCoopPause()
 {
     bool paused = false;
     auto runs = GetCoopRuns();
-    for (BonkRun* run : runs) paused |= run->m_coopPauseWanted || run->m_state == STATE_ENTERING;
+    for (BonkRun* run : runs) paused |= (run->m_player->IsAlive() && run->m_coopPauseWanted) || run->m_state == STATE_ENTERING;
     for (BonkRun* run : runs) run->SetPausedLocal(paused);
 }
 
@@ -365,7 +366,7 @@ bool BonkRun::JoinCoop(BonkRun& source, std::string& error)
 
 void BonkRun::CompleteCoopArrival()
 {
-    if (!m_coopLateJoin) return;
+    if (!IsCoopFollower()) return;
     m_coopLateJoin = false;
     BonkRun* leader = GetCoopLeader();
     if (!leader || leader == this) return;
@@ -375,6 +376,11 @@ void BonkRun::CompleteCoopArrival()
         if (next <= have) break;
         GiveExperience(next - have);
     }
+    m_player->SetUInt32Value(PLAYER_XP, leader->m_player->GetUInt32Value(PLAYER_XP));
+    m_pendingLevels += leader->m_overcapLevel > m_overcapLevel ? leader->m_overcapLevel - m_overcapLevel : 0;
+    m_overcapLevel = leader->m_overcapLevel;
+    m_overcapXp = leader->m_overcapXp;
+    UpdateRunXp(true);
     SyncCoop();
     if (leader->IsPortalOpen())
     {
@@ -411,6 +417,17 @@ void BonkRun::ReadyCoopPortal()
 
 void BonkRun::TransferCoopWorld(BonkRun& next)
 {
+    m_telegraphs.Clear(m_player);
+    next.m_orbs = std::move(m_orbs);
+    next.m_orbMerges = std::move(m_orbMerges);
+    next.m_orbMergeTimer = m_orbMergeTimer;
+    next.m_lastOrbMergeId = m_lastOrbMergeId;
+    next.m_powerups = std::move(m_powerups);
+    next.m_powerupObjectives = std::move(m_powerupObjectives);
+    next.m_powerupSpawnTimer = m_powerupSpawnTimer;
+    next.m_chests = std::move(m_chests);
+    next.m_chestChoices = std::move(m_chestChoices);
+    next.m_chestObjectives = std::move(m_chestObjectives);
     next.m_mobs = std::move(m_mobs);
     next.m_objectives = std::move(m_objectives);
     m_objectives = BonkObjectives();
@@ -457,6 +474,7 @@ void BonkRun::TransferCoopWorld(BonkRun& next)
 
 void BonkRun::EndCoop(bool, bool)
 {
+    ClearCoopGrave();
     if (!m_coop) return;
     auto runs = GetCoopRuns();
     BonkRun* next = nullptr;
@@ -490,4 +508,113 @@ void BonkRun::CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer)
             member->m_bossArrivals = m_bossArrivals;
             member->OnMobKilled(mob, kind, killer);
         }
+}
+
+bool BonkRun::HoldCoopDeath() const
+{
+    return m_coop && !m_player->IsAlive() && (m_state == STATE_RUNNING || m_state == STATE_PORTAL);
+}
+
+void BonkRun::ClearCoopGrave()
+{
+    if (Map* map = m_player->FindMap())
+        if (GameObject* grave = map->GetGameObject(m_coopGrave)) grave->Delete();
+    m_coopGrave.Clear();
+    m_coopRescueVisuals.Clear(m_player);
+    m_coopRescueVisuals.Dismiss(m_player);
+    m_coopRescueShown = false;
+    if (BonkRun* leader = GetCoopLeader())
+        if (m_coopGraveObjective) leader->RemoveObjective(m_coopGraveObjective);
+    m_coopGraveObjective = 0;
+    m_coopRescueMs = 0;
+    m_coopRescueReportMs = 0;
+    auto runs = GetCoopRuns();
+    if (runs.empty()) runs.push_back(this);
+    for (BonkRun* run : runs)
+        run->m_player->GetBonkPlayer()->SendAddon("rescue~" + std::string(m_player->GetName()) + "~0~0~" + (run == this ? "1" : "0"));
+}
+
+bool BonkRun::UpdateCoopRescue(uint32 diff)
+{
+    if (!m_coop || (m_state != STATE_RUNNING && m_state != STATE_PORTAL)) return false;
+    auto runs = GetCoopRuns();
+    BonkRun* living = nullptr;
+    for (BonkRun* run : runs)
+        if (run->m_player->IsAlive() && run->m_state != STATE_ENTERING) { living = run; break; }
+    if (!living)
+    {
+        for (BonkRun* run : runs) if (run->m_state == STATE_ENTERING) return HoldCoopDeath();
+        for (BonkRun* run : runs) run->ClearCoopGrave();
+        for (BonkRun* run : runs) run->Finish(false);
+        return true;
+    }
+    if (!IsCoopFollower() && !m_player->IsAlive())
+    {
+        TransferCoopWorld(*living);
+        m_coop->leader = living->m_player->GetObjectGuid();
+    }
+    if (!IsCoopFollower())
+        for (BonkRun* run : runs)
+        {
+            Player* hero = run->m_player;
+            if (!run->HoldCoopDeath())
+            {
+                if (!run->m_coopGrave.IsEmpty()) run->ClearCoopGrave();
+                continue;
+            }
+            if (hero->GetMap() != m_player->GetMap() || hero->IsBeingTeleported()) continue;
+            if (run->m_coopGrave.IsEmpty())
+            {
+                if (GameObject* grave = hero->SummonGameObject(37, hero->GetPositionX(), hero->GetPositionY(), hero->GetPositionZ(),
+                    hero->GetOrientation(), 0, 0, 0, 0, 3600, false))
+                {
+                    grave->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+                    run->m_coopGrave = grave->GetObjectGuid();
+                }
+                if (!run->m_coopGraveObjective)
+                    run->m_coopGraveObjective = m_objectives.Add(m_player, BONK_OBJECTIVE_SHRINE, hero->GetPositionX(), hero->GetPositionY(),
+                        hero->GetPositionZ(), std::string("Revive ") + hero->GetName(), 0, "Spell_Holy_Resurrection",
+                        "Stay within 6 yards for 6 seconds to revive this ally.");
+            }
+            if (!run->m_coopRescueShown)
+            {
+                run->m_coopRescueVisuals.Add(hero, BONK_TELEGRAPH_CIRCLE, hero->GetPositionX(), hero->GetPositionY(),
+                    hero->GetPositionZ(), 0, 6.0f, 3600000, nullptr, true);
+                run->m_coopRescueShown = true;
+            }
+            run->m_coopRescueVisuals.Update(hero, diff);
+            bool nearby = false;
+            for (BonkRun* ally : runs)
+                if (ally != run && ally->m_player->IsAlive() && ally->m_player->IsInWorld() && !ally->m_player->IsBeingTeleported() &&
+                    ally->m_player->GetMap() == hero->GetMap() && hero->GetDistance3dToCenter(ally->m_player) <= 6.0f &&
+                    hero->IsWithinLOSInMap(ally->m_player)) { nearby = true; break; }
+            if (!nearby) run->m_coopRescueMs = 0;
+            else if (!m_paused) run->m_coopRescueMs = std::min(6000u, run->m_coopRescueMs + diff);
+            run->m_coopRescueReportMs += diff;
+            if (run->m_coopRescueReportMs >= 200)
+            {
+                run->m_coopRescueReportMs = 0;
+                for (BonkRun* member : runs)
+                    member->m_player->GetBonkPlayer()->SendAddon("rescue~" + std::string(hero->GetName()) + "~" +
+                        std::to_string(run->m_coopRescueMs) + "~6000~" + (member == run ? "1" : "0"));
+            }
+            if (run->m_coopRescueMs >= 6000)
+            {
+                hero->ResurrectPlayer(0.5f);
+                hero->SpawnCorpseBones();
+                hero->CastSpell(hero, 1022, true);
+                run->ClearCoopGrave();
+                run->UpdateOffers();
+                for (BonkRun* member : runs)
+                    member->m_player->GetBonkPlayer()->Notify(std::string(hero->GetName()) + " is back in the fight!");
+            }
+        }
+    return HoldCoopDeath();
+}
+
+void BonkRun::GiveCoopExperience(uint32 xp)
+{
+    if (!m_coop) { GiveExperience(xp); return; }
+    for (BonkRun* run : GetCoopRuns())
+        if (run->m_state != STATE_ENTERING) run->GiveExperience(xp);
 }

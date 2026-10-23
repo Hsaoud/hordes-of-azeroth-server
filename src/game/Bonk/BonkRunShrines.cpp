@@ -228,8 +228,13 @@ void BonkRun::RemoveShrine(size_t index)
 void BonkRun::UpdateLeyLine(size_t index, uint32 diff)
 {
     Shrine& shrine = m_shrines[index];
-    bool const inside = DistanceSq(m_player->GetPositionX(), m_player->GetPositionY(), shrine.spot.x, shrine.spot.y) <=
-        BONK_LEY_RADIUS * BONK_LEY_RADIUS;
+    auto heroes = GetCoopRuns();
+    if (heroes.empty()) heroes.push_back(this);
+    bool inside = false;
+    for (BonkRun* run : heroes)
+        if (run->m_player->IsAlive() && run->m_player->GetMap() == m_player->GetMap() &&
+            DistanceSq(run->m_player->GetPositionX(), run->m_player->GetPositionY(), shrine.spot.x, shrine.spot.y) <=
+                BONK_LEY_RADIUS * BONK_LEY_RADIUS) { inside = true; break; }
     BonkPlayer* bonk = m_player->GetBonkPlayer();
     if (!inside)
     {
@@ -251,7 +256,11 @@ void BonkRun::UpdateLeyLine(size_t index, uint32 diff)
         m_captureShown = false;
         bonk->Notify("You captured the Ley Line!");
         RemoveShrine(index);
-        ++m_pendingLeyOffers;
+        for (BonkRun* run : heroes)
+        {
+            ++run->m_pendingLeyOffers;
+            run->UpdateOffers();
+        }
         return;
     }
     if (!m_captureShown || m_captureSendMs >= BONK_LEY_SEND_MS)
@@ -420,6 +429,8 @@ void BonkRun::SendGreed() const
 
 void BonkRun::UseShrine(GameObject* go)
 {
+    if (!m_player->IsAlive()) return;
+    if (IsCoopFollower()) { GetCoopLeader()->UseShrine(go); return; }
     if (m_state != STATE_RUNNING || m_paused)
         return;
 
@@ -434,8 +445,9 @@ void BonkRun::UseShrine(GameObject* go)
         {
             case BONK_SHRINE_GREED:
             {
-                ++m_greedStacks;
-                SendGreed();
+                auto heroes = GetCoopRuns();
+                if (heroes.empty()) heroes.push_back(this);
+                for (BonkRun* run : heroes) { ++run->m_greedStacks; run->SendGreed(); }
                 bonk->Notify("You now earn " + std::to_string(GetGreedRewardPercent()) + "% more gold and Darkmoon Tickets, but face " +
                     std::to_string(uint32(GetGreedCrowdPercent() + 0.5f)) + "% more enemies.");
                 RemoveShrine(i);
@@ -599,44 +611,30 @@ void BonkRun::UpdateAltar(size_t index)
 void BonkRun::UpdateMoonwell(size_t index, uint32 diff)
 {
     Shrine& shrine = m_shrines[index];
-    bool const inside = DistanceSq(m_player->GetPositionX(), m_player->GetPositionY(), shrine.spot.x, shrine.spot.y) <=
-        BONK_MOONWELL_RADIUS * BONK_MOONWELL_RADIUS;
-    BonkPlayer* bonk = m_player->GetBonkPlayer();
-    if (!shrine.active)
-        return;
-
+    if (!shrine.active) return;
+    auto heroes = GetCoopRuns();
+    if (heroes.empty()) heroes.push_back(this);
     if (shrine.leftMs <= diff)
     {
-        bonk->SendAddon("moonwell~0~0~" + std::to_string(GetMoonwellSeconds()));
-        bonk->Notify("The Moonwell runs dry.");
+        for (BonkRun* run : heroes)
+            run->m_player->GetBonkPlayer()->SendAddon("moonwell~0~0~" + std::to_string(GetMoonwellSeconds()));
         RemoveShrine(index);
         return;
     }
     shrine.leftMs -= diff;
-
-    if (!inside)
-    {
-        if (shrine.progressMs)
-        {
-            shrine.progressMs = 0;
-            bonk->SendAddon("moonwell~0~0~" + std::to_string(GetMoonwellSeconds()));
-        }
-        return;
-    }
-
-    bool const entered = !shrine.progressMs;
-    shrine.progressMs = 1;
     shrine.tickMs += diff;
-    if (!entered && shrine.tickMs < IN_MILLISECONDS)
-        return;
-    if (shrine.tickMs >= IN_MILLISECONDS)
+    if (shrine.tickMs < IN_MILLISECONDS) return;
+    shrine.tickMs -= IN_MILLISECONDS;
+    for (BonkRun* run : heroes)
     {
-        shrine.tickMs -= IN_MILLISECONDS;
-        if (m_player->IsAlive() && m_player->GetHealth() < m_player->GetMaxHealth())
-            m_player->ModifyHealth(int32(ReduceHealing(std::max(1u, uint32(m_player->GetMaxHealth() * BONK_MOONWELL_HEAL)))));
+        Player* hero = run->m_player;
+        bool const inside = hero->IsAlive() && hero->GetMap() == m_player->GetMap() &&
+            DistanceSq(hero->GetPositionX(), hero->GetPositionY(), shrine.spot.x, shrine.spot.y) <= BONK_MOONWELL_RADIUS * BONK_MOONWELL_RADIUS;
+        if (inside && hero->GetHealth() < hero->GetMaxHealth())
+            hero->ModifyHealth(int32(run->ReduceHealing(std::max(1u, uint32(hero->GetMaxHealth() * BONK_MOONWELL_HEAL)))));
+        hero->GetBonkPlayer()->SendAddon("moonwell~" + std::to_string((shrine.leftMs + IN_MILLISECONDS - 1) / IN_MILLISECONDS) +
+            (inside ? "~1~" : "~0~") + std::to_string(GetMoonwellSeconds()));
     }
-    bonk->SendAddon("moonwell~" + std::to_string((shrine.leftMs + IN_MILLISECONDS - 1) / IN_MILLISECONDS) + "~1~" +
-        std::to_string(GetMoonwellSeconds()));
 }
 
 uint32 BonkRun::GetMoonwellSeconds() const

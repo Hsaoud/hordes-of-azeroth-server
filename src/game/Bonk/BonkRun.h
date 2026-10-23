@@ -121,6 +121,10 @@ class BonkRun
         void Update(uint32 diff);
         void Abort();
         void Surrender();
+        bool HoldCoopDeath() const;
+        bool UpdateCoopRescue(uint32 diff);
+        void ClearCoopGrave();
+        void GiveCoopExperience(uint32 xp);
         bool SkipTime(uint32 seconds, std::string& error);
         bool StartMiniEventNow(BonkMiniEventType type, std::string& error);
         bool PlaceShrineNow(BonkShrineType type, std::string& error);
@@ -258,7 +262,7 @@ class BonkRun
         bool Skip(std::string& error);
         bool Lock(uint32 choice, std::string& error);
 
-        void UseChest(GameObject* chest);
+        void UseChest(GameObject* chest, BonkRun* opener = nullptr);
         bool IsOwnPortal(GameObject const* portal) const;
         BonkMap const* GetNextMap() const;
         void EnterNextStage();
@@ -996,6 +1000,12 @@ class BonkRun
         };
         std::shared_ptr<CoopMission> m_coop;
         bool m_coopLateJoin = false;
+        ObjectGuid m_coopGrave;
+        bool m_coopRescueShown = false;
+        BonkTelegraphs m_coopRescueVisuals;
+        uint32 m_coopGraveObjective = 0;
+        uint32 m_coopRescueMs = 0;
+        uint32 m_coopRescueReportMs = 0;
         bool m_coopPauseWanted = false;
         bool m_coopPortalReady = false;
         bool m_coopEnding = false;

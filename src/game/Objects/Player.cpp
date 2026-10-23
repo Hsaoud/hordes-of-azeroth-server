@@ -83,6 +83,7 @@
 #include "world/scourge_invasion.h"
 #include "world/world_event_wareffort.h"
 #include "Bonk/BonkPlayer.h"
+#include "Bonk/BonkRun.h"
 
 #include <climits>
 
@@ -1295,7 +1296,9 @@ void Player::Update(uint32 update_diff, uint32 p_time)
     if (GetDeathState() == CORPSE)
 #endif
     {
-        if (p_time >= m_deathTimer)
+        if (GetBonkPlayer()->GetRun() && GetBonkPlayer()->GetRun()->HoldCoopDeath())
+            m_deathTimer = CORPSE_REPOP_TIME;
+        else if (p_time >= m_deathTimer)
         {
             BuildPlayerRepop();
             ScheduleRepopAtGraveyard();
