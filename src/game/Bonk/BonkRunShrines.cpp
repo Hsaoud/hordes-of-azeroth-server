@@ -236,11 +236,15 @@ void BonkRun::UpdateLeyLine(size_t index, uint32 diff)
             DistanceSq(run->m_player->GetPositionX(), run->m_player->GetPositionY(), shrine.spot.x, shrine.spot.y) <=
                 BONK_LEY_RADIUS * BONK_LEY_RADIUS) { inside = true; break; }
     BonkPlayer* bonk = m_player->GetBonkPlayer();
+    auto sendCapture = [&heroes](std::string const& message)
+    {
+        for (BonkRun* run : heroes) run->m_player->GetBonkPlayer()->SendAddon(message);
+    };
     if (!inside)
     {
         if (m_captureShown && shrine.progressMs)
         {
-            bonk->SendAddon(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~-1");
+            sendCapture(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~-1");
             m_captureShown = false;
         }
         return;
@@ -251,8 +255,8 @@ void BonkRun::UpdateLeyLine(size_t index, uint32 diff)
     m_captureSendMs += diff;
     if (shrine.progressMs >= captureMs)
     {
-        bonk->SendAddon(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~100");
-        bonk->SendAddon(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~-1");
+        sendCapture(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~100");
+        sendCapture(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~-1");
         m_captureShown = false;
         bonk->Notify("You captured the Ley Line!");
         RemoveShrine(index);
@@ -267,7 +271,7 @@ void BonkRun::UpdateLeyLine(size_t index, uint32 diff)
     {
         m_captureSendMs = 0;
         m_captureShown = true;
-        bonk->SendAddon(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~" +
+        sendCapture(std::string("capture~") + SHRINE_LABELS[BONK_SHRINE_LEY_LINE] + "~" +
             std::to_string(shrine.progressMs * 100 / captureMs));
     }
 }
