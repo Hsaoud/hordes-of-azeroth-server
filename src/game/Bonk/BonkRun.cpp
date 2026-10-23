@@ -966,7 +966,7 @@ bool BonkRun::Begin(std::string& error)
 BonkMap const* BonkRun::ChooseNextMap()
 {
     if (IsCoopFollower())
-        if (BonkRun* partner = GetCoopPartner())
+        if (BonkRun* partner = GetCoopLeader())
             return &partner->m_map;
     if (m_sandbox)
         return GetSandboxMap();
@@ -1067,12 +1067,12 @@ bool BonkRun::TeleportToStage(BonkMap const& map, std::string& error)
     }
 
     if (IsCoopFollower())
-        if (BonkRun* partner = GetCoopPartner())
+        if (BonkRun* partner = GetCoopLeader())
         {
-            x = partner->m_coopX;
-            y = partner->m_coopY;
-            z = partner->m_coopZ;
-            o = partner->m_coopO;
+            x = m_coopLateJoin ? partner->m_player->GetPositionX() : partner->m_coopX;
+            y = m_coopLateJoin ? partner->m_player->GetPositionY() : partner->m_coopY;
+            z = m_coopLateJoin ? partner->m_player->GetPositionZ() : partner->m_coopZ;
+            o = m_coopLateJoin ? partner->m_player->GetOrientation() : partner->m_coopO;
         }
     m_coopX = x;
     m_coopY = y;
@@ -1308,6 +1308,7 @@ void BonkRun::StartStage()
 
     m_player->GetBonkPlayer()->RecordStage(m_tier.id, m_stage);
 
+    CompleteCoopArrival();
     SendFullState();
     uint32 const minutes = m_map.durationSeconds / 60;
     uint32 const seconds = m_map.durationSeconds % 60;
@@ -1333,8 +1334,8 @@ void BonkRun::SendFullState() const
     SendCards();
     if (!m_offer.empty())
         SendOffer();
-    if (IsCoopFollower() && GetCoopPartner())
-        GetCoopPartner()->m_objectives.Resend(m_player);
+    if (IsCoopFollower() && GetCoopLeader())
+        GetCoopLeader()->m_objectives.Resend(m_player);
     else
         m_objectives.Resend(m_player);
     if (m_greedStacks)
@@ -1537,7 +1538,7 @@ void BonkRun::UpdateNatives(uint32 diff)
     ObjectGuid const playerGuid = m_player->GetObjectGuid();
     for (Creature* creature : creatures)
     {
-        if (creature->IsTemporarySummon() && OwnsEnemy(static_cast<TemporarySummon*>(creature)->GetSummonerGuid()))
+        if (dynamic_cast<BonkMobAI*>(creature->AI()) || (creature->IsTemporarySummon() && OwnsEnemy(static_cast<TemporarySummon*>(creature)->GetSummonerGuid())))
             continue;
         if (creature->GetCharmerOrOwnerGuid().IsPlayer() || creature->IsFriendlyTo(m_player))
             continue;
@@ -3068,7 +3069,7 @@ uint32 BonkRun::GetSpawnHealth(BonkSpawnKind kind, BonkArchetype archetype, floa
     uint32 const level = std::min(GetMobLevel() + GetKindLevelBonus(kind), 63u);
     float const archetypeHealth = kind == BONK_SPAWN_NORMAL ? sBonkMgr.GetArchetype(archetype).healthMultiplier : 1.0f;
     return std::max(1u, uint32(GetMobHealth(level) * GetStageHealthMultiplier() * m_map.healthMultiplier * creatureMultiplier * archetypeHealth *
-        GetCrowdOverflow() * GetKindHealth(kind) * GetScalingNow().health * m_spawnHealthScale * (IsCoop() ? 1.7f : 1.0f)));
+        GetCrowdOverflow() * GetKindHealth(kind) * GetScalingNow().health * m_spawnHealthScale * GetCoopHealthScale()));
 }
 
 std::vector<std::string> BonkRun::DescribeScaling() const
@@ -3288,7 +3289,7 @@ void BonkRun::OnAffixedDeath(Creature* mob)
 void BonkRun::SpawnPhaseAdds(Creature const* boss, uint32 count, uint32 elites)
 {
     if (IsCoopFollower())
-        if (BonkRun* partner = GetCoopPartner())
+        if (BonkRun* partner = GetCoopLeader())
         {
             partner->SpawnPhaseAdds(boss, count, elites);
             return;
@@ -3764,9 +3765,9 @@ Creature* BonkRun::SpawnMobAt(BonkMapCreature const& creature, float x, float y,
     }
 
     m_mobs.push_back(mob->GetObjectGuid());
-    if (IsCoop())
-        if (BonkRun* partner = GetCoopPartner())
-            partner->m_mobs.push_back(mob->GetObjectGuid());
+    for (BonkRun* member : GetCoopRuns())
+        if (member != this)
+            member->m_mobs.push_back(mob->GetObjectGuid());
     if (m_sandbox)
     {
         PrepareSandboxMob(mob);
@@ -4229,7 +4230,7 @@ void BonkRun::OpenPortal(Creature* boss)
     bool const last = m_tier.stages && m_stage >= m_tier.stages;
     if (last)
         m_victory = true;
-    BonkRun* partner = GetCoopPartner();
+    BonkRun* partner = GetCoopLeader();
     BonkMap const* next = IsCoopFollower() && partner ? partner->GetNextMap() : !last || m_tier.endless ? ChooseNextMap() : nullptr;
     m_nextMapId = next ? next->id : 0;
 
@@ -4284,28 +4285,16 @@ void BonkRun::EnterNextStage()
         return;
 
     BonkPlayer* bonk = m_player->GetBonkPlayer();
-    if (!m_offer.empty())
+    if (!m_offer.empty() || (IsCoop() && HasCoopChoice()))
     {
         bonk->Notify("Make your choice first.");
         return;
     }
 
-    if (IsCoop() && !m_coopPortalReady)
+    if (IsCoop() && !m_coop->advancing)
     {
-        m_coopPortalReady = true;
-        BonkRun* partner = GetCoopPartner();
-        if (!partner || !partner->m_coopPortalReady)
-        {
-            bonk->Notify("Ready for the next stage. Waiting for your friend at the portal.");
-            if (partner)
-                partner->m_player->GetBonkPlayer()->Notify("Your friend is ready. Take your portal when you have finished choosing your rewards.");
-            return;
-        }
-        if (IsCoopFollower())
-        {
-            partner->EnterNextStage();
-            return;
-        }
+        ReadyCoopPortal();
+        return;
     }
 
     BonkMap const* next = GetNextMap();
@@ -4346,17 +4335,14 @@ void BonkRun::EnterNextStage()
 
     ++m_stage;
     m_map = *next;
-    if (IsCoopFollower() && GetCoopPartner())
-        m_map = GetCoopPartner()->m_map;
+    if (IsCoopFollower() && GetCoopLeader())
+        m_map = GetCoopLeader()->m_map;
     else
     {
         ApplyInvader();
         BringBossEarlier();
     }
     m_nextMapId = 0;
-    if (IsCoop() && !IsCoopFollower())
-        if (BonkRun* partner = GetCoopPartner())
-            partner->EnterNextStage();
     m_coopPortalReady = false;
 }
 
@@ -7275,9 +7261,9 @@ void BonkRun::Erupt(BonkEnemyHit const& hit, float x, float y, float z, float ra
     if (m_state != STATE_RUNNING)
         return;
     ShowImpact(hit, x, y, z);
-    if (BonkRun* partner = GetCoopPartner())
-        if (partner->m_player->GetMap() == m_player->GetMap() && partner->m_player->GetDistance2d(x, y) <= radius)
-            partner->StrikeHero(hit, hit.impactKit ? BONK_SPELL_PLAIN_HIT : BONK_SPELL_ERUPTION_HIT, SummonHazard(x, y, z));
+    for (BonkRun* member : GetCoopRuns())
+        if (member != this && member->m_player->GetMap() == m_player->GetMap() && member->m_player->GetDistance2d(x, y) <= radius)
+            member->StrikeHero(hit, hit.impactKit ? BONK_SPELL_PLAIN_HIT : BONK_SPELL_ERUPTION_HIT, SummonHazard(x, y, z));
 
     if (!hit.damage || !m_player->IsAlive() || m_player->GetDistance2d(x, y) > radius)
         return;
@@ -11415,6 +11401,7 @@ void BonkRun::CleanUp()
 
 void BonkRun::Exit()
 {
+    EndCoop(false, true);
     CleanUp();
     m_state = STATE_FINISHED;
 
@@ -11423,6 +11410,7 @@ void BonkRun::Exit()
     RestoreBroughtGear();
     m_broughtGear.clear();
     ClearSky();
+    m_player->SetFactionForRace(m_player->GetRace());
     bonk->TeleportToCamp();
 }
 
@@ -11443,6 +11431,7 @@ void BonkRun::Abort()
     m_player->GetBonkPlayer()->ResetCharacter();
     RestoreBroughtGear();
     m_broughtGear.clear();
+    m_player->SetFactionForRace(m_player->GetRace());
 }
 
 void BonkRun::Surrender()

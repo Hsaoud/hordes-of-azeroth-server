@@ -6373,6 +6373,12 @@ bool Unit::IsVisibleForOrDetect(WorldObject const* pDetector, WorldObject const*
 
     Unit const* pDetectorUnit = pDetector->ToUnit();
     Player const* pDetectorPlayer = pDetector->ToPlayer();
+    if (pDetectorPlayer)
+        if (BonkMobAI const* ai = dynamic_cast<BonkMobAI const*>(AI()))
+        {
+            BonkRun const* run = pDetectorPlayer->GetBonkPlayer()->GetRun();
+            if (!run || !run->OwnsEnemy(ai->GetOwnerGuid())) return false;
+        }
 
     // Grid dead/alive checks
     if (pDetectorPlayer)

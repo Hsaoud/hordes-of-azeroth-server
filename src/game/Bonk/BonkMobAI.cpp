@@ -1545,8 +1545,10 @@ void BonkMobAI::ResolveArea(Player* owner)
         else
             Cast(*ability, owner, true);
 
-        BonkRun* partner = run ? run->GetCoopPartner() : nullptr;
-        Player* friendHero = partner ? partner->GetHero() : nullptr;
+        for (BonkRun* member : run ? run->GetCoopRuns() : std::vector<BonkRun*>())
+        {
+        Player* friendHero = member->GetHero();
+        if (friendHero == owner) continue;
         if (friendHero && friendHero->GetMap() == owner->GetMap() && friendHero->IsAlive() &&
             !friendHero->GetBonkPlayer()->IsDashInvulnerable())
         {
@@ -1560,6 +1562,7 @@ void BonkMobAI::ResolveArea(Player* owner)
                 if (friendHero->IsAlive())
                     KnockBackHero(friendHero, std::atan2(y - m_areaY, x - m_areaX));
             }
+        }
         }
     }
 
@@ -1659,7 +1662,7 @@ void BonkMobAI::Dash(Player* owner)
     m_dashFromX = m_creature->GetPositionX();
     m_dashFromY = m_creature->GetPositionY();
     m_dashHit = false;
-    m_coopDashHit = false;
+    m_coopDashHits.clear();
     m_creature->SendPlaySpellVisualKit(BONK_KIT_CHARGE_TRAIL);
     m_creature->GetMotionMaster()->MovePoint(0, m_dashX, m_dashY, m_dashZ, MOVE_RUN_MODE | MOVE_FORCE_DESTINATION, BONK_CHARGE_SPEED);
 }
@@ -1688,11 +1691,19 @@ void BonkMobAI::UpdateDash(Player* owner)
     }
     };
     Player* anchor = m_creature->GetMap()->GetPlayer(m_ownerGuid);
-    strike(anchor ? anchor : owner, m_dashHit);
     BonkRun* run = anchor ? anchor->GetBonkPlayer()->GetRun() : nullptr;
-    if (BonkRun* partner = run ? run->GetCoopPartner() : nullptr)
-        if (partner->GetHero()->GetMap() == m_creature->GetMap())
-            strike(partner->GetHero(), m_coopDashHit);
+    if (run && run->IsCoop())
+    {
+        for (BonkRun* member : run->GetCoopRuns())
+            if (member->GetHero()->GetMap() == m_creature->GetMap())
+            {
+                bool hit = m_coopDashHits.count(member->GetHero()->GetObjectGuid()) != 0;
+                strike(member->GetHero(), hit);
+                if (hit) m_coopDashHits.insert(member->GetHero()->GetObjectGuid());
+            }
+    }
+    else
+        strike(owner, m_dashHit);
     m_dashFromX = toX;
     m_dashFromY = toY;
 }
@@ -1725,6 +1736,16 @@ void BonkMobAI::DamageDeal(Unit* victim, uint32& damage)
     if (!damage || victim == m_creature)
         return;
 
+    if (victim->IsPlayer())
+    {
+        BonkRun* victimRun = static_cast<Player*>(victim)->GetBonkPlayer()->GetRun();
+        if (!victimRun || !victimRun->OwnsEnemy(m_ownerGuid))
+        {
+            damage = 0;
+            return;
+        }
+    }
+
     if (victim->IsPlayer() && static_cast<Player*>(victim)->GetBonkPlayer()->GetRun() &&
         static_cast<Player*>(victim)->GetBonkPlayer()->GetRun()->OwnsEnemy(m_ownerGuid))
         if (BonkRun* run = static_cast<Player*>(victim)->GetBonkPlayer()->GetRun())
@@ -1749,14 +1770,18 @@ void BonkMobAI::DamageDeal(Unit* victim, uint32& damage)
 
 void BonkMobAI::DamageTaken(Unit* attacker, uint32& damage)
 {
-    if (m_fleeing && m_blinks && damage && damage < m_creature->GetHealth() && m_blinkTimer <= 0)
-        m_blinkPending = true;
-
     if (!damage || !attacker)
         return;
 
     Player* hero = attacker->GetCharmerOrOwnerPlayerOrPlayerItself();
     BonkRun* run = hero ? hero->GetBonkPlayer()->GetRun() : nullptr;
+    if (hero && (!run || !run->OwnsEnemy(m_ownerGuid)))
+    {
+        damage = 0;
+        return;
+    }
+    if (m_fleeing && m_blinks && damage < m_creature->GetHealth() && m_blinkTimer <= 0)
+        m_blinkPending = true;
     if (run && run->OwnsEnemy(m_ownerGuid))
     {
         run->ModifyHeroHit(m_creature, damage);
@@ -2014,8 +2039,8 @@ void BonkMobAI::JustDied(Unit* killer)
 
     if (BonkRun* run = owner->GetBonkPlayer()->GetRun())
     {
-        if (run->IsCoopFollower() && run->GetCoopPartner())
-            run = run->GetCoopPartner();
+        if (run->IsCoopFollower() && run->GetCoopLeader())
+            run = run->GetCoopLeader();
         run->OnMobKilled(m_creature, m_kind, killer);
     }
 }

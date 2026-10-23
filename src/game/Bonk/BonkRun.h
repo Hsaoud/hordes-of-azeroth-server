@@ -10,6 +10,7 @@
 #include "nonstd/optional.hpp"
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -94,10 +95,21 @@ class BonkRun
         bool IsInvasion() const { return m_invaderId != 0; }
 
         bool Begin(std::string& error);
-        void LinkCoop(ObjectGuid partner, bool follower);
-        BonkRun* GetCoopPartner() const;
-        bool IsCoop() const { return !m_coopPartner.IsEmpty(); }
-        bool IsCoopFollower() const { return IsCoop() && m_coopFollower; }
+        void LinkCoop(BonkRun& leader);
+        BonkRun* GetCoopLeader() const;
+        std::vector<BonkRun*> GetCoopRuns() const;
+        bool IsCoop() const { return bool(m_coop); }
+        BonkRunChoice GetCoopChoice() const;
+        void SetCoopToken(uint32 token) { if (m_coop) m_coop->token = token; }
+        bool IsCoopFollower() const;
+        uint32 GetCoopToken() const;
+        float GetCoopHealthScale() const;
+        void RefreshCoopScaling();
+        bool JoinCoop(BonkRun& leader, std::string& error);
+        void CompleteCoopArrival();
+        void ReadyCoopPortal();
+        bool HasCoopChoice() const;
+        void TransferCoopWorld(BonkRun& next);
         Player* GetHero() const { return m_player; }
         bool OwnsEnemy(ObjectGuid owner) const;
         Player* GetCoopTarget(Creature const* mob) const;
@@ -974,8 +986,16 @@ class BonkRun
         std::set<uint32> m_playedMaps;
         State m_state = STATE_ENTERING;
         bool m_paused = false;
-        ObjectGuid m_coopPartner;
-        bool m_coopFollower = false;
+        struct CoopMission
+        {
+            ObjectGuid leader;
+            std::vector<ObjectGuid> members;
+            uint32 token = 0;
+            float healthScale = 1.0f;
+            bool advancing = false;
+        };
+        std::shared_ptr<CoopMission> m_coop;
+        bool m_coopLateJoin = false;
         bool m_coopPauseWanted = false;
         bool m_coopPortalReady = false;
         bool m_coopEnding = false;

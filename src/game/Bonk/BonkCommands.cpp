@@ -12,6 +12,8 @@
 #include "Player.h"
 #include "TemporarySummon.h"
 #include "WorldSession.h"
+#include "World.h"
+#include "Config/Config.h"
 
 #include <algorithm>
 #include <cmath>
@@ -111,6 +113,38 @@ bool ChatHandler::HandleBonkStartCommand(char* args)
 
     std::string error;
     if (!player->GetBonkPlayer()->StartRun(*tier, error, choice))
+    {
+        SendSysMessage(error.c_str());
+        SetSentErrorMessage(true);
+        return false;
+    }
+    return true;
+}
+
+bool ChatHandler::HandleBonkCoopCommand(char* args)
+{
+    char* action = ExtractArg(&args);
+    BonkPlayer* bonk = m_session->GetPlayer()->GetBonkPlayer();
+    if (!action) { bonk->SendCoopStatus(); return true; }
+    if (!sConfig.GetBoolDefault("Bonk.Coop", false)) return false;
+    if (std::string(action) == "lobby")
+    {
+        bonk->SendAddon("cooplobbyclear");
+        Player* self = m_session->GetPlayer();
+        for (auto const& entry : sWorld.GetAllSessions())
+            if (Player* player = entry.second->GetPlayer())
+                if (player->IsInWorld() && player != self)
+                    bonk->SendAddon("cooplobby~" + std::string(player->GetName()) + "~" + std::to_string(player->GetClass()) + "~" +
+                        (player->GetBonkPlayer()->GetRun() ? "1" : "0") + "~" + (self->GetGroup() && self->GetGroup() == player->GetGroup() ? "1" : "0"));
+        return true;
+    }
+    if (std::string(action) == "join") { bonk->RequestCoopJoin(); return true; }
+    if (std::string(action) == "cancel") { bonk->CancelCoopProposal(); return true; }
+    uint32 token = 0;
+    if (!ExtractUInt32(&args, token)) return false;
+    if (std::string(action) != "accept" && std::string(action) != "decline") return false;
+    std::string error;
+    if (!bonk->AnswerCoop(token, std::string(action) == "accept", error))
     {
         SendSysMessage(error.c_str());
         SetSentErrorMessage(true);

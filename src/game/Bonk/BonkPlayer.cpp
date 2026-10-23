@@ -1699,14 +1699,8 @@ void BonkPlayer::StopRun()
 {
     if (m_run)
         m_run->Surrender();
-    else if (m_coopTier)
-    {
-        m_coopTier = 0;
-        Notify("You are no longer ready.");
-        SendCoopStatus();
-        if (Player* other = GetCoopFriend())
-            other->GetBonkPlayer()->SendCoopStatus();
-    }
+    else if (IsCoopReady())
+        CancelCoopProposal();
 }
 
 std::vector<BonkTier const*> BonkPlayer::GetTiersInOrder()
@@ -1789,8 +1783,9 @@ void BonkPlayer::SendAddon(std::string const& line) const
             (line.compare(0, 9, "objective") == 0 || line.compare(0, 5, "beat~") == 0 ||
              line.compare(0, 11, "eventtimer~") == 0 || line.compare(0, 8, "allydone") == 0 || line.compare(0, 5, "ally~") == 0));
         if (shared)
-            if (BonkRun* partner = m_run->GetCoopPartner())
-                ChatHandler(partner->GetHero()).SendSysMessage(("BONK~" + line).c_str());
+            for (BonkRun* member : m_run->GetCoopRuns())
+                if (member != m_run.get())
+                    ChatHandler(member->GetHero()).SendSysMessage(("BONK~" + line).c_str());
     }
 }
 

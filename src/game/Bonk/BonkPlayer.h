@@ -48,8 +48,13 @@ class BonkPlayer
         bool StartSandbox(std::string& error);
         bool IsInSandbox() const;
         void StopRun();
-        bool IsCoopReady() const { return m_coopTier != 0; }
-        Player* GetCoopFriend() const;
+        bool IsCoopReady() const { return m_coopTier != 0 || !m_coopProposer.IsEmpty(); }
+        std::vector<Player*> GetCoopGroup() const;
+        bool AnswerCoop(uint32 token, bool accept, std::string& error);
+        void CancelCoopProposal();
+        void LaunchCoopProposal();
+        void OfferCoopJoin();
+        void RequestCoopJoin() { m_coopDismissed = 0; OfferCoopJoin(); SendCoopStatus(); }
         void UpdateCoop(uint32 diff);
         void SendCoopStatus();
         bool CanStartRun(BonkTier const& tier, std::string& error, BonkRunChoice const& choice) const;
@@ -277,6 +282,11 @@ class BonkPlayer
 
         Player* m_player;
         std::unique_ptr<BonkRun> m_run;
+        ObjectGuid m_coopProposer;
+        uint32 m_coopToken = 0;
+        uint32 m_coopDismissed = 0;
+        bool m_coopJoining = false;
+        std::map<ObjectGuid, uint8> m_coopInvited;
         uint32 m_coopTimer = 0;
         uint32 m_coopReadyMs = 0;
         uint32 m_coopTier = 0;

@@ -6,6 +6,7 @@
 #include "ObjectGuid.h"
 
 #include <string>
+#include <set>
 #include <vector>
 
 class BonkPlayer;
@@ -37,6 +38,7 @@ class BonkMobAI : public CreatureAI
         bool IsFlyer() const { return m_creature->IsBonkFlyer(); }
         void FlyIn(Player* owner);
         ObjectGuid GetOwnerGuid() const { return m_ownerGuid; }
+        void SetCoopOwner(ObjectGuid owner) { m_ownerGuid = owner; }
         void SetArchetype(BonkArchetype archetype) { m_archetype = archetype; }
         BonkArchetype GetArchetype() const { return m_archetype; }
         void SetVeteran(bool veteran) { m_veteran = veteran; }
@@ -198,7 +200,7 @@ class BonkMobAI : public CreatureAI
         float m_dashX = 0.0f, m_dashY = 0.0f, m_dashZ = 0.0f;
         float m_dashFromX = 0.0f, m_dashFromY = 0.0f;
         bool m_dashHit = false;
-        bool m_coopDashHit = false;
+        std::set<ObjectGuid> m_coopDashHits;
         ObjectGuid m_boltTarget;
         uint32 m_boltSpell = 0;
         uint32 m_boltDamage = 0;

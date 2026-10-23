@@ -255,6 +255,7 @@ ChatCommand * ChatHandler::getCommandTable()
 
     static ChatCommand bonkCommandTable[] =
     {
+        { "coop",           SEC_PLAYER,         false, &ChatHandler::HandleBonkCoopCommand,            "", nullptr },
         { "start",          SEC_PLAYER,         false, &ChatHandler::HandleBonkStartCommand,           "", nullptr },
         { "starter",        SEC_PLAYER,         false, &ChatHandler::HandleBonkStarterCommand,         "", nullptr },
         { "perfdip",        SEC_PLAYER,         false, &ChatHandler::HandleBonkPerfDipCommand,         "", nullptr },
