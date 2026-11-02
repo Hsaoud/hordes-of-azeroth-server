@@ -201,6 +201,7 @@ void BonkCoop::JoinHostGroup(Player* guest)
 {
     if (!IsGuestAccount(guest))
         return;
+    LinkHomeMail(guest);
     if (WasRemoved(guest->GetSession()->GetAccountId()))
     {
         SendAway(guest, BONK_STRING_COOP_REMOVED);

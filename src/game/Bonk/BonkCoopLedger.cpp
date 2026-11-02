@@ -138,6 +138,13 @@ namespace
         s_budgets[std::to_string(home.accountId) + ":" + home.game] = budget;
     }
 
+    void Credit(HomeTarget const& home, std::string const& kind, int64 amount)
+    {
+        std::lock_guard<std::mutex> guard(s_budgetLock);
+        int64& used = s_budgets[std::to_string(home.accountId) + ":" + home.game].used[kind];
+        used = std::max<int64>(0, used - amount);
+    }
+
     std::string OverLimit(std::string const& kind)
     {
         return "more " + kind + " than a session can earn";
@@ -427,6 +434,56 @@ namespace
         return out.str();
     }
 
+    std::string ApplyMailItemTaken(HomeTarget const& home, std::vector<std::string> const& fields)
+    {
+        uint32 mailId = 0, itemGuid = 0, entry = 0;
+        if (!ReadCount(fields, 2, mailId) || !ReadCount(fields, 3, itemGuid) || !ReadCount(fields, 4, entry))
+            return "broken mail item entry";
+        if (!home.characterGuid)
+            return "no home character";
+        std::unique_ptr<QueryResult> found(CharacterDatabase.PQuery(
+            "SELECT 1 FROM `mail_items` mi JOIN `mail` m ON m.`id` = mi.`mail_id` WHERE mi.`mail_id` = %u AND mi.`item_guid` = %u AND mi.`item_id` = %u AND m.`receiver_guid` = %u",
+            mailId, itemGuid, entry, home.characterGuid));
+        if (!found)
+            return "that mail item is no longer in the home mailbox";
+        CharacterDatabase.PExecute("DELETE FROM `mail_items` WHERE `item_guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `item_instance` WHERE `guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `bonk_item_found` WHERE `item_guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("UPDATE `mail` SET `has_items` = (SELECT COUNT(*) > 0 FROM `mail_items` WHERE `mail_id` = %u) WHERE `id` = %u", mailId, mailId);
+        CharacterDatabase.PExecute("INSERT INTO `bonk_coop_mail_taken` (`character_guid`, `item_id`) VALUES (%u, %u)", home.characterGuid, entry);
+        return "";
+    }
+
+    std::string ApplyMailMoneyTaken(HomeTarget const& home, std::vector<std::string> const& fields)
+    {
+        uint32 mailId = 0, money = 0;
+        if (!ReadCount(fields, 2, mailId) || !ReadCount(fields, 3, money) || !money)
+            return "broken mail money entry";
+        if (!home.characterGuid)
+            return "no home character";
+        std::unique_ptr<QueryResult> found(CharacterDatabase.PQuery(
+            "SELECT `money` FROM `mail` WHERE `id` = %u AND `receiver_guid` = %u", mailId, home.characterGuid));
+        if (!found || found->Fetch()[0].GetUInt32() < money)
+            return "that mail's gold is no longer in the home mailbox";
+        CharacterDatabase.PExecute("UPDATE `mail` SET `money` = `money` - %u WHERE `id` = %u", money, mailId);
+        Credit(home, "gold", money);
+        return "";
+    }
+
+    std::multiset<uint32> TakenFromMail(uint32 characterGuid)
+    {
+        std::multiset<uint32> entries;
+        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
+            "SELECT `item_id` FROM `bonk_coop_mail_taken` WHERE `character_guid` = %u", characterGuid));
+        if (result)
+        {
+            do
+                entries.insert(result->Fetch()[0].GetUInt32());
+            while (result->NextRow());
+        }
+        return entries;
+    }
+
     std::string ApplyMail(HomeTarget const& home, std::vector<std::string> const& fields)
     {
         uint32 entry = 0;
@@ -714,13 +771,21 @@ namespace
             }
         }
         std::set<uint32> const owned = HomeCarriedEntries(home.characterGuid);
+        std::multiset<uint32> fromMail = TakenFromMail(home.characterGuid);
         uint32 const tierCap = TierCap(home);
         std::vector<CarriedItem> allowed;
         for (CarriedItem const& item : carried)
         {
             ItemPrototype const* proto = sObjectMgr.GetItemPrototype(item.entry);
             BonkFoundGear found;
-            bool const familiar = owned.count(item.entry) || BonkMgr::GetGearTier(item.entry) || proto->Class == ITEM_CLASS_CONTAINER;
+            bool familiar = owned.count(item.entry) || BonkMgr::GetGearTier(item.entry) || proto->Class == ITEM_CLASS_CONTAINER;
+            auto const mailed = fromMail.find(item.entry);
+            if (!familiar && mailed != fromMail.end())
+            {
+                familiar = true;
+                fromMail.erase(mailed);
+                CharacterDatabase.PExecute("DELETE FROM `bonk_coop_mail_taken` WHERE `character_guid` = %u AND `item_id` = %u LIMIT 1", home.characterGuid, item.entry);
+            }
             bool const tooMany = item.count > std::max(1u, proto->Stackable);
             bool const tooHigh = item.found != "-" && ReadFound(item.found, found) && found.tier > tierCap;
             if (familiar && !tooMany && !tooHigh)
@@ -781,6 +846,10 @@ namespace
         std::string const& kind = fields[1];
         if (kind == "inventory")
             return ApplyInventory(home, fields);
+        if (kind == "mailitem")
+            return ApplyMailItemTaken(home, fields);
+        if (kind == "mailmoney")
+            return ApplyMailMoneyTaken(home, fields);
         if (kind == "rows")
             return ApplyRows(home, fields);
         if (kind == "gold")
@@ -1101,6 +1170,64 @@ void BonkCoop::RecordMail(Player const* guest, uint32 entry, std::string const& 
     if (!IsGuestAccount(guest))
         return;
     Record(guest, "mail\t" + std::to_string(entry) + "\t" + Escape(subject) + "\t" + Escape(body) + "\t" + (found ? WriteFound(*found) : std::string("-")));
+}
+
+namespace
+{
+    struct HomeMailItemLink
+    {
+        uint32 mail = 0;
+        uint32 item = 0;
+    };
+
+    std::mutex s_homeMailLock;
+    std::map<uint32, uint32> s_homeMails;
+    std::map<uint32, HomeMailItemLink> s_homeMailItems;
+}
+
+void BonkCoop::RememberHomeMail(uint32 hostMail, uint32 homeMail)
+{
+    std::lock_guard<std::mutex> guard(s_homeMailLock);
+    s_homeMails[hostMail] = homeMail;
+}
+
+void BonkCoop::RememberHomeMailItem(uint32 hostItem, uint32 homeMail, uint32 homeItem)
+{
+    std::lock_guard<std::mutex> guard(s_homeMailLock);
+    s_homeMailItems[hostItem] = HomeMailItemLink{ homeMail, homeItem };
+}
+
+void BonkCoop::OnMailItemTaken(Player const* guest, uint32 hostMail, uint32 hostItem, uint32 entry)
+{
+    if (!IsGuestAccount(guest))
+        return;
+    HomeMailItemLink link;
+    {
+        std::lock_guard<std::mutex> guard(s_homeMailLock);
+        auto found = s_homeMailItems.find(hostItem);
+        if (found == s_homeMailItems.end())
+            return;
+        link = found->second;
+        s_homeMailItems.erase(found);
+    }
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s took item %u from home mail %u", guest->GetName(), entry, link.mail);
+    Record(guest, "mailitem\t" + std::to_string(link.mail) + "\t" + std::to_string(link.item) + "\t" + std::to_string(entry));
+}
+
+void BonkCoop::OnMailMoneyTaken(Player const* guest, uint32 hostMail, uint32 money)
+{
+    if (!IsGuestAccount(guest) || !money)
+        return;
+    uint32 homeMail = 0;
+    {
+        std::lock_guard<std::mutex> guard(s_homeMailLock);
+        auto found = s_homeMails.find(hostMail);
+        if (found == s_homeMails.end())
+            return;
+        homeMail = found->second;
+    }
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s took %u copper from home mail %u", guest->GetName(), money, homeMail);
+    Record(guest, "mailmoney\t" + std::to_string(homeMail) + "\t" + std::to_string(money));
 }
 
 void BonkCoop::RecordLevel(Player const* guest, uint32 classId, uint32 bestLevel, uint32 bestMs, uint32 finale)
