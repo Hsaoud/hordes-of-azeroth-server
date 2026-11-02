@@ -377,6 +377,8 @@ enum BonkWeaponFlags : uint32
     BONK_WEAPON_FLAG_AOE              = 0x4000000,
     BONK_WEAPON_FLAG_TOTEM            = 0x8000000,
     BONK_WEAPON_FLAG_LONG_JUMPS       = 0x10000000,
+    BONK_WEAPON_FLAG_VIPERS           = 0x20000000,
+    BONK_WEAPON_FLAG_VOLATILE         = 0x40000000,
 };
 
 float const BONK_CLEAVE_RADIUS    = 6.0f;

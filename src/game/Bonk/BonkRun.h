@@ -897,7 +897,7 @@ class BonkRun
         bool IsReckless() const;
         void DropTraps(OwnedWeapon& owned, bool armed = false);
         void UpdateTraps(uint32 diff);
-        void SpringTrap(OwnedWeapon& owned, float x, float y, float z);
+        void SpringTrap(OwnedWeapon& owned, float x, float y, float z, float share = 1.0f, bool echo = false);
         void DespawnTraps();
         void ClearPendingTrapLooks();
         std::vector<uint32> m_trapLookTimes;
@@ -1805,6 +1805,7 @@ class BonkRun
             bool poisonBomb = false;
             bool blinkChill = false;
             bool explosiveArrow = false;
+            bool volatileEcho = false;
             bool hammerOfWrath = false;
             bool lightsHammer = false;
             bool lightsHammerLaunch = false;
@@ -1940,6 +1941,21 @@ class BonkRun
             uint32 untilMs = 0;
         };
         std::vector<Snake> m_snakes;
+        struct Viper
+        {
+            ObjectGuid guid;
+            ObjectGuid target;
+            uint32 weaponId = 0;
+            uint32 untilMs = 0;
+            uint32 moveMs = 0;
+        };
+        std::vector<Viper> m_vipers;
+        void ReleaseVipers(OwnedWeapon const& owned, float x, float y, float z);
+        void UpdateVipers();
+        void BurstViper(OwnedWeapon const& owned, Creature* viper, Creature* bitten);
+        void DespawnVipers();
+        void OnHunterCloudPulse(OwnedWeapon const& owned, KeywordCloud const& cloud);
+        bool GetHunterCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind) const;
         void ReleaseSnakes(OwnedWeapon const& owned, float x, float y, float z);
         void DressSnakes();
         void UpdateSnakes();
