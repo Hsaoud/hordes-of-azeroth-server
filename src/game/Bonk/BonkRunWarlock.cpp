@@ -9,6 +9,7 @@
 
 namespace
 {
+    uint32 const BONK_DRAIN_HEALED_BEAMS      = 2;
     uint32 const BONK_WEAPON_IMP              = 900;
     uint32 const BONK_WEAPON_VOIDWALKER       = 901;
     uint32 const BONK_WEAPON_SUCCUBUS         = 902;
@@ -207,7 +208,7 @@ void BonkRun::DrainLife(OwnedWeapon& owned, SpellEntry const* spellInfo)
         }
     if (drained && owned.weapon.healPct > 0.0f && m_player->IsAlive())
     {
-        uint32 const heal = std::max(1u, uint32(m_player->GetMaxHealth() * owned.weapon.healPct * drained / 100.0f));
+        uint32 const heal = std::max(1u, uint32(m_player->GetMaxHealth() * owned.weapon.healPct * std::min(drained, BONK_DRAIN_HEALED_BEAMS) / 100.0f));
         OnDrainOverheal(heal);
         HealHero(heal, owned.weapon.spellId);
     }
