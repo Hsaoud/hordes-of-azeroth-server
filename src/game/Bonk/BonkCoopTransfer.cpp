@@ -1,4 +1,5 @@
 #include "BonkCoop.h"
+#include "BonkPlayer.h"
 
 #include "AccountMgr.h"
 #include "Database/DatabaseEnv.h"
@@ -307,7 +308,7 @@ namespace
         while (std::getline(third, line))
         {
             std::vector<std::string> const values = DumpValues(line);
-            bool drop = false;
+            bool drop = IsDumpOf(line, "bonk_ironman");
             if (IsDumpOf(line, "character_inventory"))
                 drop = values.size() >= 4 && bankItems.count(values[3]);
             else if (IsDumpOf(line, "item_instance") || IsDumpOf(line, "bonk_item_found"))
@@ -461,12 +462,17 @@ namespace
         return result != nullptr;
     }
 
+    uint32 ProgressAccountOf(uint32 guid, uint32 accountId)
+    {
+        return IsIronman(guid) ? BonkPlayer::GetIronmanAccount(guid) : accountId;
+    }
+
     std::string WriteExport(uint32 low)
     {
         uint32 const accountId = AccountOfCharacter(low);
         PlayerDumpWriter writer;
         WriteFile(DUMP_FILE, writer.GetDump(low));
-        WriteFile(ACCOUNT_FILE, ExportAccountRows(accountId));
+        WriteFile(ACCOUNT_FILE, ExportAccountRows(ProgressAccountOf(low, accountId)));
         return "ok " + std::to_string(low) + " " + std::to_string(accountId);
     }
 
@@ -475,8 +481,6 @@ namespace
         uint32 const low = GuidOfName(name);
         if (!low)
             return "error There is no character called " + name + ".";
-        if (IsIronman(low))
-            return "error Ironman characters play solo only.";
         if (Player* online = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, low)))
         {
             online->SaveToDB();

@@ -938,8 +938,11 @@ namespace
         std::string name = character;
         CharacterDatabase.escape_string(name);
         std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `guid` FROM `characters` WHERE `name` = '%s' AND `account` = %u", name.c_str(), home.accountId));
-        if (result)
-            home.characterGuid = result->Fetch()[0].GetUInt32();
+        if (!result)
+            return home;
+        home.characterGuid = result->Fetch()[0].GetUInt32();
+        if (std::unique_ptr<QueryResult> ironman{ CharacterDatabase.PQuery("SELECT 1 FROM `bonk_ironman` WHERE `guid` = %u", home.characterGuid) })
+            home.accountId = BonkPlayer::GetIronmanAccount(home.characterGuid);
         return home;
     }
 

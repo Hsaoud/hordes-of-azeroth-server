@@ -212,11 +212,6 @@ void BonkCoop::JoinHostGroup(Player* guest)
     Player* host = FindHost();
     if (!host)
         return;
-    if (host->GetBonkPlayer() && host->GetBonkPlayer()->IsIronman())
-    {
-        SendAway(guest, BONK_STRING_COOP_HOST_IRONMAN);
-        return;
-    }
     Group* group = host->GetGroup();
     if (group)
     {
@@ -302,8 +297,6 @@ uint8 BonkCoop::GuestLoginRefusal(std::string const& username, uint32 accountId,
     Player* host = FindHost();
     if (!host)
         return 0;
-    if (host->GetBonkPlayer() && host->GetBonkPlayer()->IsIronman())
-        return CHAR_LOGIN_FAILED;
     Group const* group = host->GetGroup();
     if (!group || group->IsMember(character))
         return 0;
