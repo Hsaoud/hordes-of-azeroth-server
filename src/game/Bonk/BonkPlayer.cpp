@@ -2489,10 +2489,17 @@ void BonkPlayer::SendFoundItems() const
     SendAddon("foundclear");
     auto send = [&](Item const* item, std::string const& place)
     {
-        BonkFoundGear found;
-        if (!item || !sBonkFound.Get(item->GetGUIDLow(), found))
+        if (!item)
             return;
+        BonkFoundGear found;
         uint32 const tier = BonkFound::GetItemTier(item);
+        if (!sBonkFound.Get(item->GetGUIDLow(), found))
+        {
+            if (!tier)
+                return;
+            found = BonkFoundGear();
+            found.season = 0;
+        }
         SendAddon("founditem~" + place + "~" + std::to_string(item->GetEntry()) + "~" + std::to_string(tier) + "~" +
             BonkFound::DescribeLines(found, tier) + "~" + BonkFound::DescribeExtra(item, tier) + "~" + (found.season != BONK_LEADERBOARD_SEASON ? "1" : "0"));
     };
@@ -3130,7 +3137,8 @@ void BonkPlayer::SendArena(std::string const& npc) const
                 dungeons += (dungeons.empty() ? "" : ",") + dungeon->key + ":" + dungeon->icon + ":" + Localize(BONK_FIELD_MAP_NAME, dungeon->id, dungeon->name) + ":" + (cleared ? "1" : "0");
             SendAddon("tier~" + std::to_string(tier.id) + "~" + tier.key + "~" + Localize(BONK_FIELD_TIER_NAME, tier.id, tier.name) + "~" + (unlocked ? "1" : "0") + "~" +
                 (unlocked ? "" : GetUnlockHint(tier)) + "~" + std::to_string(GetTierBest(tier)) + "~" + Localize(BONK_FIELD_TIER_DESCRIPTION, tier.id, tier.description) + "~" + tier.art + "~" + maps + "~" +
-                std::to_string(tier.levels) + "~" + std::to_string(unlocked ? tier.GetBandLevel(GetOpenLevel(tier)) : 0) + "~" + dungeons + "~" + Localize(BONK_FIELD_TIER_DETAILS, tier.id, tier.details));
+                std::to_string(tier.levels) + "~" + std::to_string(unlocked ? tier.GetBandLevel(GetOpenLevel(tier)) : 0) + "~" + dungeons + "~" + Localize(BONK_FIELD_TIER_DETAILS, tier.id, tier.details) + "~" +
+                std::to_string(tier.firstLevel));
             SendLevelPreview(tier, GetRunBonuses());
         }
         else if (unlocked)
@@ -3145,6 +3153,7 @@ void BonkPlayer::SendArena(std::string const& npc) const
     }
     if (m_addonReady)
         SendStarters();
+    SendBoardChoice();
     SendAddon("tierend");
 }
 

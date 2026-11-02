@@ -840,6 +840,17 @@ bool ChatHandler::HandleBonkBoardCommand(char* /*args*/)
     return true;
 }
 
+bool ChatHandler::HandleBonkBoardPageCommand(char* args)
+{
+    uint32 view = 0;
+    uint32 classId = 0;
+    uint32 offset = 0;
+    if (!ExtractUInt32(&args, view) || !ExtractUInt32(&args, classId) || !ExtractUInt32(&args, offset))
+        return false;
+    BonkLeaderboard::SendPage(m_session->GetPlayer(), view, classId, offset);
+    return true;
+}
+
 bool ChatHandler::HandleBonkBoardJoinCommand(char* args)
 {
     uint32 show = 0;
