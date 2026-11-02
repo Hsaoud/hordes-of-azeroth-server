@@ -450,6 +450,7 @@ float const BONK_START_POLY_REACH   = 10.0f;
     uint32 const BONK_TRAP_CHECK_MS        = 100;
     uint32 const BONK_THROWN_TRAP_ARM_MS   = 400;
     float const BONK_TRAP_THROW_RANGE      = 20.0f;
+    size_t const BONK_TRAP_LOOKS_PER_SEC   = 3;
     float const BONK_LINE_WIDTH            = 3.0f;
     float const BONK_LINE_GROUP_RADIUS     = 8.0f;
     float const BONK_WOLF_SCALE            = 0.8f;
@@ -1696,6 +1697,7 @@ void BonkRun::StartStage()
     m_shotSourceTimer = BONK_SHOT_SOURCE_CHECK_MS;
     m_trickShotTimes.clear();
     ClearHunterEvolutions();
+    ClearPendingTrapLooks();
     m_pendingCasts.clear();
     m_heldShotSources.clear();
     m_telegraphs.Dismiss(m_player);
@@ -9283,11 +9285,19 @@ void BonkRun::PutAwayTrap(Trap const& trap)
             go->Delete();
 }
 
+void BonkRun::ClearPendingTrapLooks()
+{
+    for (PendingCast const& cast : m_pendingCasts)
+        if ((cast.releaseLook || cast.springTrap) && cast.prop)
+            SendBonkPropGone(m_player, cast.prop);
+    m_trapLookTimes.clear();
+}
+
 void BonkRun::ShowTrapSprung(OwnedWeapon const& owned, uint32 prop, float x, float y, float z)
 {
     TrapLook const* look = GetTrapLook(uint32(owned.weapon.behaviorValue));
     SendBonkPropGone(m_player, prop);
-    if (!look)
+    if (!look || !TakeRateSlot(m_trapLookTimes, BONK_TRAP_LOOKS_PER_SEC))
         return;
     PendingCast release;
     release.weaponId = owned.weapon.id;
@@ -13958,6 +13968,7 @@ void BonkRun::CleanUp()
     DespawnShotSources();
     m_trickShotTimes.clear();
     ClearHunterEvolutions();
+    ClearPendingTrapLooks();
     m_pendingCasts.clear();
     m_heldShotSources.clear();
     m_telegraphs.Dismiss(m_player);

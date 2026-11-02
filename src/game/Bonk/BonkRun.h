@@ -899,6 +899,8 @@ class BonkRun
         void UpdateTraps(uint32 diff);
         void SpringTrap(OwnedWeapon& owned, float x, float y, float z);
         void DespawnTraps();
+        void ClearPendingTrapLooks();
+        std::vector<uint32> m_trapLookTimes;
         void ThrowTrap(OwnedWeapon& owned, float x, float y, float z);
         void ShowTrapSprung(OwnedWeapon const& owned, uint32 prop, float x, float y, float z);
         uint32 PlaceTrapProp(uint32 display, float x, float y, float z);
