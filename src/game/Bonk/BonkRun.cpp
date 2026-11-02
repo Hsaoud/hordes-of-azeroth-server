@@ -4660,7 +4660,7 @@ uint32 BonkRun::GetMissileDelay(SpellCaster const* caster, Unit const* target, f
 float BonkRun::GetCritChance(SpellEntry const* spell, Unit const* victim, Unit const* attacker) const
 {
     float const chance = GetPaladinCritChance(spell, GetRogueCritChance(spell,
-        BONK_BASE_CRIT + GetPassiveTotal(BONK_PASSIVE_CRIT) + GetTalentCritChance(victim, attacker)));
+        BONK_BASE_CRIT + GetPassiveTotal(BONK_PASSIVE_CRIT) + GetTalentCritChance(victim, attacker) + GetDeepWoundsCritChance(victim)));
     return IsAlwaysCrit(spell, victim) ? 100.0f + chance : chance;
 }
 

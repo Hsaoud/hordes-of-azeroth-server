@@ -24,6 +24,8 @@ namespace
     size_t const BONK_MAX_PENDING_CRITS       = 200;
     size_t const BONK_MAX_DEEP_WOUNDS_PER_SEC = 20;
     size_t const BONK_DEEP_WOUNDS_PRUNE_SIZE  = 256;
+    float const BONK_DEEP_WOUNDS_CRIT_PER_STACK = 1.0f;
+    uint32 const BONK_DEEP_WOUNDS_CRIT_STACKS = 20;
     uint32 const BONK_KIT_DEEP_WOUND          = 220;
     float const BONK_SHIELD_SLAM_MAX_BONUS    = 200.0f;
 
@@ -275,6 +277,13 @@ void BonkRun::OpenDeepWound(OwnedWeapon const& owned, Creature* mob)
         SplatterBlood(owned, mob, stacks);
     else
         mob->SendPlaySpellVisualKit(BONK_KIT_DEEP_WOUND);
+}
+
+float BonkRun::GetDeepWoundsCritChance(Unit const* victim) const
+{
+    if (!victim || !HasBehavior(BONK_BEHAVIOR_DEEP_WOUNDS))
+        return 0.0f;
+    return std::min(GetKeywordStacks(victim, BONK_KEYWORD_BLEED), BONK_DEEP_WOUNDS_CRIT_STACKS) * BONK_DEEP_WOUNDS_CRIT_PER_STACK;
 }
 
 void BonkRun::SplatterBlood(OwnedWeapon const& owned, Creature* struck, uint32 stacks)

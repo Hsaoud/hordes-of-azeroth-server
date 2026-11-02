@@ -2265,6 +2265,7 @@ class BonkRun
         void EnrageOnKill(uint32 killingSpell);
         void ResolveCriticalStrikes();
         void OpenDeepWound(OwnedWeapon const& owned, Creature* mob);
+        float GetDeepWoundsCritChance(Unit const* victim) const;
         void PruneDeepWounds();
         OwnedWeapon const* FindOwnedByBehavior(BonkWeaponBehavior behavior) const;
         bool WasStruckRecently() const;
