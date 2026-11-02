@@ -1703,6 +1703,9 @@ void BonkRun::StartStage()
     m_pendingKeywords.clear();
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
+    m_pendingDotBursts.clear();
+    m_dotBurstTimes.clear();
+    m_dotBurstLookTimes.clear();
     m_dotStacks.clear();
     m_crowdControl.clear();
     m_buffs.clear();
@@ -8371,7 +8374,7 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
-        if (cast.killingSpree || cast.fanOfKnives || cast.shadowyShuriken)
+        if (cast.killingSpree || cast.fanOfKnives || cast.shadowyShuriken || cast.poisonBomb)
         {
             ResolveRogueCast(*owned, info, cast);
             continue;
@@ -13904,6 +13907,9 @@ void BonkRun::CleanUp()
     m_pendingKeywords.clear();
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
+    m_pendingDotBursts.clear();
+    m_dotBurstTimes.clear();
+    m_dotBurstLookTimes.clear();
     m_dotStacks.clear();
     m_crowdControl.clear();
     m_buffs.clear();

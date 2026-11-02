@@ -1062,7 +1062,9 @@ void BonkRun::LandShield(OwnedWeapon& owned, SpellEntry const* spellInfo, Pendin
         if (next)
             LaunchShield(owned, spellInfo, source, next, cast.share, cast.struck, cast.hops - 1);
     }
-    if (alive)
+    if (alive && owned.weapon.behavior == BONK_BEHAVIOR_PALADIN_SHIELD)
+        StrikeWithAvengersShield(owned, target);
+    else if (alive)
     {
         FiringWeapon firing(m_player->GetBonkPlayer());
         StrikeWith(owned, spellInfo, target, cast.share, true);

@@ -1175,6 +1175,9 @@ void BonkRun::ClearSandboxEnemies()
     m_pendingKeywords.clear();
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
+    m_pendingDotBursts.clear();
+    m_dotBurstTimes.clear();
+    m_dotBurstLookTimes.clear();
     m_dotStacks.clear();
     m_crowdControl.clear();
     SetNecroticStacks(0);

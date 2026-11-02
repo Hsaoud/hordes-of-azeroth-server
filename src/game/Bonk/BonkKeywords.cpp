@@ -28,6 +28,14 @@ namespace
     uint32 const BONK_MAX_PAYOFF_DOT_STACKS  = 30;
     uint32 const BONK_KEYWORD_TIMER_MS       = 200;
     size_t const BONK_KEYWORD_TIMER_LINE     = 900;
+    float const BONK_DOT_BURST_RANGE         = 8.0f;
+    size_t const BONK_DOT_BURST_TARGETS      = 4;
+    float const BONK_DOT_BURST_SHARE         = 0.5f;
+    size_t const BONK_DOT_BURSTS_PER_SEC     = 15;
+    size_t const BONK_DOT_BURST_LOOKS_PER_SEC = 4;
+    uint32 const BONK_KIT_POISON_BURST       = 6377;
+    uint32 const BONK_KIT_BLOOD_BURST        = 903;
+    uint32 const BONK_KIT_BURNING_BURST      = 728;
 
     BonkMobAI const* GetRunAI(Unit const* unit)
     {
@@ -163,13 +171,17 @@ void BonkRun::OnKillingBlow(Unit* victim)
         int64 sum = 0;
         uint32 fullMs = 0;
         std::map<uint32, uint32> bySpell;
+        uint32 const now = WorldTimer::getMSTime();
+        float const tickMs = std::max(BONK_MIN_CONSUME_TICK_MS, info.tickMs / GetHasteRate());
+        DyingKeyword& dying = carried[itr.first];
         for (DotStack const& stack : stacks->second)
         {
             sum += stack.points;
             fullMs = std::max(fullMs, stack.fullMs);
             ++bySpell[stack.spellId];
+            if (BurstsOnDeath(itr.first) && TimeLeft(stack.untilMs, now))
+                dying.leftDamage[stack.spellId] += stack.points * float(stack.untilMs - now) / tickMs;
         }
-        DyingKeyword& dying = carried[itr.first];
         dying.fullMs = fullMs;
         dying.stacks = uint32(stacks->second.size());
         dying.points = int32(sum / int64(dying.stacks));
@@ -192,6 +204,8 @@ void BonkRun::UpdateKeywords(uint32 diff)
     }
     if (!m_pendingConsumes.empty())
         ConsumePendingKeywords();
+    if (!m_pendingDotBursts.empty())
+        ReleaseDotBursts();
     if (!m_pendingSlows.empty())
     {
         std::vector<std::pair<ObjectGuid, float>> slows;
@@ -248,6 +262,24 @@ float BonkRun::ConsumeDotStacks(Creature* mob, BonkKeywordInfo const& info)
     if (victim->second.empty())
         m_dotStacks.erase(victim);
     mob->RemoveAurasByCasterSpell(info.spellId, m_player->GetObjectGuid());
+    return damage;
+}
+
+float BonkRun::GetDotDamageLeft(Creature const* mob, BonkKeyword keyword) const
+{
+    BonkKeywordInfo const* info = sBonkMgr.GetKeyword(keyword);
+    auto victim = m_dotStacks.find(mob->GetObjectGuid());
+    if (!info || victim == m_dotStacks.end())
+        return 0.0f;
+    auto stacks = victim->second.find(info->id);
+    if (stacks == victim->second.end())
+        return 0.0f;
+    uint32 const now = WorldTimer::getMSTime();
+    float const tickMs = std::max(BONK_MIN_CONSUME_TICK_MS, info->tickMs / GetHasteRate());
+    float damage = 0.0f;
+    for (DotStack const& stack : stacks->second)
+        if (TimeLeft(stack.untilMs, now))
+            damage += stack.points * float(stack.untilMs - now) / tickMs;
     return damage;
 }
 
@@ -800,6 +832,8 @@ void BonkRun::SpreadKeywords(Creature const* dead)
             OnPoisonedDeath(dead);
         if (info->id == BONK_KEYWORD_BLEED)
             OnBleedingDeath(dead);
+        if (BurstsOnDeath(info->id))
+            QueueDotBurst(dead, info->id, keyword.second);
 
         uint32 const half = keyword.second.stacks / 2;
         if (!half)
@@ -815,6 +849,61 @@ void BonkRun::SpreadKeywords(Creature const* dead)
             ++spread;
         }
     }
+}
+
+bool BonkRun::BurstsOnDeath(uint8 keyword)
+{
+    return keyword == BONK_KEYWORD_BURNING || keyword == BONK_KEYWORD_BLEED || keyword == BONK_KEYWORD_POISON;
+}
+
+void BonkRun::QueueDotBurst(Creature const* dead, uint8 keyword, DyingKeyword const& dying)
+{
+    if (dying.leftDamage.empty())
+        return;
+    PendingDotBurst burst;
+    burst.dead = dead->GetObjectGuid();
+    burst.x = dead->GetPositionX();
+    burst.y = dead->GetPositionY();
+    burst.keyword = keyword;
+    burst.leftDamage = dying.leftDamage;
+    m_pendingDotBursts.push_back(std::move(burst));
+}
+
+void BonkRun::ReleaseDotBursts()
+{
+    std::vector<PendingDotBurst> pending;
+    pending.swap(m_pendingDotBursts);
+    Map* map = m_player->GetMap();
+    for (PendingDotBurst const& burst : pending)
+    {
+        BonkKeywordInfo const* info = sBonkMgr.GetKeyword(BonkKeyword(burst.keyword));
+        SpellEntry const* look = info ? sSpellMgr.GetSpellEntry(info->spellId) : nullptr;
+        if (!look || !TakeRateSlot(m_dotBurstTimes, BONK_DOT_BURSTS_PER_SEC))
+            continue;
+        std::vector<Creature*> struck;
+        for (Creature* mob : GetMobsNear(burst.x, burst.y, BONK_DOT_BURST_RANGE))
+        {
+            if (struck.size() >= BONK_DOT_BURST_TARGETS)
+                break;
+            if (mob->IsAlive() && GetRunAI(mob))
+                struck.push_back(mob);
+        }
+        if (struck.empty())
+            continue;
+        if (Creature* dead = map->GetCreature(burst.dead))
+            ShowDotBurst(dead, burst.keyword);
+        for (Creature* mob : struck)
+            for (auto const& part : burst.leftDamage)
+                DealShamanHit(look, part.first, mob, part.second * BONK_DOT_BURST_SHARE);
+    }
+}
+
+void BonkRun::ShowDotBurst(Creature* dead, uint8 keyword)
+{
+    if (!TakeRateSlot(m_dotBurstLookTimes, BONK_DOT_BURST_LOOKS_PER_SEC))
+        return;
+    uint32 const kit = keyword == BONK_KEYWORD_POISON ? BONK_KIT_POISON_BURST : keyword == BONK_KEYWORD_BLEED ? BONK_KIT_BLOOD_BURST : BONK_KIT_BURNING_BURST;
+    dead->SendPlaySpellVisualKit(kit);
 }
 
 void BonkRun::RebuildWeaponSpells()

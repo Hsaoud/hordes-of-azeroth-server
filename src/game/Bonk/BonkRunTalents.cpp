@@ -754,7 +754,7 @@ void BonkRun::OnTalentDamage(Unit* victim, SpellEntry const* spell)
 
     if (crit && ((root == BONK_WEAPON_JUDGEMENT && m_mastery.Special(BONK_SPECIAL_RIGHTEOUS_VERDICT) > 0.0f) ||
         (root == BONK_WEAPON_DIVINE_STORM && m_mastery.Special(BONK_SPECIAL_FINAL_RECKONING) > 0.0f)))
-        ReduceTimer(BONK_WEAPON_HAMMER_OF_WRATH, BONK_INSTANT_RECHARGE_MS);
+        ReduceTimer(BONK_WEAPON_AVENGERS_SHIELD_PALADIN, BONK_INSTANT_RECHARGE_MS);
     if (root == BONK_WEAPON_SEAL_COMMAND && roll_chance_f(m_mastery.Special(BONK_SPECIAL_EMPYREAN_POWER)))
         ReduceTimer(BONK_WEAPON_DIVINE_STORM, BONK_INSTANT_RECHARGE_MS);
 }
