@@ -1,6 +1,8 @@
+#include "Bag.h"
 #include "BonkCoop.h"
 #include "BonkCodex.h"
 #include "BonkEnchant.h"
+#include "BonkLeaderboard.h"
 #include "BonkLocale.h"
 #include "BonkMgr.h"
 #include "BonkMobAI.h"
@@ -402,6 +404,13 @@ bool ChatHandler::HandleBonkResyncCommand(char* )
     return true;
 }
 
+bool ChatHandler::HandleBonkStatsCommand(char* args)
+{
+    char* watching = ExtractLiteralArg(&args);
+    m_session->GetPlayer()->GetBonkPlayer()->WatchStats(watching && !strcmp(watching, "on"));
+    return true;
+}
+
 bool ChatHandler::HandleBonkVaultCommand(char* args)
 {
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
@@ -424,7 +433,7 @@ bool ChatHandler::HandleBonkVaultCommand(char* args)
     std::string error;
     bool done = false;
     if (!strcmp(action, "send"))
-        done = run->SendHomeFromPillar(guidLow, error);
+        done = run->SendHomeFromHearth(guidLow, error);
     else if (!strcmp(action, "put"))
         done = run->PutInVault(guidLow, error);
     else
@@ -534,21 +543,6 @@ bool ChatHandler::HandleBonkTitleCommand(char* args)
 bool ChatHandler::HandleBonkGearCommand(char* args)
 {
     std::string const tab = args ? args : "";
-    if (tab.compare(0, 4, "tab ") == 0)
-    {
-        m_session->GetPlayer()->GetBonkPlayer()->SelectGearTab(uint32(atoi(tab.c_str() + 4)));
-        return true;
-    }
-    if (tab == "refit")
-    {
-        m_session->GetPlayer()->GetBonkPlayer()->RefitAtQuartermaster();
-        return true;
-    }
-    if (tab == "upgrade on" || tab == "upgrade off")
-    {
-        m_session->GetPlayer()->GetBonkPlayer()->SetQuartermasterUpgrade(tab == "upgrade on");
-        return true;
-    }
     if (tab.compare(0, 8, "upgrade ") == 0)
     {
         std::string error;
@@ -574,6 +568,37 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
         std::string error;
         if (!m_session->GetPlayer()->GetBonkPlayer()->GiveTestFoundGear(tier, lines, error))
             m_session->GetPlayer()->GetBonkPlayer()->Notify(error);
+        return true;
+    }
+    if (tab == "testshop" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        Player* player = m_session->GetPlayer();
+        uint32 const quartermasterEntry = 900002;
+        if (Creature* quartermaster = player->FindNearestCreature(quartermasterEntry, 10.0f))
+            player->GetBonkPlayer()->OpenShop(BONK_SHOP_UPGRADES, quartermaster);
+        else
+            SendSysMessage("No Quartermaster within 10 yards.");
+        return true;
+    }
+    if (tab == "testhearth" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        Player* player = m_session->GetPlayer();
+        BonkRun* run = player->GetBonkPlayer()->GetRun();
+        if (run && run->IsHearthVaultReady())
+        {
+            run->UseVault();
+            return true;
+        }
+        Item* stone = nullptr;
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END && !stone; ++slot)
+            if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                if (item->GetEntry() == BONK_ITEM_HEARTHSTONE)
+                    stone = item;
+        for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END && !stone; ++bag)
+            if (Bag* container = dynamic_cast<Bag*>(player->GetItemByPos(INVENTORY_SLOT_BAG_0, bag)))
+                stone = container->GetItemByEntry(BONK_ITEM_HEARTHSTONE);
+        if (!stone || !run || !run->UseItem(stone))
+            SendSysMessage("You need a Hearthstone in a run.");
         return true;
     }
     if (tab == "enchant open" || tab == "enchant discard" || tab.compare(0, 13, "enchant pick ") == 0 || tab.compare(0, 13, "enchant roll ") == 0)
@@ -727,6 +752,25 @@ bool ChatHandler::HandleBonkGodCommand(char* args)
     return true;
 }
 
+bool ChatHandler::HandleBonkChestCommand(char*)
+{
+    Player* player = m_session->GetPlayer();
+    BonkRun* run = player->GetBonkPlayer()->GetRun();
+    if (!run || !run->IsActive())
+    {
+        SendSysMessage("Start a run first.");
+        return false;
+    }
+    Player* spot = GetSelectedPlayer();
+    if (!run->SpawnFreeChestAt(spot ? spot : player))
+    {
+        SendSysMessage("The chest couldn't be placed there.");
+        return false;
+    }
+    PSendSysMessage("Free chest placed next to %s.", (spot ? spot : player)->GetName());
+    return true;
+}
+
 bool ChatHandler::HandleBonkQuestsCommand(char*)
 {
     Player* player = m_session->GetPlayer();
@@ -790,13 +834,18 @@ bool ChatHandler::HandleBonkNoticeCommand(char* args)
     return true;
 }
 
-bool ChatHandler::HandleBonkOldLegendariesCommand(char* args)
+bool ChatHandler::HandleBonkBoardCommand(char* /*args*/)
 {
-    char* choice = ExtractArg(&args);
-    std::string const answer = choice ? choice : "";
-    if (answer != "keep" && answer != "delete")
+    BonkLeaderboard::Send(m_session->GetPlayer());
+    return true;
+}
+
+bool ChatHandler::HandleBonkBoardJoinCommand(char* args)
+{
+    uint32 show = 0;
+    if (!ExtractUInt32(&args, show))
         return false;
-    m_session->GetPlayer()->GetBonkPlayer()->ResolveOldLegendaries(answer == "delete");
+    m_session->GetPlayer()->GetBonkPlayer()->SetBoardChoice(show != 0);
     return true;
 }
 
@@ -985,14 +1034,14 @@ bool ChatHandler::HandleBonkObjectiveCommand(char* args)
     BonkObjectiveKind kind = BONK_OBJECTIVE_SHRINE;
     if (!kindArg || !ParseBonkObjectiveKind(kindArg, kind))
     {
-        SendSysMessage("Usage: .bonk objective shrine|vendor|event|extract [seconds] | clear");
+        SendSysMessage("Usage: .bonk objective shrine|vendor|event [seconds] | clear");
         SetSentErrorMessage(true);
         return false;
     }
     uint32 seconds = 0;
     ExtractUInt32(&args, seconds);
 
-    char const* const labels[MAX_BONK_OBJECTIVE_KIND] = { "Shrine", "Goblin Merchant", "Event", "Extraction Point" };
+    char const* const labels[MAX_BONK_OBJECTIVE_KIND] = { "Shrine", "Goblin Merchant", "Event" };
     BonkSpot spot;
     bool const atSpot = run->TakeSpawnPoint(120.0f, 250.0f, spot);
     if (!atSpot)
@@ -1268,6 +1317,12 @@ bool ChatHandler::HandleBonkCoopReadyCommand(char* args)
 {
     std::string const answer = args ? args : "";
     BonkCoop::AnswerReady(m_session->GetPlayer(), answer == "1" || answer == "yes");
+    return true;
+}
+
+bool ChatHandler::HandleBonkWatchNextCommand(char* args)
+{
+    BonkCoop::WatchNext(m_session->GetPlayer(), !args || std::string(args) != "prev");
     return true;
 }
 

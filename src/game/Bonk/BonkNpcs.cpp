@@ -24,7 +24,6 @@ namespace
     uint32 const BONK_TEXT_MASTERY_SOON  = 900009;
     uint32 const BONK_TEXT_VAULT_EMPTY   = 900010;
     uint32 const BONK_TEXT_VAULT         = 900011;
-    uint32 const BONK_TEXT_TIER_VENDOR   = 900015;
     uint32 const BONK_TEXT_COOP          = 900190;
 
     uint32 const COOP_ACTION_PAUSE = GOSSIP_ACTION_INFO_DEF + 1;
@@ -45,6 +44,7 @@ namespace
 
     uint32 const SENDER_VAULT_PUT  = GOSSIP_SENDER_MAIN + 1;
     uint32 const SENDER_VAULT_TAKE = GOSSIP_SENDER_MAIN + 2;
+    uint32 const SENDER_VAULT_SEND = GOSSIP_SENDER_MAIN + 3;
 }
 
 bool GossipHello_npc_bonk_run_master(Player* player, Creature* creature)
@@ -251,32 +251,6 @@ bool GOHello_go_bonk_chest(Player* player, GameObject* go)
     return true;
 }
 
-bool GossipHello_npc_bonk_tier_vendor(Player* player, Creature* creature)
-{
-    BonkPlayer* bonk = player->GetBonkPlayer();
-    std::vector<Item*> const foreign = bonk->GetForeignTierPieces();
-    if (foreign.empty())
-    {
-        player->GetSession()->SendListInventory(creature->GetObjectGuid());
-        return true;
-    }
-    std::string const exchange = bonk->GetString(foreign.size() == 1 ? BONK_STRING_REFIT_SET_PIECE : BONK_STRING_REFIT_SET_PIECES,
-        { std::to_string(foreign.size()), FormatBonkMoney(bonk->GetTierExchangeFee(foreign), bonk->GetLocale()) });
-    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_VENDOR, bonk->GetString(BONK_STRING_SHOW_SET_PIECES).c_str(), GOSSIP_SENDER_MAIN, GOSSIP_ACTION_TRADE);
-    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_MONEY_BAG, exchange.c_str(), GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-    player->SEND_GOSSIP_MENU(BONK_TEXT_TIER_VENDOR, creature->GetObjectGuid());
-    return true;
-}
-
-bool GossipSelect_npc_bonk_tier_vendor(Player* player, Creature* creature, uint32 , uint32 action)
-{
-    player->CLOSE_GOSSIP_MENU();
-    if (action == GOSSIP_ACTION_INFO_DEF)
-        player->GetBonkPlayer()->ExchangeTierPieces();
-    player->GetSession()->SendListInventory(creature->GetObjectGuid());
-    return true;
-}
-
 bool GossipHello_npc_bonk_vendor(Player* player, Creature* creature)
 {
     if (BonkRun* run = player->GetBonkPlayer()->GetRun())
@@ -294,17 +268,19 @@ bool GOHello_go_bonk_shrine(Player* player, GameObject* go)
 bool GOHello_go_bonk_portal(Player* player, GameObject* go)
 {
     BonkRun* run = player->GetBonkPlayer()->GetRun();
-    if (!run || !run->IsOwnPortal(go))
+    BonkRun* portalRun = run && run->IsOwnPortal(go) ? run : BonkCoop::GroupPortalRun(player, go);
+    if (!portalRun)
         return true;
 
-    if (BonkMap const* next = run->GetNextMap())
+    if (BonkMap const* next = portalRun->GetNextMap())
     {
         std::string const mapName = run->Localize(BONK_FIELD_MAP_NAME, next->id, next->name);
-        std::string const text = run->GetStage() >= run->GetTier().stages ? run->GetString(BONK_STRING_PORTAL_FINALE, { mapName }) :
-            run->GetString(BONK_STRING_PORTAL_NEXT_STAGE, { std::to_string(run->GetStage() + 1), mapName });
+        std::string const text = portalRun->GetStage() >= portalRun->GetTier().stages ? run->GetString(BONK_STRING_PORTAL_FINALE, { mapName }) :
+            run->GetString(BONK_STRING_PORTAL_NEXT_STAGE, { std::to_string(portalRun->GetStage() + 1), mapName });
         player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, text.c_str(), GOSSIP_SENDER_MAIN, PORTAL_ACTION_NEXT);
     }
-    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_TAXI, run->GetString(BONK_STRING_PORTAL_RETURN_HOME).c_str(), GOSSIP_SENDER_MAIN, PORTAL_ACTION_HOME);
+    if (portalRun == run)
+        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_TAXI, run->GetString(BONK_STRING_PORTAL_RETURN_HOME).c_str(), GOSSIP_SENDER_MAIN, PORTAL_ACTION_HOME);
     player->SEND_GOSSIP_MENU(BONK_TEXT_PORTAL, go->GetObjectGuid());
     return true;
 }
@@ -312,6 +288,12 @@ bool GOHello_go_bonk_portal(Player* player, GameObject* go)
 bool GOGossipSelect_go_bonk_portal(Player* player, GameObject* go, uint32 , uint32 action)
 {
     BonkRun* run = player->GetBonkPlayer()->GetRun();
+    if (run && action == PORTAL_ACTION_NEXT && BonkCoop::InGroupRun(player) && (run->IsOwnPortal(go) || BonkCoop::GroupPortalRun(player, go)))
+    {
+        player->CLOSE_GOSSIP_MENU();
+        BonkCoop::RequestNextStage(player);
+        return true;
+    }
     if (!run || !run->IsOwnPortal(go))
     {
         player->CLOSE_GOSSIP_MENU();
@@ -357,11 +339,25 @@ bool GOHello_go_bonk_vault(Player* player, GameObject* go)
 {
     BonkRun* run = player->GetBonkPlayer()->GetRun();
     if (!run || !run->IsOwnVault(go))
+    {
+        if (Player* owner = BonkCoop::VaultOwner(player, go))
+            if (owner != player)
+                player->GetBonkPlayer()->Notify(BONK_STRING_COOP_VAULT_NOT_YOURS, { owner->GetName() });
         return true;
+    }
 
     if (player->GetBonkPlayer()->IsAddonReady())
     {
-        run->OpenVault();
+        run->UseVault();
+        return true;
+    }
+
+    if (run->IsHearthVaultReady())
+    {
+        for (BonkRun::VaultFind const& find : run->GetVaultFinds())
+            if (ItemPrototype const* proto = sObjectMgr.GetItemPrototype(find.entry))
+                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_VENDOR, (std::string("Send home now: ") + proto->Name1).c_str(), SENDER_VAULT_SEND, find.guid.GetCounter());
+        player->SEND_GOSSIP_MENU(BONK_TEXT_VAULT, go->GetObjectGuid());
         return true;
     }
 
@@ -379,37 +375,6 @@ bool GOHello_go_bonk_vault(Player* player, GameObject* go)
     return true;
 }
 
-bool GOHello_go_bonk_pillar(Player* player, GameObject* go)
-{
-    BonkRun* run = player->GetBonkPlayer()->GetRun();
-    if (!run || !run->IsOwnPillar(go))
-        return true;
-
-    if (player->GetBonkPlayer()->IsAddonReady())
-    {
-        run->OpenPillar();
-        return true;
-    }
-
-    for (BonkRun::VaultFind const& find : run->GetVaultFinds())
-        if (ItemPrototype const* proto = sObjectMgr.GetItemPrototype(find.entry))
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_VENDOR, (std::string("Send home now: ") + proto->Name1).c_str(), SENDER_VAULT_PUT, find.guid.GetCounter());
-    player->SEND_GOSSIP_MENU(BONK_TEXT_VAULT, go->GetObjectGuid());
-    return true;
-}
-
-bool GOGossipSelect_go_bonk_pillar(Player* player, GameObject* go, uint32 , uint32 action)
-{
-    BonkRun* run = player->GetBonkPlayer()->GetRun();
-    player->CLOSE_GOSSIP_MENU();
-    if (!run || !run->IsOwnPillar(go))
-        return true;
-    std::string error;
-    if (!run->SendHomeFromPillar(action, error))
-        player->GetBonkPlayer()->Notify(error);
-    return true;
-}
-
 bool GOGossipSelect_go_bonk_vault(Player* player, GameObject* go, uint32 sender, uint32 action)
 {
     BonkRun* run = player->GetBonkPlayer()->GetRun();
@@ -420,7 +385,9 @@ bool GOGossipSelect_go_bonk_vault(Player* player, GameObject* go, uint32 sender,
     }
 
     std::string error;
-    if (!(sender == SENDER_VAULT_TAKE ? run->TakeFromVault(action, error) : run->PutInVault(action, error)))
+    bool const done = sender == SENDER_VAULT_SEND ? run->SendHomeFromHearth(action, error) :
+        sender == SENDER_VAULT_TAKE ? run->TakeFromVault(action, error) : run->PutInVault(action, error);
+    if (!done)
         player->GetBonkPlayer()->Notify(error);
     player->PlayerTalkClass->ClearMenus();
     return GOHello_go_bonk_vault(player, go);
@@ -428,12 +395,17 @@ bool GOGossipSelect_go_bonk_vault(Player* player, GameObject* go, uint32 sender,
 
 bool GossipHello_npc_bonk_coop(Player* player, Creature* creature)
 {
+    BonkPlayer const* bonk = player->GetBonkPlayer();
     bool const host = BonkCoop::IsGroupHost(player);
-    std::string const change = host ? " (click to change)" : "";
-    std::string const pause = BonkCoop::SharesPause(player) ? "Pausing: shared. Everyone waits while someone picks." : "Pausing: off. Nobody waits while someone picks.";
-    std::string const xp = BonkCoop::SharesXp(player) ? "XP: shared. Everyone levels together." : "XP: individual. Everyone keeps their own XP; magnets are off.";
-    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, (pause + change).c_str(), GOSSIP_SENDER_MAIN, COOP_ACTION_PAUSE);
-    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, (xp + change).c_str(), GOSSIP_SENDER_MAIN, COOP_ACTION_XP);
+    auto item = [bonk, host](BonkString setting)
+    {
+        std::string const text = bonk->GetString(setting);
+        return host ? bonk->GetString(BONK_STRING_COOP_SETTING_CHANGE, { text }) : text;
+    };
+    std::string const pause = item(BonkCoop::SharesPause(player) ? BONK_STRING_COOP_SETTING_PAUSE_SHARED : BONK_STRING_COOP_SETTING_PAUSE_OFF);
+    std::string const xp = item(BonkCoop::SharesXp(player) ? BONK_STRING_COOP_SETTING_XP_SHARED : BONK_STRING_COOP_SETTING_XP_OWN);
+    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, pause.c_str(), GOSSIP_SENDER_MAIN, COOP_ACTION_PAUSE);
+    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, xp.c_str(), GOSSIP_SENDER_MAIN, COOP_ACTION_XP);
     player->SEND_GOSSIP_MENU(BONK_TEXT_COOP, creature->GetObjectGuid());
     return true;
 }
@@ -443,7 +415,7 @@ bool GossipSelect_npc_bonk_coop(Player* player, Creature* creature, uint32 , uin
     if (!BonkCoop::IsGroupHost(player))
     {
         player->CLOSE_GOSSIP_MENU();
-        player->GetBonkPlayer()->Notify("Only the host can change the group settings.");
+        player->GetBonkPlayer()->Notify(BONK_STRING_COOP_ONLY_HOST_SETTINGS);
         return true;
     }
     if (action == COOP_ACTION_PAUSE)
@@ -474,12 +446,6 @@ void AddSC_bonk_npcs()
     newscript->Name = "npc_bonk_quartermaster";
     newscript->pGossipHello = &GossipHello_npc_bonk_quartermaster;
     newscript->pGossipSelect = &GossipSelect_npc_bonk_quartermaster;
-    newscript->RegisterSelf();
-
-    newscript = new Script;
-    newscript->Name = "npc_bonk_tier_vendor";
-    newscript->pGossipHello = &GossipHello_npc_bonk_tier_vendor;
-    newscript->pGossipSelect = &GossipSelect_npc_bonk_tier_vendor;
     newscript->RegisterSelf();
 
     newscript = new Script;
@@ -524,11 +490,5 @@ void AddSC_bonk_npcs()
     newscript->Name = "go_bonk_vault";
     newscript->pGOHello = &GOHello_go_bonk_vault;
     newscript->pGOGossipSelect = &GOGossipSelect_go_bonk_vault;
-    newscript->RegisterSelf();
-
-    newscript = new Script;
-    newscript->Name = "go_bonk_pillar";
-    newscript->pGOHello = &GOHello_go_bonk_pillar;
-    newscript->pGOGossipSelect = &GOGossipSelect_go_bonk_pillar;
     newscript->RegisterSelf();
 }

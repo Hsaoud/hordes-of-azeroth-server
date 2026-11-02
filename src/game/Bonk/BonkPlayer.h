@@ -28,6 +28,7 @@ enum BonkQuestReward : uint8;
 enum BonkUpgradeUtility : uint8;
 enum BonkString : uint32;
 enum BonkTextField : uint8;
+
 struct BonkMap;
 struct BonkMasteryBonuses;
 struct BonkMasteryNode;
@@ -35,6 +36,8 @@ struct BonkRunBonuses;
 struct BonkRunChoice;
 struct BonkTier;
 struct BonkWeapon;
+
+uint32 const BONK_PLAYER_FACTION = 1;
 
 class BonkPlayer
 {
@@ -76,19 +79,62 @@ class BonkPlayer
         bool IsTierCleared(char const* tierKey) const;
         bool RecordLevelClear(uint32 level, uint32 clearMs);
         void RecordFinale(uint32 score);
+        struct LevelRun
+        {
+            uint32 level = 0;
+            uint32 ms = 0;
+            uint32 kills = 0;
+            uint64 damage = 0;
+            uint32 gold = 0;
+            uint32 valor = 0;
+            std::string name;
+        };
+        struct LevelBest
+        {
+            uint32 clears = 0;
+            uint32 firstClear = 0;
+            uint32 bestMs = 0;
+            std::string bestMsBy;
+            uint32 damagePerSecond = 0;
+            std::string damageBy;
+            uint32 kills = 0;
+            std::string killsBy;
+            uint32 goldPerMinute = 0;
+            std::string goldBy;
+            uint32 valorPerMinute = 0;
+            std::string valorBy;
+            uint32 finale = 0;
+            uint32 finaleSeconds = 0;
+        };
+        static void MergeLevelBest(LevelBest& best, LevelRun const& run);
+        static bool MergeFinaleBest(LevelBest& best, uint32 score, uint32 seconds);
+        static LevelBest LoadLevelBest(uint32 account, uint8 classId, uint32 level);
+        static void SaveLevelBest(uint32 account, uint8 classId, uint32 level, LevelBest const& best);
+        static void ApplyLevelBest(uint32 account, uint8 classId, LevelRun const& run);
+        static void ApplyFinaleBest(uint32 account, uint8 classId, uint32 level, uint32 score, uint32 seconds);
+        void RecordLevelBest(LevelRun const& run);
+        void RecordFinaleBest(uint32 level, uint32 score, uint32 seconds);
         uint8 GetTrainingRankCap() const;
         std::string GetTrainingCapHint() const;
         uint8 GetDetermination() const;
         void AddDetermination();
         void SendDetermination() const;
-        bool CanBuyGear(uint32 itemEntry) const;
-        bool ShowsGearItem(Creature const* vendor, uint32 itemEntry) const;
-        bool IsTierVendor(Creature const* vendor) const;
+        bool IsShopVendor(Creature const* vendor) const;
         uint32 GetStockTier() const;
-        std::vector<uint32> GetTierStock() const;
+        std::vector<uint32> GetShopStock() const;
+        static uint32 GetShopFirstTier(uint8 quality);
         uint32 GetScrap() const { return m_scrap; }
+        uint8 GetDeterminationStacks() const { return m_determination; }
+        bool IsGoldLoaded() const { return m_goldLoaded; }
+        void GetRunRecord(uint32& runs, uint32& bestLevel, uint32& bestSeconds, uint32& kills, uint32& goldEarned) const
+        {
+            runs = m_record.runs;
+            bestLevel = m_record.bestLevel;
+            bestSeconds = m_record.bestSeconds;
+            kills = m_record.kills;
+            goldEarned = m_record.goldEarned;
+        }
         void AddScrap(uint32 points);
-        void SetQuartermasterUpgrade(bool on);
         void SendQuartermaster() const;
         uint32 GetUpgradeCeiling() const;
         std::vector<Item*> GetUpgradableGear() const;
@@ -98,17 +144,6 @@ class BonkPlayer
         bool PickFoundReroll(uint32 guidLow, uint8 choice, std::string& error);
         void SendFoundItems() const;
         bool GiveTestFoundGear(uint32 tier, uint32 lineCount, std::string& error);
-        bool IsGearFound(uint32 keepEntry) const { return m_foundGear.count(keepEntry) != 0; }
-        bool RecordGearFound(uint32 keepEntry);
-        float GetGearPriceFactor(Creature const* vendor, uint32 itemEntry) const;
-        void SendFoundGear(Creature const* vendor) const;
-        std::vector<Item*> GetForeignTierPieces() const;
-        uint32 GetTierExchangeFee(std::vector<Item*> const& pieces) const;
-        void ExchangeTierPieces();
-        void SendGearTabs(Creature const* vendor) const;
-        void SelectGearTab(uint32 group);
-        void SendRefitOffer() const;
-        void RefitAtQuartermaster();
         std::string GetUnlockHint(BonkTier const& tier) const;
 
         static bool IsWipeName(std::string const& name);
@@ -165,6 +200,13 @@ class BonkPlayer
         bool HasLearnedParent(BonkMasteryNode const& node, uint32 ignoredId) const;
         uint32 GetMasterySpentAbove(uint32 treeId, uint8 row) const;
         uint32 GetLevelTalentPoints() const;
+        uint32 GetEpicLuckBonus() const;
+        int32 GetBoardChoice() const { return m_boardChoice; }
+        void SetBoardChoice(bool show);
+        void SendBoardChoice() const;
+        bool HasBoardGear(uint32 level) const;
+        void CountEpicLuck(bool epicDropped);
+        void SendEpicLuck() const;
         void TakeTalentResetNotice();
         uint32 GetMasterySpent() const;
         std::string DescribeLoadout() const;
@@ -310,7 +352,6 @@ class BonkPlayer
         void SendGearInfo() const;
         void SendUpdateNotices();
         void SeeGearNotice();
-        bool ResolveOldLegendaries(bool remove);
         void SendStats() const;
         void SendMasteryShop(bool open, bool inspect) const;
         std::map<uint32, uint8> ReadMasteryPreset(uint8 slot) const;
@@ -318,7 +359,9 @@ class BonkPlayer
         void WriteMasteryPreset(uint8 slot, std::map<uint32, uint8> const& ranks);
         std::string DescribeMasteryPresets() const;
         void SendMasteryPresetRanks() const;
-        void SendStatTotals(float const* totals, bool inRun) const;
+        void SendStatTotals(float const* totals, bool inRun, float const* afterCaps = nullptr) const;
+        void WatchStats(bool watching);
+        bool IsWatchingStats() const { return m_watchingStats; }
         void OpenArena(Creature const* npc) const;
 
         void ResetCharacter();
@@ -339,7 +382,6 @@ class BonkPlayer
         PacketCounts TakePacketCounts();
 
     private:
-        Item* ReplaceGearEntry(Item* item, uint32 entry);
         Item* FindUpgradableGear(uint32 guidLow) const;
         void DiscardFoundReroll();
         void ClearAuras();
@@ -381,13 +423,11 @@ class BonkPlayer
         std::unique_ptr<BonkRun> m_run;
         BonkTelegraphs m_previewTelegraphs;
         bool m_addonReady = false;
+        bool m_watchingStats = false;
         float m_leashFactor = 1.0f;
         uint32 m_otherEffects = 100;
         float m_leashDistance = 0.0f;
         bool m_gearNoticePending = false;
-        bool m_legendaryPromptPending = false;
-        std::vector<Item*> GetOwnedLegendaries() const;
-        void ClearLegendaryPrompt();
         LocaleConstant m_locale = LOCALE_enUS;
         mutable bool m_zoneArtSent = false;
         void SendZoneArt() const;
@@ -412,9 +452,6 @@ class BonkPlayer
         static constexpr uint32 BONK_CAMP_MAIL_NOTICE_DELAY_MS = 1500;
         uint32 m_campMailNoticeMs = 0;
         void UpdateCampMailNotice(uint32 diff);
-        uint32 m_gearTab = 0;
-        std::vector<uint32> GetGearTabs(Creature const* vendor) const;
-        uint32 GetShownGearTab(std::vector<uint32> const& tabs) const;
         uint32 m_mailboxGlowMs = 0;
         bool m_mailboxGlowShown = false;
         static uint16 const PACKET_KINDS = 1024;
@@ -431,6 +468,11 @@ class BonkPlayer
             uint32 finale = 0;
         };
         std::map<uint8, LevelRecord> m_levels;
+        std::map<std::pair<uint8, uint32>, LevelBest> m_levelBests;
+        std::map<uint8, uint32> m_keptTalentPoints;
+        uint32 m_epicLuckMisses = 0;
+        int32 m_boardChoice = -1;
+        void LoadLevelBests(uint32 accountId);
         Record m_record;
         std::map<uint32, uint8> m_upgradeRanks;
         std::map<uint32, uint8> m_talentRanks;
@@ -438,11 +480,9 @@ class BonkPlayer
         uint32 m_shards = 0;
         uint8 m_determination = 0;
         uint32 m_scrap = 0;
-        bool m_quartermasterUpgrade = false;
         uint32 m_rerollItem = 0;
         uint8 m_rerollLine = 0;
         std::vector<std::pair<uint8, float>> m_rerollOffers;
-        std::set<uint32> m_foundGear;
         uint32 m_masteryXp = 0;
         uint32 m_titleId = 0;
         bool m_accountHasRun = false;

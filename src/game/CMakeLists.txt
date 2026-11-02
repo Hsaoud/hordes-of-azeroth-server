@@ -21,6 +21,7 @@ set (game_SRCS
     AutoBroadCastMgr.cpp
     Bonk/BonkCodex.cpp
     Bonk/BonkCoop.cpp
+    Bonk/BonkCoopLedger.cpp
     Bonk/BonkCoopRun.cpp
     Bonk/BonkCoopTransfer.cpp
     Bonk/BonkCommands.cpp
@@ -28,6 +29,7 @@ set (game_SRCS
     Bonk/BonkEnchant.cpp
     Bonk/BonkFoundGear.cpp
     Bonk/BonkKeywords.cpp
+    Bonk/BonkLeaderboard.cpp
     Bonk/BonkLocale.cpp
     Bonk/BonkMastery.cpp
     Bonk/BonkMgr.cpp
@@ -305,6 +307,7 @@ set (game_SRCS
     AuraRemovalMgr.h
     AutoBroadCastMgr.h
     Bonk/BonkCodex.h
+    Bonk/BonkLeaderboard.h
     Bonk/BonkLocale.h
     Bonk/BonkMastery.h
     Bonk/BonkMgr.h

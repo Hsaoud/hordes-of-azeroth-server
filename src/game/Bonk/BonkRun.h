@@ -12,6 +12,8 @@
 #include "ObjectGuid.h"
 #include "nonstd/optional.hpp"
 
+#include <functional>
+
 #include <deque>
 #include <map>
 #include <set>
@@ -129,6 +131,8 @@ class BonkRun
         bool IsDungeon() const { return m_dungeonId != 0; }
         bool IsChallenge() const { return m_dungeonId != 0 || m_invaderId != 0; }
         bool IsInvasion() const { return m_invaderId != 0; }
+        std::string DescribeForLobby() const;
+        void FollowToPortal();
 
         bool Begin(std::string& error);
         void FollowHost(ObjectGuid host) { m_coopHost = host; }
@@ -138,6 +142,7 @@ class BonkRun
         BonkMap const& GetStageMap() const { return m_map; }
         void GetStageStart(float& x, float& y, float& z) const { x = m_stageX; y = m_stageY; z = m_stageZ; }
         void FollowToStage(BonkMap const& map, uint32 stage);
+        void FollowIntoEndless(uint32 stage);
         void SetAway(bool away);
         bool IsAway() const { return m_away; }
         void EndWithHost();
@@ -148,6 +153,7 @@ class BonkRun
         bool OffersChest(ObjectGuid chest, Player* opener) const;
         uint32 OpenChestFor(GameObject* chest, Player* opener);
         void ReviveFromGroup(float health);
+        void SetMissedBoss() { m_missedBoss = true; }
         std::string GetString(BonkString id, std::vector<std::string> const& args = {}) const;
         std::string Localize(BonkTextField field, uint32 id, std::string const& english) const;
         LocaleConstant GetLocale() const;
@@ -184,6 +190,7 @@ class BonkRun
         void OnHeroDamaged();
         bool IsPaused() const { return m_paused; }
         bool IsChoosing() const { return m_ownPaused; }
+        bool SpawnFreeChestAt(WorldObject const* spot) { return SpawnChest(true, spot->GetPositionX() + 1.5f, spot->GetPositionY(), spot->GetPositionZ()); }
         std::vector<ObjectGuid> const& GetMobGuids() const { return m_mobs; }
         std::vector<ObjectGuid> const& GetEnemyGuids() const { return m_groupEnemies.empty() ? m_mobs : m_groupEnemies; }
         void RefreshGroupEnemies();
@@ -202,9 +209,8 @@ class BonkRun
         uint32 GetEliteAffixes() const { return m_tier.eliteAffixes + m_bonuses.eliteAffixes + m_levelRow.extraAffixes; }
         ObjectGuid const& GetBossGuid() const { return m_bossGuid; }
         static float StageHealthScale(BonkTier const& tier, BonkLevel const& level, uint32 stage);
+        static uint32 GetLevelDropTier(BonkTier const& tier, uint32 bandLevel);
         static float StageDamageScale(BonkTier const& tier, BonkLevel const& level, uint32 stage);
-        static float BossLegendaryChance(BonkTier const& tier, uint32 bandLevel);
-        static float BossEpicChance(BonkTier const& tier, uint32 bandLevel);
         uint32 GetEvolveRank() const;
         void BringBossEarlier();
         uint32 GetStage() const { return m_stage; }
@@ -300,11 +306,11 @@ class BonkRun
             std::string extra;
         };
         bool IsOwnVault(GameObject const* vault) const;
-        bool IsOwnPillar(GameObject const* pillar) const;
         void OpenVault();
-        void OpenPillar();
+        void UseVault();
+        bool IsHearthVaultReady() const { return m_hearthVaultReady; }
         void CloseVault();
-        bool SendHomeFromPillar(uint32 guidLow, std::string& error);
+        bool SendHomeFromHearth(uint32 guidLow, std::string& error);
         bool PutInVault(uint32 guidLow, std::string& error);
         bool TakeFromVault(uint32 guidLow, std::string& error);
         std::vector<VaultFind> GetVaultFinds() const;
@@ -328,6 +334,7 @@ class BonkRun
         void OnTalentDamage(Unit* victim, SpellEntry const* spell);
         bool ApplyKeyword(Creature* mob, BonkKeyword keyword, uint32 stacks, uint32 durationMs = 0, float damageScale = 1.0f, uint32 sourceSpellId = 0);
         void CreditDamageOverTime(Unit const* victim, uint32 spellId, uint32 damage, std::vector<std::pair<uint32, uint32>>& credits) const;
+        uint32 GetMeterPartSpell() const { return m_meterPartSpell; }
         uint32 GetKeywordStacks(Unit const* victim, BonkKeyword keyword) const;
         bool LimitStun(Creature* mob, int32& duration);
         bool LimitRoot(Creature* mob, int32& duration);
@@ -378,6 +385,7 @@ class BonkRun
         bool IsOwnPortal(GameObject const* portal) const;
         BonkMap const* GetNextMap() const;
         void EnterNextStage();
+        void ContinueEndless();
         void GoHome();
 
         void SendFullState() const;
@@ -464,6 +472,7 @@ class BonkRun
             ObjectGuid guid;
             uint32 experience = 0;
             bool pulled = false;
+            ObjectGuid puller;
             float aimX = 0.0f, aimY = 0.0f, aimZ = 0.0f;
             BonkOrb colour = BONK_ORB_BLUE;
             uint32 droppedMs = 0;
@@ -489,6 +498,8 @@ class BonkRun
         bool TeleportToStage(BonkMap const& map, std::string& error);
         void LearnStarts(std::vector<BonkSpot> const& spots);
         void StartStage();
+        void StartEndless();
+        uint32 GetEndlessMs() const { return m_elapsedMs - m_endlessStartMs; }
         void UpdateRunning(uint32 diff);
         void UpdateOffers();
         void DropOffers();
@@ -524,6 +535,7 @@ class BonkRun
         void EndMiniEvent();
         void DespawnMiniEvent();
         void UpdateShrines(uint32 diff);
+        void PlaceDueShrine();
         bool PlaceShrine(BonkShrineType type);
         BonkShrineType PickShrineType() const;
         void RemoveShrine(size_t index);
@@ -600,6 +612,7 @@ class BonkRun
         void DespawnPools();
         void RunEvent(BonkMapEvent const& event);
         void OpenPortal(Creature* boss);
+        bool CloseStage();
         void RewardLevelClear();
         void PayFinale();
         bool IsMythic() const { return m_tier.key == "mythic"; }
@@ -624,10 +637,17 @@ class BonkRun
         float GetCrowdOverflow() const;
         void UpdateWaves();
         void EnterWave(size_t index);
+        bool SpawnBosses();
+        void SpawnMinibosses(uint32 count);
+        void UpdateEndlessBosses();
+        static uint32 GetEndlessInterval(uint32 firstMs, uint32 shortestMs, uint32 spawned);
         uint32 GetFirstMinibossSecond() const;
         std::string DescribeTimelineMarks() const;
         void UpdateOvertime(uint32 diff);
         BonkScalingPoint GetScalingNow() const;
+        BonkScalingPoint GetScalingAt(float minute) const;
+        BonkScalingPoint GetEndlessScaling() const;
+        static float GetGrowthOver(float from, float to, float cycles);
         float GetHeroBaseHealth() const;
         float GetArmorReduction() const;
         float GetArmorOverflowHealth() const;
@@ -726,8 +746,10 @@ class BonkRun
             BonkSpot spot;
             ObjectGuid object;
             ObjectGuid boss;
+            uint32 sparkle = 0;
         };
         HiddenEncounter m_hidden;
+        void RemoveHiddenSparkle();
         void RollHidden();
         void UpdateHidden(uint32 diff);
         void TriggerHidden();
@@ -772,6 +794,7 @@ class BonkRun
         bool IsSkeleton(ObjectGuid const& guid) const;
         bool IsWarlockMinion(ObjectGuid const& guid) const;
         std::string DescribeGlyphStats() const;
+        void AddGlyphMeterSpells(std::set<uint32>& shown) const;
         std::string DescribeGlyphTotals(BonkGlyph const& glyph) const;
         struct RisenSkeleton
         {
@@ -957,6 +980,16 @@ class BonkRun
 
         void GiveExperience(uint32 xp);
         void GiveCollectedExperience(uint32 xp);
+        struct OrbCollector
+        {
+            Player* player = nullptr;
+            BonkRun* run = nullptr;
+            float x = 0.0f, y = 0.0f, z = 0.0f;
+            float magnet = 0.0f;
+        };
+        enum class PickupSpot : uint8 { Body, Chest };
+        std::vector<OrbCollector> GetPickupPlayers(PickupSpot spot, bool hurtOnly);
+        void EatHealDrop();
         BonkRun* GetKillRewardRun(Unit* killer);
         static bool IsPlatedMob(Creature const* mob);
         void RewardKill(Creature* mob, BonkSpawnKind kind, Unit* killer, bool eventGroup);
@@ -1074,6 +1107,7 @@ class BonkRun
         void UseAscension(OwnedWeapon const& owned);
         void ShowAllEvolutions(std::vector<Offer>& cards) const;
         std::string DescribeWeaponStats() const;
+        std::string DescribeOtherDamage() const;
         std::pair<uint64, uint32> GetOwnedSpellTotals(OwnedWeapon const& owned) const;
         std::string DescribeBuildTotals() const;
         void ApplyStep(OwnedWeapon& owned, Offer const& offer);
@@ -1183,15 +1217,7 @@ class BonkRun
         {
             PendingGear(uint32 pendingEntry = 0) : entry(pendingEntry) {}
             uint32 entry;
-            bool found = false;
             BonkFoundGear gear;
-        };
-        enum LootBag : uint8
-        {
-            LOOT_BAG_PLAIN,
-            LOOT_BAG_TIER,
-            LOOT_BAG_EPIC,
-            LOOT_BAG_LEGENDARY,
         };
         struct GearDrop
         {
@@ -1200,14 +1226,12 @@ class BonkRun
             uint32 marker = 0;
             uint32 core = 0;
             uint32 swirl = 0;
-            uint8 bag = LOOT_BAG_PLAIN;
             uint8 quality = 0;
             std::set<ObjectGuid> takenBy;
         };
-        bool MakeTierPiece(bool epic, PendingGear& piece) const;
+        bool MakeTierPiece(uint8 quality, PendingGear& piece) const;
         bool MakeLegendary(PendingGear& piece) const;
-        bool MakePlainGear(uint8 rolled, PendingGear& piece, uint8& quality) const;
-        bool MakeBagPiece(uint8 bag, uint8 quality, PendingGear& piece) const;
+        bool MakeBagPiece(uint8 quality, PendingGear& piece) const;
         void ShowLootBeamTo(Player* viewer, GameObject const* go, uint8 quality, GearDrop const& drop) const;
         void HideLootBagFrom(Player* viewer, GearDrop const& drop) const;
         void RemoveLootBag(GearDrop const& drop);
@@ -1215,24 +1239,20 @@ class BonkRun
         bool EveryoneTookBag(GearDrop const& drop) const;
         void DropGear(Creature const* mob, BonkSpawnKind kind);
         void DropTierPiece(Creature const* mob, BonkSpawnKind kind);
-        bool PlaceTierPiece(Creature const* mob, bool epic);
+        bool PlaceTierPiece(Creature const* mob, uint8 quality);
         bool DropLegendary(Creature const* mob);
         uint32 GetDropTier() const;
-        bool PlaceGearDrop(Creature const* mob, PendingGear const& piece, uint8 quality, uint8 bag);
-        std::string DescribeFoundDrop(BonkFoundGear const& found) const;
+        bool PlaceGearDrop(Creature const* mob, PendingGear const& piece, uint8 quality);
+        std::string DescribeFoundDrop(BonkFoundGear const& found, uint8 quality) const;
         void AddEliteScrap();
-        bool GetKeepInfo(uint32 entry, uint32& keepEntry, uint8& quality) const;
+        bool GetGearQuality(uint32 entry, uint8& quality) const;
         void MailKeptPiece(uint32 entry, std::string const& body, BonkFoundGear const* found);
         uint32 GetScrapPoints(Item const* item) const;
         void GetOwnedTiers(uint32 entry, uint32& bestTier, bool& owned) const;
-        uint8 RollGearQuality(BonkSpawnKind kind) const;
+        uint8 RollGearQuality() const;
         void UpdateGearDrops(uint32 diff);
         void CollectAllGear();
         void OfferGear();
-        void SettlePendingGear();
-        void NoteGearFound(uint32 entry);
-        bool IsWorseThanWorn(uint32 entry) const;
-        void AutoSalvageGear(uint32 entry);
         void SendGearOffer() const;
         void CloseGearOffer();
         uint32 GetGearSalvage(uint32 entry) const;
@@ -1246,22 +1266,14 @@ class BonkRun
         void TrackRunGear(ObjectGuid const& guid);
         void UntrackRunGear(ObjectGuid const& guid);
         void ResolveRunGear(bool extract);
+    public:
         void PlaceVault(float x, float y, float baseZ);
+    private:
+        void PlaceVaultLabel(GameObject const* vault);
         void DespawnVault();
         void SendVault() const;
         bool CheckVaultReach(std::string& error) const;
-        bool CheckPillarReach(std::string& error) const;
-        bool IsPillarStage() const;
-        void CountStageMiniBoss();
-        void MaybeSpawnPillar();
-        void MaybeSpawnPillarAt(float x, float y, float baseZ);
-        bool RaisePillarAt(float x, float y, float z);
-        void DespawnPillar();
-        ObjectGuid m_pillarGuid;
-        uint32 m_pillarObjective = 0;
-        bool m_pillarRaised = false;
-        bool m_pillarMode = false;
-        struct PillarSentPiece
+        struct SentHomePiece
         {
             uint32 entry = 0;
             uint32 stage = 0;
@@ -1269,12 +1281,12 @@ class BonkRun
             std::string lines;
             std::string extra;
         };
-        std::vector<PillarSentPiece> m_pillarSent;
-        uint32 m_stageMiniBosses = 0;
+        std::vector<SentHomePiece> m_sentHome;
         ObjectGuid FindRunGear(uint32 guidLow) const;
         bool IsInVault(ObjectGuid const& guid) const;
         uint32 GetGearGold(uint8 quality) const;
         ObjectGuid m_vaultGuid;
+        ObjectGuid m_vaultLabelGuid;
         std::vector<ObjectGuid> m_vault;
         std::vector<GearDrop> m_gearDrops;
         std::vector<PendingGear> m_pendingGear;
@@ -1290,15 +1302,14 @@ class BonkRun
         void PauseHearth(bool paused);
         void ShowHearthRing();
         void SendHearthBar(bool inside);
-        void LeaveHeroBehind();
         bool IsHeroInHearthRing() const;
         void EndHearth();
-        uint32 GetHearthMs() const;
         bool m_hearthDropped = false;
         bool m_hearthActive = false;
+        bool m_hearthVaultReady = false;
+        bool m_hearthSending = false;
         uint32 m_hearthMs = 0;
         uint32 m_hearthSendMs = 0;
-        uint32 m_hearthLeavingMs = 0;
         bool m_hearthShown = false;
         bool m_hearthInside = false;
         float m_hearthX = 0.0f, m_hearthY = 0.0f, m_hearthZ = 0.0f;
@@ -1334,6 +1345,7 @@ class BonkRun
         BonkLevel m_levelRow;
         uint32 m_levelBestAtStart = 0;
         void ApplyInvader();
+        void ApplyDifficultyGold();
 
         void Finish(bool wentHome);
         void Exit();
@@ -1378,8 +1390,14 @@ class BonkRun
         void LogLoadout() const;
         void LogBuild() const;
         void LogRunEnd(bool wentHome, std::string const& build) const;
+        void LogLevelClear() const;
+        void LogFinale(float minutes, uint32 score) const;
+        std::string DescribeBoardEntry() const;
+        std::string DescribeBoardParty() const;
         void LogBossFight(Creature const* mob, BonkSpawnKind kind, BossArrival const& arrival);
         uint32 m_nextLogMinute = 1;
+        uint32 m_statsRefreshTimer = 0;
+        void RefreshWatchedStats(uint32 diff);
         uint32 m_minuteDamage = 0;
         uint32 m_minuteHealed = 0;
         uint32 m_minuteKills = 0;
@@ -1434,9 +1452,16 @@ class BonkRun
         uint32 m_stage = 1;
         ObjectGuid m_coopHost;
         uint32 m_coopPlayers = 1;
+        bool m_missedBoss = false;
         bool m_coopNoPause = false;
         bool m_coopOwnXp = false;
         float GetCoopHealthScale(BonkSpawnKind kind) const;
+        uint32 GetCoopBossCount() const;
+        float GetCoopCrowd() const;
+        float GetCoopSpawnShare() const;
+        void UpdateOwnCombat(uint32 diff);
+        bool OnStageBossKilled(Creature* mob);
+        void NotifyArrived(Creature* mob) const;
         float m_stageX = 0.0f, m_stageY = 0.0f, m_stageZ = 0.0f;
         void ClearStageObjects();
         bool PlaceNearHost(float& x, float& y, float& z, float& o) const;
@@ -1516,12 +1541,12 @@ class BonkRun
             bool countdown);
         void UpdatePendingSummons(uint32 diff);
         bool IsAltarWaking(ObjectGuid const& altar) const;
-        uint32 m_shrinesToPlace = 0;
+        std::vector<uint32> m_shrineDueMs;
         uint32 m_shrineTimer = 0;
         bool m_moonwellPlaced = false;
         uint32 m_leyLinesPlaced = 0;
         bool m_stonePlaced = false;
-        uint32 m_stoneAt = 0;
+        bool m_placeStone = false;
         bool m_captureShown = false;
         uint32 m_captureSendMs = 0;
         uint32 m_greedStacks = 0;
@@ -1561,6 +1586,7 @@ class BonkRun
         uint32 m_vendorCheckMs = 0;
         uint32 m_vendorRerolls = 0;
         BonkRarity m_rarityFloor = BONK_RARITY_COMMON;
+        bool TakeHostSky(uint32 key) const;
         mutable uint32 m_skyKey = 0;
         mutable time_t m_skyTime = 0;
         uint32 m_skySentKey = 0;
@@ -1579,6 +1605,12 @@ class BonkRun
         uint32 m_miniEventSlots = 0;
         uint32 m_overtimeWaves = 0;
         int32 m_overtimeTimer = 0;
+        uint32 m_endlessStartMs = 0;
+        uint32 m_endlessStartTotalMs = 0;
+        uint32 m_endlessBossDueMs = 0;
+        uint32 m_endlessMinibossDueMs = 0;
+        uint32 m_endlessBosses = 0;
+        uint32 m_endlessMinibosses = 0;
         float m_spawnDamageScale = 1.0f;
         uint32 m_boundaryTimer = 0;
         uint32 m_nativeTimer = 0;
@@ -1590,6 +1622,7 @@ class BonkRun
         bool m_stoneBoss = false;
         float m_scalingMinuteOverride = -1.0f;
         ObjectGuid m_bossGuid;
+        std::vector<ObjectGuid> m_stageBosses;
         std::vector<ObjectGuid> m_mobs;
         std::vector<ObjectGuid> m_groupEnemies;
         uint32 m_lastPlateId = 0;
@@ -1654,6 +1687,7 @@ class BonkRun
             ObjectGuid guid;
             ObjectGuid sparkle;
             bool pulled = false;
+            ObjectGuid puller;
             float aimX = 0.0f, aimY = 0.0f, aimZ = 0.0f;
         };
         std::vector<HealDrop> m_healDrops;
@@ -2083,6 +2117,7 @@ class BonkRun
         float GetPoisonDamageScale() const;
 
         bool m_keywordlessHits = false;
+        uint32 m_meterPartSpell = 0;
         void ClearHunterEvolutions();
         bool UsesShotSources() const;
         Creature* SummonShotSource();
@@ -2319,6 +2354,20 @@ class BonkRun
         void ShowStrikeImpact(SpellEntry const* spellInfo, Creature* target);
         void ShowAreaImpact(SpellEntry const* spellInfo, float radius);
         void ShowStrike(Unit* caster, SpellEntry const* spellInfo, Unit* target) const;
+        void LaunchBolt(Unit* caster, SpellEntry const* look, Creature* target, float damage, std::function<void(Creature*)> land);
+        void LandDueBolts();
+        void ReleaseBoltIncoming(ObjectGuid const& target, float incoming);
+        bool SurvivesBoltsInFlight(Creature const* mob) const;
+        Creature* PickBoltTarget(Unit const* from, Creature* wanted, float range) const;
+        struct FlyingBolt
+        {
+            ObjectGuid target;
+            uint32 dueMs = 0;
+            float incoming = 0.0f;
+            std::function<void(Creature*)> land;
+        };
+        std::vector<FlyingBolt> m_flyingBolts;
+        std::map<ObjectGuid, float> m_boltIncoming;
         void ShowSwing(SpellEntry const* look, Unit* target) const;
         void ResolveMageCast(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast);
         bool HurlPyroblasts(OwnedWeapon& owned, SpellEntry const* spellInfo, std::vector<Creature*> mobs);
@@ -2370,7 +2419,15 @@ class BonkRun
         bool DealShamanHit(SpellEntry const* spellInfo, uint32 creditSpellId, Unit* target, float damage);
         void ChargeLightningShield();
         void ShowLightningShield(uint32 charges);
+        void ZapWithLightningShield(OwnedWeapon const& shield, Creature* target);
+        void ZapNearestWithLightningShield(OwnedWeapon const& shield);
         void ReplantTotems();
+        uint32 CountOwnedTotems() const;
+        void GetTotemSlot(uint32 slot, float& x, float& y, float& z) const;
+        void PlantTotemAt(OwnedWeapon& owned, ObjectGuid& guid, Creature* totem, float x, float y, float z);
+        float GetMagmaPulseRadius(OwnedWeapon const& owned) const;
+        Creature* FindMagmaPack(float radius) const;
+        void HurlMagmaTotem(OwnedWeapon& owned, ObjectGuid& guid, Creature* totem);
         void FlowHealingStreams();
         void ResetPriestState();
         void UpdatePriest(uint32 diff);
@@ -2747,6 +2804,7 @@ class BonkRun
         uint32 m_voidTendrilsMs = 0;
         uint32 m_maelstromHits = 0;
         uint32 m_lightningCharges = 0;
+        std::map<ObjectGuid, uint32> m_magmaIdleMs;
         uint32 m_shamanTickMs = 0;
         uint32 m_shamanTicks = 0;
         uint32 m_doomWindsReadyMs = 0;

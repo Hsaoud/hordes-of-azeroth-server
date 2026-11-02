@@ -238,6 +238,7 @@ struct BonkRunChoice
     bool invade = false;
     uint32 level = 0;
     bool groupReady = false;
+    bool loadWaited = false;
 };
 
 struct BonkMapStart
@@ -272,6 +273,11 @@ struct BonkLevel
     uint8 extraAffixes = 0;
     float veteranChance = 0.0f;
     float reward = 1.0f;
+    float greenChance = 0.0f;
+    float blueChance = 0.0f;
+    float epicChance = 0.0f;
+    float legendaryChance = 0.0f;
+    float rollFloor = 0.0f;
 };
 
 struct BonkTier
@@ -872,6 +878,7 @@ float const BONK_MAX_AREA           = 60.0f;
 float const BONK_MIN_CURVED_GAIN    = 1.0f;
 float const BONK_MAX_MOVE_SPEED     = 50.0f;
 float const BONK_BASE_MOVE_SPEED    = 10.0f;
+float const BONK_MYTHIC_BASE_MOVE_SPEED = 5.0f;
 float const BONK_MAX_HASTE          = 75.0f;
 float CurveStat(float raw, float ceiling);
 float CurveHaste(float raw);
@@ -1020,27 +1027,24 @@ uint8 const BONK_TRAINING_OPEN_RANKS = 3;
 uint8 const BONK_TRAINING_HEROIC_RANKS = 3;
 uint8 const BONK_TRAINING_MYTHIC_RANKS = 4;
 uint32 const BONK_TRAINING_LEVELS_PER_RANK = 4;
-uint32 const BONK_TIER_VENDOR = 900150;
 uint32 const BONK_DECK_OBJECT = 900063;
 uint32 const BONK_COOP_NPC = 900190;
+uint32 const BONK_VAULT_LABEL = 900191;
 float const BONK_COOP_NPC_RANGE = 150.0f;
-uint32 const BONK_TIER_EXCHANGE_FEE_PERCENT = 10;
 uint32 const BONK_STOCK_TIER_LAG = 2;
-uint32 const BONK_STOCK_TIER_MAX = 10;
-float const BONK_FOUND_PRICE_FACTOR = 0.5f;
-size_t const BONK_FOUND_LINE_LENGTH = 200;
-uint32 const BONK_TIER_GEAR_FIRST = 903000;
-uint32 const BONK_TIER_GEAR_TIERS = 20;
-uint32 const BONK_TIER_GEAR_SLOTS = 8;
-uint8 const BONK_TIER_GEAR_CLASSES[] = { 1, 2, 3, 4, 5, 7, 8, 9, 11 };
-uint32 const BONK_TIER_GEAR_CLASS_COUNT = sizeof(BONK_TIER_GEAR_CLASSES) / sizeof(BONK_TIER_GEAR_CLASSES[0]);
-uint32 const BONK_MYTHIC_GEAR_FIRST = 904500;
-uint32 const BONK_MYTHIC_GEAR_KINDS = 20;
-uint32 const BONK_MYTHIC_GEAR_FIRST_ACCESSORY = 9;
-uint32 const BONK_MYTHIC_GEAR_FIRST_TRINKET = 12;
-uint32 const BONK_LEGENDARY_TIER_FIRST = 905000;
-uint32 const BONK_EPIC_GEAR_OFFSET = 7000;
-uint32 const BONK_LEGACY_LEGENDARY_FIRST = 901420;
+uint32 const BONK_STOCK_TIER_MAX = 9;
+uint32 const BONK_SHOP_GREEN_FIRST_TIER = 2;
+uint32 const BONK_SHOP_BLUE_FIRST_TIER = 5;
+uint32 const BONK_ITEM_HEARTHSTONE = 900230;
+uint32 const BONK_GEAR_FIRST = 930000;
+uint32 const BONK_GEAR_TIERS = 10;
+uint8 const BONK_GEAR_LOWEST_QUALITY = 1;
+uint8 const BONK_GEAR_QUALITIES = 4;
+uint32 const BONK_GEAR_FIRST_WEAPON = 24;
+uint32 const BONK_GEAR_FIRST_ACCESSORY = 33;
+uint32 const BONK_GEAR_FIRST_TRINKET = 36;
+uint32 const BONK_GEAR_KINDS = 44;
+uint32 const BONK_LEGENDARY_FIRST = 932000;
 uint32 const BONK_LEGENDARY_KINDS = 8;
 
 enum BonkTrinketEffect : uint8
@@ -1063,8 +1067,11 @@ struct BonkTrinket
     BonkString text;
 };
 uint8 const BONK_DETERMINATION_MAX_STACKS = 5;
-uint32 const BONK_LEVELS_PER_TALENT_POINT = 2;
-uint32 const BONK_LEVEL_TALENT_POINTS_MAX = 10;
+uint32 const BONK_TALENT_NORMAL_LAST_LEVEL = 4;
+uint32 const BONK_EPIC_LUCK_PER_MISS = 5;
+uint32 const BONK_TALENT_HEROIC_LAST_LEVEL = 9;
+uint32 const BONK_TALENT_MYTHIC_LEVELS = 20;
+uint32 const BONK_TALENT_MYTHIC_POINTS = 8;
 uint32 const BONK_LEVEL_TICKETS_BASE = 3;
 
 inline uint32 GetLevelFirstClearTickets(uint32 level)
@@ -1084,6 +1091,7 @@ struct BonkUpgrade
     uint8 maxRank = 5;
     uint32 cost = 5000;
     float costGrowth = 1.4f;
+    uint32 requiredLevel = 0;
     BonkShopNode layout;
 
     uint32 GetCost(uint8 ownedRanks) const;
@@ -1115,7 +1123,7 @@ enum BonkTalentEffect : uint8
     MAX_BONK_TALENT_EFFECT
 };
 
-uint8 const BONK_TALENT_ENDLESS_RANKS = 255;
+uint32 const BONK_DARKMOON_FAVORS_TREE = 8;
 
 struct BonkTalent
 {
@@ -1130,6 +1138,7 @@ struct BonkTalent
     float costGrowth = 1.0f;
     BonkShopNode layout;
     std::vector<uint32> rankQuests;
+    std::vector<uint32> rankLevels;
 
     bool IsToggle() const
     {
@@ -1137,7 +1146,6 @@ struct BonkTalent
             effect == BONK_TALENT_ELITE_AFFIX;
     }
     uint32 GetCost(uint8 ownedRanks) const;
-    bool IsEndless() const { return maxRank == BONK_TALENT_ENDLESS_RANKS; }
 };
 
 uint32 const BONK_FORTUNE_ROW_GATES[] = { 0, 0, 10, 30 };
@@ -1176,23 +1184,6 @@ struct BonkRunBonuses
 struct BonkItemStat
 {
     float stats[MAX_BONK_PASSIVE_EFFECT] = {};
-    uint32 setId = 0;
-    uint32 unlockTier = 0;
-};
-
-struct BonkItemSetBonus
-{
-    uint8 pieces = 2;
-    float stats[MAX_BONK_PASSIVE_EFFECT] = {};
-    std::string description;
-};
-
-struct BonkItemSet
-{
-    uint32 id = 0;
-    std::string name;
-    std::vector<uint32> items;
-    std::vector<BonkItemSetBonus> bonuses;
 };
 
 struct BonkGearTotals
@@ -1328,17 +1319,6 @@ struct BonkGlyph
     bool starter = false;
 };
 
-struct BonkGear
-{
-    uint32 entry = 0;
-    uint8 quality = 2;
-    uint32 keepEntry = 0;
-    uint32 allowableClass = 0;
-    uint32 tierId = 0;
-
-    bool DropsOn(uint32 runTierId) const { return !tierId || tierId == runTierId; }
-};
-
 class BonkMgr
 {
     public:
@@ -1400,25 +1380,16 @@ class BonkMgr
 
         uint32 GetItemCard(uint32 itemEntry) const;
 
-        BonkGear const* GetGear(uint32 entry) const;
-        BonkGear const* GetGearByKeep(uint32 keepEntry) const;
-        static uint32 GetTierGearEntry(uint8 classId, uint32 tier, uint32 slot);
-        static bool ReadTierGearEntry(uint32 entry, uint8& classId, uint32& tier, uint32& slot);
-        static uint32 GetMythicGearEntry(uint32 kind, uint32 tier);
-        static bool ReadMythicGearEntry(uint32 entry, uint32& kind, uint32& tier);
+        static uint32 GetGearEntry(uint32 kind, uint8 quality, uint32 tier);
+        static bool ReadGearEntry(uint32 entry, uint32& kind, uint8& quality, uint32& tier);
+        static std::vector<uint32> GetGearKindsFor(uint32 classMask);
         static bool ReadTrinketEffect(uint32 entry, BonkTrinketEffect& effect);
         static BonkTrinket const& GetTrinket(BonkTrinketEffect effect);
-        static std::vector<uint32> GetMythicGearFor(uint32 classMask, uint32 tier);
-        static uint32 GetLegendaryTierEntry(uint32 kind, uint32 tier);
+        static uint32 GetLegendaryEntry(uint32 kind, uint32 tier);
         static bool ReadLegendaryEntry(uint32 entry, uint32& kind, uint32& tier);
         static std::vector<uint32> GetLegendariesFor(uint32 classMask, uint32 tier);
         static uint32 GetGearTier(uint32 entry);
-        static bool IsEpicGear(uint32 entry);
-        static uint32 GetEpicGearEntry(uint32 blueEntry);
-        static uint32 GetBlueGearEntry(uint32 entry);
-        static uint32 GetGearAtTier(uint32 entry, uint32 tier);
-        static bool IsLegacyLegendary(uint32 entry);
-        std::map<uint32, BonkGear> const& GetGear() const { return m_gear; }
+        static uint32 PickGearLook(uint8 quality, uint32 tier);
 
         std::map<uint32, BonkShopTree> const& GetShopTrees() const { return m_shopTrees; }
 
@@ -1430,8 +1401,6 @@ class BonkMgr
 
         BonkItemStat const* GetItemStat(uint32 itemEntry) const;
         std::map<uint32, BonkItemStat> const& GetItemStats() const { return m_itemStats; }
-        BonkItemSet const* GetItemSet(uint32 id) const;
-        std::map<uint32, BonkItemSet> const& GetItemSets() const { return m_itemSets; }
         BonkGearTotals EvaluateGear(Player const* player) const;
         BonkGearTotals EvaluateItems(std::vector<uint32> const& entries) const;
 
@@ -1457,7 +1426,6 @@ class BonkMgr
         void LoadGlyphs();
         void LoadHiddenEncounters();
         void LoadBossLines();
-        void LoadGear();
         void LoadShopTrees();
         void LoadUpgrades();
         void LoadTalents();
@@ -1486,8 +1454,6 @@ class BonkMgr
         std::map<uint32, BonkGlyph> m_glyphs;
         std::vector<BonkHidden> m_hiddenEncounters;
         std::map<uint32, std::array<std::vector<uint32>, MAX_BONK_BOSS_LINE>> m_bossLines;
-        std::map<uint32, BonkGear> m_gear;
-        std::map<uint32, uint32> m_gearByKeep;
         std::map<uint32, BonkShopTree> m_shopTrees;
         std::map<uint32, BonkUpgrade> m_upgrades;
         mutable std::mutex m_mapStartLock;
@@ -1496,7 +1462,6 @@ class BonkMgr
         void LoadZoneArt();
         std::map<uint32, BonkTalent> m_talents;
         std::map<uint32, BonkItemStat> m_itemStats;
-        std::map<uint32, BonkItemSet> m_itemSets;
         std::map<uint32, BonkMob> m_mobs;
         std::map<uint32, BonkBoltLook> m_boltLooks;
         BonkArchetypeInfo m_archetypes[MAX_BONK_ARCHETYPE];

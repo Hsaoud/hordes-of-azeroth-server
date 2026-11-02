@@ -3,6 +3,7 @@
 #include "AccountMgr.h"
 #include "BonkMgr.h"
 #include "BonkPlayer.h"
+#include "BonkStrings.h"
 #include "Chat.h"
 #include "Database/DatabaseEnv.h"
 #include "DynamicObject.h"
@@ -15,6 +16,7 @@
 #include "Player.h"
 #include "WorldSession.h"
 
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <set>
@@ -24,7 +26,7 @@ namespace
 {
     char const* const GUEST_ACCOUNT_PREFIX = "HOAC";
     char const* const GUEST_ACCOUNT_TABLES[] = {
-        "bonk_account", "bonk_account_bank", "bonk_account_disabled", "bonk_account_found", "bonk_account_level", "bonk_account_mastery",
+        "bonk_account", "bonk_account_bank", "bonk_account_disabled", "bonk_account_board", "bonk_account_epic_luck", "bonk_account_kept_talents", "bonk_account_level", "bonk_account_level_best", "bonk_account_mastery",
         "bonk_account_mastery_node", "bonk_account_mastery_preset", "bonk_account_mastery_preset_active", "bonk_account_quest",
         "bonk_account_starter", "bonk_account_talent", "bonk_account_unlock", "bonk_account_upgrade",
     };
@@ -57,9 +59,9 @@ namespace
         return s_removedAccounts.count(accountId) != 0;
     }
 
-    void SendAway(Player* guest, char const* reason)
+    void SendAway(Player* guest, BonkString reason)
     {
-        ChatHandler(guest).SendSysMessage(reason);
+        ChatHandler(guest).SendSysMessage(guest->GetBonkPlayer()->GetString(reason).c_str());
         ObjectGuid const guid = guest->GetObjectGuid();
         guest->m_Events.AddLambdaEventAtOffset([guid]
         {
@@ -68,14 +70,22 @@ namespace
         }, REMOVE_DELAY_MS);
     }
 
+    bool SameClassAllowed()
+    {
+        std::ifstream marker("coop/same-class.txt", std::ios::binary);
+        return marker.good();
+    }
+
     bool ClassTaken(Group const* group, Player const* guest)
     {
+        if (SameClassAllowed())
+            return false;
         for (Group::MemberSlot const& slot : group->GetMemberSlots())
         {
             if (slot.guid == guest->GetObjectGuid())
                 continue;
             if (Player* member = sObjectMgr.GetPlayer(slot.guid))
-                if (member->GetClass() == guest->GetClass())
+                if (member->GetClass() == guest->GetClass() && !BonkCoop::IsAway(member))
                     return true;
         }
         return false;
@@ -185,7 +195,7 @@ void BonkCoop::JoinHostGroup(Player* guest)
         return;
     if (WasRemoved(guest->GetSession()->GetAccountId()))
     {
-        SendAway(guest, "The host removed you from this game.");
+        SendAway(guest, BONK_STRING_COOP_REMOVED);
         return;
     }
     if (guest->GetGroup())
@@ -195,7 +205,7 @@ void BonkCoop::JoinHostGroup(Player* guest)
         return;
     if (host->GetBonkPlayer() && host->GetBonkPlayer()->IsIronman())
     {
-        SendAway(guest, "The host is playing an ironman character, and ironman characters play solo only.");
+        SendAway(guest, BONK_STRING_COOP_HOST_IRONMAN);
         return;
     }
     Group* group = host->GetGroup();
@@ -212,7 +222,7 @@ void BonkCoop::JoinHostGroup(Player* guest)
     }
     if (group && ClassTaken(group, guest))
     {
-        SendAway(guest, "Your class is already in this group. Make a character of another class.");
+        SendAway(guest, BONK_STRING_COOP_CLASS_TAKEN);
         return;
     }
     if (!group)
@@ -237,6 +247,8 @@ void BonkCoop::OnLogout(Player* player)
         return;
     if (!player->GetSession()->IsConnected())
         sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s didn't rejoin in time", player->GetName());
+    SyncGuest(player);
+    ForgetGuest(player);
     {
         std::lock_guard<std::mutex> guard(s_seatsLock);
         s_seats.erase(player->GetObjectGuid());
@@ -258,7 +270,40 @@ void BonkCoop::OnUninvited(ObjectGuid guid)
         std::lock_guard<std::mutex> guard(s_removedLock);
         s_removedAccounts.insert(guest->GetSession()->GetAccountId());
     }
-    SendAway(guest, "The host removed you from this game.");
+    guest->GetBonkPlayer()->SendAddon("coopremoved");
+    guest->m_Events.AddLambdaEventAtOffset([guid]
+    {
+        if (Player* player = sObjectMgr.GetPlayer(guid))
+            player->GetSession()->LogoutRequest(time(nullptr) - 20);
+    }, REMOVE_DELAY_MS);
+}
+
+uint8 BonkCoop::GuestLoginRefusal(std::string const& username, uint32 accountId, ObjectGuid character)
+{
+    if (!HasGuestPrefix(username))
+        return 0;
+    if (WasRemoved(accountId))
+        return CHAR_LOGIN_DISABLED;
+    Player* host = FindHost();
+    if (!host)
+        return 0;
+    if (host->GetBonkPlayer() && host->GetBonkPlayer()->IsIronman())
+        return CHAR_LOGIN_FAILED;
+    Group const* group = host->GetGroup();
+    if (!group || group->IsMember(character))
+        return 0;
+    uint8 const classId = sObjectMgr.GetPlayerClassByGUID(character);
+    uint32 present = 0;
+    for (Group::MemberSlot const& slot : group->GetMemberSlots())
+    {
+        Player* member = sObjectMgr.GetPlayer(slot.guid);
+        if (!member)
+            continue;
+        ++present;
+        if (!SameClassAllowed() && member->GetClass() == classId && !IsAway(member))
+            return CHAR_LOGIN_DUPLICATE_CHARACTER;
+    }
+    return present >= MAX_GROUP_SIZE ? CHAR_LOGIN_NO_INSTANCES : 0;
 }
 
 void BonkCoop::DeleteGuestAccounts()

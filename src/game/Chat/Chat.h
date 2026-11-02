@@ -221,6 +221,7 @@ class ChatHandler
         bool HandleBonkPortalCommand(char* args);
         bool HandleBonkCoopSettingsCommand(char* args);
         bool HandleBonkGodCommand(char* args);
+        bool HandleBonkChestCommand(char* args);
         bool HandleBonkCardCommand(char* args);
         bool HandleBonkEvolveCommand(char* args);
         bool HandleBonkPassiveCommand(char* args);
@@ -231,13 +232,15 @@ class ChatHandler
         bool HandleBonkBanSlotCommand(char* args);
         bool HandleBonkMenuCommand(char* args);
         bool HandleBonkResyncCommand(char* args);
+        bool HandleBonkStatsCommand(char* args);
         bool HandleBonkVaultCommand(char* args);
         bool HandleBonkTitleCommand(char* args);
         bool HandleBonkHelloCommand(char* args);
         bool HandleBonkEffectsCommand(char* args);
         bool HandleBonkLangCommand(char* args);
         bool HandleBonkNoticeCommand(char* args);
-        bool HandleBonkOldLegendariesCommand(char* args);
+        bool HandleBonkBoardCommand(char* args);
+        bool HandleBonkBoardJoinCommand(char* args);
         bool HandleBonkStringsExportCommand(char* args);
         bool HandleBonkQuestsCommand(char* args);
         bool HandleBonkCodexCommand(char* args);
@@ -259,6 +262,7 @@ class ChatHandler
         bool HandleBonkScalingCommand(char* args);
         bool HandleBonkStressCommand(char* args);
         bool HandleBonkCoopReadyCommand(char* args);
+        bool HandleBonkWatchNextCommand(char* args);
         bool HandleBonkCrowdCommand(char* args);
         bool HandleBonkSpawnLookCommand(char* args);
         bool HandleBonkBossTuneCommand(char* args);

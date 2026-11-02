@@ -189,6 +189,18 @@ void BonkQuests::OnLogin(Player* player)
     OnProgress(player, BONK_QUEST_QUESTS_DONE, 0, CountCompleted(account), true);
 }
 
+std::map<uint32, std::pair<uint32, bool>> BonkQuests::GetAllProgress(uint32 account) const
+{
+    std::map<uint32, std::pair<uint32, bool>> all;
+    std::lock_guard<std::mutex> guard(m_lock);
+    auto itr = m_accounts.find(account);
+    if (itr == m_accounts.end())
+        return all;
+    for (auto const& progress : itr->second)
+        all[progress.first] = { progress.second.value, progress.second.completed };
+    return all;
+}
+
 void BonkQuests::Save(uint32 account)
 {
     std::vector<std::pair<uint32, uint32>> rows;
@@ -800,6 +812,8 @@ void BonkQuests::SendLog(Player* player, std::string const& npc)
         if (!Counts(player, quest))
             continue;
         Progress const& entry = progress[quest.id];
+        if (IsHiddenUntilDone(quest) && !entry.completed)
+            continue;
         std::string rewardIcon;
         std::string const reward = DescribeReward(quest, &rewardIcon, bonk->GetLocale());
         bonk->SendAddon("q~" + std::to_string(quest.id) + "~" + bonk->Localize(BONK_FIELD_QUEST_NAME, quest.id, quest.name) + "~" +
@@ -828,6 +842,8 @@ std::vector<std::string> BonkQuests::DescribeAll(Player* player) const
         if (!Counts(player, quest))
             continue;
         Progress const& entry = progress[quest.id];
+        if (IsHiddenUntilDone(quest) && !entry.completed)
+            continue;
         std::string icon;
         std::string const reward = DescribeReward(quest, &icon);
         lines.push_back(quest.name + (entry.completed ? " (done): " : " " + std::to_string(GetShownProgress(quest, entry)) + "/" +

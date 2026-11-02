@@ -56,6 +56,7 @@ enum BonkQuestType : uint8
     BONK_QUEST_DEATHS         = 37,
     BONK_QUEST_DOT_KILLS      = 38,
     BONK_QUEST_DASHES         = 39,
+    BONK_QUEST_VETERAN        = 40,
     MAX_BONK_QUEST_TYPE
 };
 
@@ -129,6 +130,7 @@ class BonkQuests
         bool IsLocked(uint32 account, BonkQuestReward type, uint32 id) const;
         bool IsDisabled(uint32 account, BonkQuestReward type, uint32 id) const;
         bool IsInPool(uint32 account, BonkQuestReward type, uint32 id) const { return !IsLocked(account, type, id) && !IsDisabled(account, type, id); }
+        static bool IsHiddenUntilDone(BonkQuest const& quest) { return quest.type == BONK_QUEST_VETERAN; }
         static bool IsTogglable(BonkQuestReward type) { return type == BONK_REWARD_CARD || type == BONK_REWARD_GLYPH; }
         bool SetDisabled(uint32 account, BonkQuestReward type, uint32 id, bool disabled, uint32 slots, std::string& error,
             LocaleConstant locale = LOCALE_enUS);
@@ -140,6 +142,12 @@ class BonkQuests
         bool IsCompleted(uint32 account, uint32 questId) const;
         uint32 GetProgress(uint32 account, BonkQuest const& quest) const;
         uint32 GetCompletedCount(uint32 account) const { return CountCompleted(account); }
+        std::map<uint32, std::pair<uint32, bool>> GetAllProgress(uint32 account) const;
+        BonkQuest const* FindQuest(uint32 id) const
+        {
+            auto itr = m_quests.find(id);
+            return itr != m_quests.end() ? &itr->second : nullptr;
+        }
 
         void OnKill(Player* player, BonkSpawnKind kind, uint32 killingSpell, uint32 creatureType, uint32 entry, bool standing);
         void OnBossFight(Player* player, BonkSpawnKind kind, uint32 seconds, bool unhurt, uint32 healthPercent);

@@ -440,8 +440,8 @@ void BonkRun::ReleaseGlyphBursts()
         m_cardProc = true;
         for (Creature* mob : mobs)
         {
-            if (burst.effect == BONK_GLYPH_CLEAVE)
-                DealCarriedDamage(spellInfo, mob, burst.damage);
+            if (burst.effect == BONK_GLYPH_CLEAVE || burst.effect == BONK_GLYPH_CORPSE_BLAST)
+                DealCarriedDamage(spellInfo, mob, burst.damage * GetHealthScale(mob));
             else
                 DealSpellHit(spellInfo, mob, burst.damage);
         }
@@ -591,6 +591,13 @@ std::string BonkRun::DescribeGlyphStats() const
     return text;
 }
 
+void BonkRun::AddGlyphMeterSpells(std::set<uint32>& shown) const
+{
+    for (GlyphDamageSpell const& source : BONK_GLYPH_DAMAGE_SPELLS)
+        if (GetGlyph(source.effect))
+            shown.insert(source.spellId);
+}
+
 std::string BonkRun::DescribeGlyphTotals(BonkGlyph const& glyph) const
 {
     std::string text = std::to_string(glyph.id);
@@ -715,7 +722,7 @@ void BonkRun::ModifyGlyphHit(Unit* victim, uint32& damage)
     if (BonkGlyph const* cleave = GetGlyph(BONK_GLYPH_CLEAVE))
         if (damage > health)
             QueueGlyphBurst(*cleave, victim->GetPositionX(), victim->GetPositionY(), victim->GetPositionZ(), cleave->values[0],
-                damage - health, true);
+                float(GetTrueAmount(victim, damage - health)), true);
 }
 
 void BonkRun::UpdateGlyphs(uint32 diff)

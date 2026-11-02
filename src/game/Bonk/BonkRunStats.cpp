@@ -1,4 +1,5 @@
 #include "BonkRunStats.h"
+#include "BonkCoop.h"
 #include "BonkLocale.h"
 #include "BonkMobAI.h"
 #include "BonkPlayer.h"
@@ -28,6 +29,7 @@ namespace
 {
     uint32 const BONK_BOSS_BAR_MS    = 250;
     float const BONK_BOSS_BAR_RANGE  = 150.0f;
+    size_t const BONK_BOSS_BAR_MAX   = 4;
 
     struct BossBar
     {
@@ -96,6 +98,7 @@ namespace
                 case BONK_KEYWORD_DECAY:   return "decay";
                 case BONK_KEYWORD_AGONY:   return "agony";
                 case BONK_KEYWORD_MOONFIRE: return "moonfire";
+                case BONK_KEYWORD_STATIC:  return "static";
                 default:                   break;
             }
         }
@@ -407,6 +410,47 @@ std::vector<uint32> BonkStats::GetWeaponSpells(BonkWeapon const& weapon)
     return spellIds;
 }
 
+std::vector<BonkOtherSource> BonkStats::GetOtherSources(Player* player, std::set<uint32> const& shown)
+{
+    std::map<uint32, BonkRunStats::Spell> bySpell;
+    {
+        std::lock_guard<std::mutex> guard(s_lock);
+        auto stats = s_stats.find(player->GetObjectGuid());
+        if (stats == s_stats.end())
+            return {};
+        bySpell = stats->second.bySpell;
+    }
+
+    BonkPlayer* bonk = player->GetBonkPlayer();
+    std::vector<BonkOtherSource> sources;
+    for (auto const& itr : bySpell)
+    {
+        if (shown.count(itr.first) || (!itr.second.damage && !itr.second.kills))
+            continue;
+        BonkOtherSource source;
+        source.spellId = itr.first;
+        source.icon = "INV_Misc_QuestionMark";
+        source.name = bonk->GetString(BONK_STRING_SPELL_NUMBERED, { std::to_string(itr.first) });
+        if (!itr.first)
+        {
+            source.icon = "INV_Sword_04";
+            source.name = "Melee";
+        }
+        else if (BonkKeywordInfo const* keyword = sBonkMgr.GetKeywordBySpell(itr.first))
+        {
+            source.icon = keyword->icon.empty() ? source.icon : keyword->icon;
+            source.name = bonk->Localize(BONK_FIELD_KEYWORD_NAME, uint32(keyword->id), keyword->name);
+        }
+        else if (SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(itr.first))
+            source.name = spellInfo->SpellName[0];
+        source.damage = itr.second.damage;
+        source.kills = itr.second.kills;
+        source.type = DamageType(itr.first);
+        sources.push_back(std::move(source));
+    }
+    return sources;
+}
+
 void BonkStats::SendSummary(Player* player, std::vector<BonkSummaryWeapon> const& weapons)
 {
     BonkRunStats stats;
@@ -463,27 +507,8 @@ void BonkStats::SendSummary(Player* player, std::vector<BonkSummaryWeapon> const
         }
     }
 
-    for (auto const& itr : stats.bySpell)
-    {
-        if (sent.count(itr.first) || (!itr.second.damage && !itr.second.kills))
-            continue;
-        std::string icon = "INV_Misc_QuestionMark";
-        std::string name = bonk->GetString(BONK_STRING_SPELL_NUMBERED, { std::to_string(itr.first) });
-        if (!itr.first)
-        {
-            icon = "INV_Sword_04";
-            name = "Melee";
-        }
-        else if (BonkKeywordInfo const* keyword = sBonkMgr.GetKeywordBySpell(itr.first))
-        {
-            icon = keyword->icon.empty() ? icon : keyword->icon;
-            name = bonk->Localize(BONK_FIELD_KEYWORD_NAME, uint32(keyword->id), keyword->name);
-        }
-        else if (SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(itr.first))
-            name = spellInfo->SpellName[0];
-        bonk->SendAddon("sumw~" + icon + "~" + name + "~0~0~0~" + std::to_string(itr.second.damage) + "~" + std::to_string(itr.second.kills) + "~" +
-            DamageType(itr.first));
-    }
+    for (BonkOtherSource const& other : GetOtherSources(player, sent))
+        bonk->SendAddon("sumw~" + other.icon + "~" + other.name + "~0~0~0~" + std::to_string(other.damage) + "~" + std::to_string(other.kills) + "~" + other.type);
 
     bonk->SendAddon("sumend");
 }
@@ -500,7 +525,13 @@ void BonkStats::UpdateBossBar(Player* player, uint32 diff)
         return;
     bar->timer = 0;
 
-    Creature* shown = nullptr;
+    struct ShownBoss
+    {
+        Creature* creature;
+        bool isBoss;
+        float distance;
+    };
+    std::vector<ShownBoss> shown;
     if (player->IsInWorld() && !player->IsBeingTeleported())
     {
         std::list<Creature*> creatures;
@@ -508,34 +539,39 @@ void BonkStats::UpdateBossBar(Player* player, uint32 diff)
         MaNGOS::CreatureListSearcher<MaNGOS::AnyUnitInObjectRangeCheck> searcher(creatures, check);
         Cell::VisitGridObjects(player, searcher, BONK_BOSS_BAR_RANGE);
 
-        float shownDistance = 0.0f;
-        bool shownIsBoss = false;
+        std::vector<Player*> const party = BonkCoop::RunGroupOf(player);
         for (Creature* creature : creatures)
         {
-            if (!creature->IsAlive() || !creature->IsTemporarySummon() ||
-                static_cast<TemporarySummon*>(creature)->GetSummonerGuid() != player->GetObjectGuid())
+            if (!creature->IsAlive() || !creature->IsTemporarySummon())
+                continue;
+            ObjectGuid const summoner = static_cast<TemporarySummon*>(creature)->GetSummonerGuid();
+            if (std::none_of(party.begin(), party.end(), [&](Player const* member) { return member->GetObjectGuid() == summoner; }))
                 continue;
             BonkMobAI const* ai = dynamic_cast<BonkMobAI const*>(creature->AI());
             if (!ai || (ai->GetKind() != BONK_SPAWN_BOSS && ai->GetKind() != BONK_SPAWN_MINIBOSS))
                 continue;
-
-            bool const isBoss = ai->GetKind() == BONK_SPAWN_BOSS;
-            float const distance = player->GetDistance(creature);
-            if (!shown || (isBoss && !shownIsBoss) || (isBoss == shownIsBoss && distance < shownDistance))
-            {
-                shown = creature;
-                shownDistance = distance;
-                shownIsBoss = isBoss;
-            }
+            shown.push_back({ creature, ai->GetKind() == BONK_SPAWN_BOSS, player->GetDistance(creature) });
         }
+        std::sort(shown.begin(), shown.end(), [](ShownBoss const& a, ShownBoss const& b)
+        {
+            return a.isBoss != b.isBoss ? a.isBoss : a.distance < b.distance;
+        });
+        if (shown.size() > BONK_BOSS_BAR_MAX)
+            shown.resize(BONK_BOSS_BAR_MAX);
     }
 
     std::string line = "boss~";
-    if (shown)
+    if (!shown.empty())
     {
-        BonkMobAI const* ai = static_cast<BonkMobAI const*>(shown->AI());
-        line += player->GetBonkPlayer()->GetLocalName(shown) + "~" + std::to_string(ai->GetTrueHealth(shown->GetHealth())) + "~" + std::to_string(ai->GetTrueHealth(shown->GetMaxHealth())) + "~" +
-            (ai->GetKind() == BONK_SPAWN_BOSS ? "boss" : "mini") + "~" + ai->GetAffixNames(player->GetBonkPlayer()->GetLocale()) + "~" + KeywordStacksText(player, shown) + "~" + BonkMobAI::GetUnitGuidText(shown);
+        line += std::to_string(shown.size());
+        for (ShownBoss const& entry : shown)
+        {
+            Creature* creature = entry.creature;
+            BonkMobAI const* ai = static_cast<BonkMobAI const*>(creature->AI());
+            line += "~" + player->GetBonkPlayer()->GetLocalName(creature) + "~" + std::to_string(ai->GetTrueHealth(creature->GetHealth())) + "~" +
+                std::to_string(ai->GetTrueHealth(creature->GetMaxHealth())) + "~" + (entry.isBoss ? "boss" : "mini") + "~" +
+                ai->GetAffixNames(player->GetBonkPlayer()->GetLocale()) + "~" + KeywordStacksText(player, creature) + "~" + BonkMobAI::GetUnitGuidText(creature);
+        }
     }
     if (line == bar->lastLine)
         return;
@@ -574,6 +610,7 @@ void BonkOnDamage(Unit* attacker, Unit* victim, uint32 damage, SpellEntry const*
         if (spellProto)
             run->CreditDamageOverTime(victim, spellProto->Id, dealt, credits);
         uint32 const dotSpellId = !credits.empty() ? spellProto->Id : 0;
+        uint32 const partSpellId = dotSpellId ? dotSpellId : owner ? 0 : run->GetMeterPartSpell();
         if (credits.empty())
             credits.emplace_back(spellProto ? spellProto->Id : 0, dealt);
 
@@ -621,8 +658,8 @@ void BonkOnDamage(Unit* attacker, Unit* victim, uint32 damage, SpellEntry const*
             for (auto const& credit : credits)
             {
                 stats.bySpell[credit.first].damage += BonkRun::GetTrueAmount(victim, credit.second);
-                if (dotSpellId && credit.first != dotSpellId)
-                    stats.dotBySpell[credit.first][dotSpellId].damage += BonkRun::GetTrueAmount(victim, credit.second);
+                if (partSpellId && credit.first != partSpellId)
+                    stats.dotBySpell[credit.first][partSpellId].damage += BonkRun::GetTrueAmount(victim, credit.second);
             }
             uint64 const trueHit = BonkRun::GetTrueAmount(victim, damage);
             if (trueHit > stats.biggestHit)
@@ -633,8 +670,8 @@ void BonkOnDamage(Unit* attacker, Unit* victim, uint32 damage, SpellEntry const*
             if (damage >= health)
             {
                 stats.killingSpells[victim->GetObjectGuid()] = credits.front().first;
-                if (dotSpellId && credits.front().first != dotSpellId)
-                    stats.killingDots[victim->GetObjectGuid()] = dotSpellId;
+                if (partSpellId && credits.front().first != partSpellId)
+                    stats.killingDots[victim->GetObjectGuid()] = partSpellId;
             }
         }
         if (newBiggestHit && run->IsSandbox())

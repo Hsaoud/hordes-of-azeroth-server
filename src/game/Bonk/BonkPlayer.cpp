@@ -39,8 +39,8 @@
 namespace
 {
     char const* const BONK_ACCOUNT_TABLES[] = { "bonk_account", "bonk_account_mastery", "bonk_account_mastery_node", "bonk_account_quest",
-        "bonk_account_starter", "bonk_account_talent", "bonk_account_level", "bonk_account_upgrade",
-        "bonk_account_found", "bonk_account_mastery_preset", "bonk_account_mastery_preset_active" };
+        "bonk_account_starter", "bonk_account_talent", "bonk_account_level", "bonk_account_level_best", "bonk_account_kept_talents", "bonk_account_epic_luck", "bonk_account_board", "bonk_account_upgrade",
+        "bonk_account_mastery_preset", "bonk_account_mastery_preset_active" };
     uint8 const BONK_MASTERY_PRESET_SLOTS = 3;
     char const* const BONK_PROGRESS_ONLY_TABLES[] = { "bonk_account_disabled", "bonk_account_unlock" };
     uint32 const BONK_IRONMAN_ACCOUNT_BIT = 0x80000000;
@@ -66,7 +66,6 @@ namespace
     float const BONK_MAILBOX_GLOW_RANGE = 100.0f;
 
     uint32 const BONK_ITEM_STARTER_BAG = 900225;
-    uint32 const BONK_ITEM_RUN_HEARTHSTONE = 900230;
     uint32 const BONK_ITEM_OLD_ARROWS = 900226;
     uint32 const BONK_ITEM_OLD_BULLETS = 900227;
 
@@ -172,6 +171,20 @@ void BonkPlayer::OnLogin()
         } while (result->NextRow());
     }
 
+    LoadLevelBests(accountId);
+    m_keptTalentPoints.clear();
+    result = CharacterDatabase.PQuery("SELECT `class`, `points` FROM `bonk_account_kept_talents` WHERE `account` = %u", accountId);
+    if (result)
+    {
+        do
+            m_keptTalentPoints[result->Fetch()[0].GetUInt8()] = result->Fetch()[1].GetUInt32();
+        while (result->NextRow());
+    }
+    result = CharacterDatabase.PQuery("SELECT `misses` FROM `bonk_account_epic_luck` WHERE `account` = %u", accountId);
+    m_epicLuckMisses = result ? result->Fetch()[0].GetUInt32() : 0;
+    result = CharacterDatabase.PQuery("SELECT `show_on_board` FROM `bonk_account_board` WHERE `account` = %u", accountId);
+    m_boardChoice = result ? int32(result->Fetch()[0].GetUInt8()) : -1;
+
     m_record = Record();
     result = CharacterDatabase.PQuery("SELECT `runs`, `best_level`, `best_time_sec`, `kills`, `gold_earned` FROM `bonk_character_stats` WHERE `guid` = %u",
         m_player->GetGUIDLow());
@@ -196,11 +209,8 @@ void BonkPlayer::OnLogin()
     ClearAuras();
     m_campCheckPending = true;
     ClearInterruptedRunItems();
-    for (auto const& itr : sBonkMgr.GetGear())
-        if (m_player->HasItemCount(itr.first, 1, true))
-            m_player->DestroyItemCount(itr.first, 255, true, false, true);
-    if (m_player->HasItemCount(BONK_ITEM_RUN_HEARTHSTONE, 1, true))
-        m_player->DestroyItemCount(BONK_ITEM_RUN_HEARTHSTONE, 255, true, false, true);
+    if (m_player->HasItemCount(BONK_ITEM_HEARTHSTONE, 1, true))
+        m_player->DestroyItemCount(BONK_ITEM_HEARTHSTONE, 255, true, false, true);
     for (uint32 ammo : { BONK_ITEM_OLD_ARROWS, BONK_ITEM_OLD_BULLETS })
         if (uint32 const count = m_player->GetItemCount(ammo, true))
             m_player->DestroyItemCount(ammo, count, true, false, true);
@@ -319,7 +329,6 @@ void BonkPlayer::LoadPurchases()
     m_shards = 0;
     m_determination = 0;
     m_scrap = 0;
-    m_quartermasterUpgrade = false;
     result = CharacterDatabase.PQuery("SELECT `shards`, `determination`, `scrap`, `gear_notice` FROM `bonk_account` WHERE `account` = %u", accountId);
     if (result)
     {
@@ -327,17 +336,6 @@ void BonkPlayer::LoadPurchases()
         m_determination = result->Fetch()[1].GetUInt8();
         m_scrap = result->Fetch()[2].GetUInt32();
         m_gearNoticePending = result->Fetch()[3].GetUInt8() != 0;
-    }
-    result = CharacterDatabase.PQuery("SELECT 1 FROM `bonk_character_notice` WHERE `guid` = %u AND `old_legendaries` = 1", m_player->GetGUIDLow());
-    m_legendaryPromptPending = result != nullptr;
-
-    m_foundGear.clear();
-    result = CharacterDatabase.PQuery("SELECT `item` FROM `bonk_account_found` WHERE `account` = %u", accountId);
-    if (result)
-    {
-        do
-            m_foundGear.insert(result->Fetch()[0].GetUInt32());
-        while (result->NextRow());
     }
 
     m_talentRanks.clear();
@@ -460,8 +458,9 @@ std::string BonkPlayer::DescribeFoundGear() const
         if (!tier)
             continue;
         BonkFoundGear gear;
-        sBonkFound.Get(item->GetGUIDLow(), gear);
-        found += (found.empty() ? "" : ",") + std::to_string(slot) + ":" + std::to_string(tier) + ":" + std::to_string(gear.lines.size());
+        bool const known = sBonkFound.Get(item->GetGUIDLow(), gear);
+        found += (found.empty() ? "" : ",") + std::to_string(slot) + ":" + std::to_string(tier) + ":" + std::to_string(gear.lines.size()) + ":" +
+            std::to_string(known ? gear.season : 0);
     }
     return found;
 }
@@ -477,7 +476,12 @@ std::string BonkPlayer::DescribeGear() const
 
 uint32 BonkPlayer::GetLevelTalentPoints() const
 {
-    return std::min(BONK_LEVEL_TALENT_POINTS_MAX, GetBestLevel() / BONK_LEVELS_PER_TALENT_POINT);
+    uint32 const best = GetBestLevel();
+    uint32 const mythic = std::min(BONK_TALENT_MYTHIC_LEVELS, best > BONK_TALENT_HEROIC_LAST_LEVEL ? best - BONK_TALENT_HEROIC_LAST_LEVEL : 0u);
+    uint32 const earned = (best >= BONK_TALENT_NORMAL_LAST_LEVEL ? 1u : 0u) + (best >= BONK_TALENT_HEROIC_LAST_LEVEL ? 1u : 0u) +
+        mythic * BONK_TALENT_MYTHIC_POINTS / BONK_TALENT_MYTHIC_LEVELS;
+    auto const kept = m_keptTalentPoints.find(m_player->GetClass());
+    return std::max(earned, kept != m_keptTalentPoints.end() ? kept->second : 0u);
 }
 
 uint32 BonkPlayer::GetMasterySpent() const
@@ -549,8 +553,6 @@ void BonkPlayer::SendMasteryState() const
 
 bool BonkPlayer::CanSeeTownObject(uint32 entry, bool gameObject) const
 {
-    if (!gameObject && entry == BONK_TIER_VENDOR)
-        return IsTierCleared("heroic");
     if (gameObject && entry == BONK_DECK_OBJECT)
         return m_accountHasRun;
     if (!gameObject && entry == BONK_COOP_NPC)
@@ -1433,6 +1435,12 @@ bool BonkPlayer::BuyUpgrade(uint32 upgradeId, std::string& message)
         return false;
     }
 
+    if (GetAccountBestLevel() < upgrade->requiredLevel)
+    {
+        message = GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(upgrade->requiredLevel), std::to_string(rank + 1) });
+        return false;
+    }
+
     BonkUpgrade const* required = sBonkMgr.GetUpgrade(upgrade->layout.requiredId);
     if (required && GetUpgradeRank(required->id) < upgrade->layout.requiredRank)
     {
@@ -1495,6 +1503,12 @@ bool BonkPlayer::BuyTalent(uint32 talentId, std::string& message)
             message = GetString(BONK_STRING_YOU_MUST_COMPLETE_QUESTS_TO, { std::to_string(needed), std::to_string(rank + 1), name, std::to_string(done) });
             return false;
         }
+    }
+
+    if (rank < talent->rankLevels.size() && GetAccountBestLevel() < talent->rankLevels[rank])
+    {
+        message = GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(talent->rankLevels[rank]), std::to_string(rank + 1) });
+        return false;
     }
 
     if (!SpendShards(talent->GetCost(rank), message))
@@ -1623,7 +1637,7 @@ uint32 BonkPlayer::GetFortuneSpentAbove(uint8 row, uint32 refundedId) const
     uint32 spent = 0;
     for (auto const& itr : m_talentRanks)
         if (BonkTalent const* talent = sBonkMgr.GetTalent(itr.first))
-            if (talent->layout.tree && talent->layout.row < row && !talent->IsEndless())
+            if (talent->layout.tree && talent->layout.tree != BONK_DARKMOON_FAVORS_TREE && talent->layout.row < row)
             {
                 uint8 const ranks = itr.first == refundedId && itr.second ? itr.second - 1 : itr.second;
                 for (uint8 rank = 0; rank < ranks; ++rank)
@@ -1996,6 +2010,8 @@ void BonkPlayer::SendShop(bool open) const
             std::string description = Localize(BONK_FIELD_UPGRADE_DESCRIPTION, upgrade.id, upgrade.description);
             if (upgrade.layout.tree == BONK_TRAINING_TREE && rank < upgrade.maxRank && rank >= GetTrainingRankCap())
                 description += " " + GetTrainingCapHint();
+            else if (rank < upgrade.maxRank && GetAccountBestLevel() < upgrade.requiredLevel)
+                description += " " + GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(upgrade.requiredLevel), std::to_string(rank + 1) });
             sendNode(upgrade.id, upgrade.layout, rank, upgrade.maxRank, upgrade.GetCost(rank), rank ? upgrade.GetCost(rank - 1) : 0, false, false,
                 Localize(BONK_FIELD_UPGRADE_NAME, upgrade.id, upgrade.name), description, upgrade.valuePerRank);
         }
@@ -2010,6 +2026,8 @@ void BonkPlayer::SendShop(bool open) const
             if (rank < talent.maxRank && rank < talent.rankQuests.size() &&
                 sBonkQuests.GetCompletedCount(GetProgressAccount()) < talent.rankQuests[rank])
                 description += " " + GetString(BONK_STRING_SHOP_NEXT_RANK_QUESTS, { std::to_string(talent.rankQuests[rank]) });
+            else if (rank < talent.maxRank && rank < talent.rankLevels.size() && GetAccountBestLevel() < talent.rankLevels[rank])
+                description += " " + GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(talent.rankLevels[rank]), std::to_string(rank + 1) });
             sendNode(talent.id, talent.layout, rank, talent.maxRank, talent.GetCost(rank), rank ? talent.GetCost(rank - 1) : 0, talent.IsToggle(),
                 IsTalentEnabled(talent.id), Localize(BONK_FIELD_TALENT_NAME, talent.id, talent.name), description, talent.valuePerRank);
         }
@@ -2150,7 +2168,9 @@ uint8 BonkPlayer::GetTrainingRankCap() const
 {
     if (!IsTierCleared("heroic"))
         return BONK_TRAINING_OPEN_RANKS;
-    uint32 const mythicRanks = std::min<uint32>(BONK_TRAINING_MYTHIC_RANKS, GetAccountBestLevel() / BONK_TRAINING_LEVELS_PER_RANK);
+    uint32 const best = GetAccountBestLevel();
+    uint32 const mythicCleared = best > BONK_TALENT_HEROIC_LAST_LEVEL ? best - BONK_TALENT_HEROIC_LAST_LEVEL : 0;
+    uint32 const mythicRanks = std::min<uint32>(BONK_TRAINING_MYTHIC_RANKS, mythicCleared / BONK_TRAINING_LEVELS_PER_RANK);
     return uint8(BONK_TRAINING_OPEN_RANKS + BONK_TRAINING_HEROIC_RANKS + mythicRanks);
 }
 
@@ -2159,7 +2179,7 @@ std::string BonkPlayer::GetTrainingCapHint() const
     uint8 const cap = GetTrainingRankCap();
     if (!IsTierCleared("heroic"))
         return GetString(BONK_STRING_CLEAR_HEROIC_TO_UNLOCK_RANKS, { std::to_string(cap + 1), std::to_string(cap + BONK_TRAINING_HEROIC_RANKS) });
-    uint32 const level = (cap - BONK_TRAINING_OPEN_RANKS - BONK_TRAINING_HEROIC_RANKS + 1) * BONK_TRAINING_LEVELS_PER_RANK;
+    uint32 const level = BONK_TALENT_HEROIC_LAST_LEVEL + (cap - BONK_TRAINING_OPEN_RANKS - BONK_TRAINING_HEROIC_RANKS + 1) * BONK_TRAINING_LEVELS_PER_RANK;
     return GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(level), std::to_string(cap + 1) });
 }
 
@@ -2214,142 +2234,42 @@ bool BonkPlayer::IsSlotUnusedByClass(uint8 slot) const
     }
 }
 
-bool BonkPlayer::CanBuyGear(uint32 itemEntry) const
+bool BonkPlayer::IsShopVendor(Creature const* vendor) const
 {
-    BonkItemStat const* stat = sBonkMgr.GetItemStat(itemEntry);
-    if (!stat || !stat->unlockTier)
-        return true;
-    BonkTier const* tier = sBonkMgr.GetTier(stat->unlockTier);
-    return tier && IsTierCleared(*tier);
-}
-
-namespace
-{
-    uint32 GetGearGroup(uint32 itemEntry)
-    {
-        BonkItemStat const* stat = sBonkMgr.GetItemStat(itemEntry);
-        return stat ? stat->unlockTier : 0;
-    }
-
-    BonkTier const* GetGearGroupTier(uint32 group, size_t* order = nullptr)
-    {
-        std::vector<BonkTier const*> const& tiers = sBonkMgr.GetTiersInOrder();
-        for (size_t i = 0; i < tiers.size(); ++i)
-            if (tiers[i]->unlockTierId == group)
-            {
-                if (order)
-                    *order = i;
-                return tiers[i];
-            }
-        if (order)
-            *order = tiers.size();
-        return nullptr;
-    }
-}
-
-std::vector<uint32> BonkPlayer::GetGearTabs(Creature const* vendor) const
-{
-    std::vector<uint32> tabs;
-    VendorItemData const* items = vendor->GetVendorItems();
-    if (!items)
-        return tabs;
-    for (uint32 i = 0; i < items->GetItemCount(); ++i)
-    {
-        VendorItem const* item = items->GetItem(i);
-        if (!item || !CanBuyGear(item->item))
-            continue;
-        uint32 const group = GetGearGroup(item->item);
-        if (std::find(tabs.begin(), tabs.end(), group) == tabs.end())
-            tabs.push_back(group);
-    }
-    std::sort(tabs.begin(), tabs.end(), [](uint32 a, uint32 b)
-    {
-        size_t orderA, orderB;
-        GetGearGroupTier(a, &orderA);
-        GetGearGroupTier(b, &orderB);
-        return orderA != orderB ? orderA < orderB : a < b;
-    });
-    return tabs;
-}
-
-uint32 BonkPlayer::GetShownGearTab(std::vector<uint32> const& tabs) const
-{
-    if (std::find(tabs.begin(), tabs.end(), m_gearTab) != tabs.end())
-        return m_gearTab;
-    return tabs.empty() ? 0 : tabs.front();
-}
-
-bool BonkPlayer::RecordGearFound(uint32 keepEntry)
-{
-    if (!keepEntry || !m_foundGear.insert(keepEntry).second)
-        return false;
-    CharacterDatabase.PExecute("INSERT IGNORE INTO `bonk_account_found` (`account`, `item`) VALUES (%u, %u)", GetProgressAccount(), keepEntry);
-    return true;
-}
-
-float BonkPlayer::GetGearPriceFactor(Creature const* vendor, uint32 itemEntry) const
-{
-    return vendor && vendor->GetEntry() == BONK_GEAR_VENDOR && IsGearFound(itemEntry) ? BONK_FOUND_PRICE_FACTOR : 1.0f;
-}
-
-void BonkPlayer::SendFoundGear(Creature const* vendor) const
-{
-    if (vendor->GetEntry() != BONK_GEAR_VENDOR)
-        return;
-    SendAddon("gearfoundclear");
-    VendorItemData const* items = vendor->GetVendorItems();
-    std::string ids;
-    for (uint32 i = 0; items && i < items->GetItemCount(); ++i)
-    {
-        VendorItem const* item = items->GetItem(i);
-        if (!item || !IsGearFound(item->item))
-            continue;
-        ids += (ids.empty() ? "" : ",") + std::to_string(item->item);
-        if (ids.size() > BONK_FOUND_LINE_LENGTH)
-        {
-            SendAddon("gearfound~" + ids);
-            ids.clear();
-        }
-    }
-    if (!ids.empty())
-        SendAddon("gearfound~" + ids);
-}
-
-bool BonkPlayer::ShowsGearItem(Creature const* vendor, uint32 itemEntry) const
-{
-    if (vendor->GetEntry() != BONK_GEAR_VENDOR)
-        return true;
-    BonkGear const* runGear = sBonkMgr.GetGearByKeep(itemEntry);
-    if (runGear && runGear->quality == ITEM_QUALITY_UNCOMMON && !IsGearFound(itemEntry))
-        return false;
-    std::vector<uint32> const tabs = GetGearTabs(vendor);
-    return tabs.size() < 2 || GetGearGroup(itemEntry) == GetShownGearTab(tabs);
-}
-
-bool BonkPlayer::IsTierVendor(Creature const* vendor) const
-{
-    return vendor && vendor->GetEntry() == BONK_TIER_VENDOR;
+    return vendor && vendor->GetEntry() == BONK_GEAR_VENDOR;
 }
 
 uint32 BonkPlayer::GetStockTier() const
 {
-    uint32 const cleared = GetAccountBestLevel();
+    uint32 const cleared = m_record.bestLevel;
     uint32 const lagged = cleared > BONK_STOCK_TIER_LAG ? cleared - BONK_STOCK_TIER_LAG : 1u;
     return std::min(BONK_STOCK_TIER_MAX, std::max(1u, lagged));
 }
 
-std::vector<uint32> BonkPlayer::GetTierStock() const
+std::vector<uint32> BonkPlayer::GetShopStock() const
 {
     std::vector<uint32> stock;
-    if (!IsTierCleared("heroic"))
-        return stock;
     uint32 const tier = GetStockTier();
-    for (uint32 slot = 0; slot < BONK_TIER_GEAR_SLOTS; ++slot)
-        if (uint32 const entry = BonkMgr::GetTierGearEntry(m_player->GetClass(), tier, slot))
-            stock.push_back(entry);
-    std::vector<uint32> const mythicGear = BonkMgr::GetMythicGearFor(m_player->GetClassMask(), tier);
-    stock.insert(stock.end(), mythicGear.begin(), mythicGear.end());
+    std::vector<uint32> const kinds = BonkMgr::GetGearKindsFor(m_player->GetClassMask());
+    for (uint8 quality : { ITEM_QUALITY_NORMAL, ITEM_QUALITY_UNCOMMON, ITEM_QUALITY_RARE })
+    {
+        if (tier < GetShopFirstTier(quality))
+            continue;
+        for (uint32 kind : kinds)
+            if (uint32 const entry = BonkMgr::GetGearEntry(kind, quality, tier))
+                stock.push_back(entry);
+    }
     return stock;
+}
+
+uint32 BonkPlayer::GetShopFirstTier(uint8 quality)
+{
+    switch (quality)
+    {
+        case ITEM_QUALITY_NORMAL:   return 1;
+        case ITEM_QUALITY_UNCOMMON: return BONK_SHOP_GREEN_FIRST_TIER;
+        default:                    return BONK_SHOP_BLUE_FIRST_TIER;
+    }
 }
 
 void BonkPlayer::AddScrap(uint32 points)
@@ -2361,24 +2281,14 @@ void BonkPlayer::AddScrap(uint32 points)
         GetProgressAccount(), m_scrap);
 }
 
-void BonkPlayer::SetQuartermasterUpgrade(bool on)
-{
-    m_quartermasterUpgrade = on;
-    DiscardFoundReroll();
-    SendQuartermaster();
-    SendFoundUpgrades();
-}
-
 void BonkPlayer::SendQuartermaster() const
 {
-    std::vector<Item*> const upgradable = GetUpgradableGear();
-    SendAddon("quartermaster~" + std::to_string(GetStockTier()) + "~" + std::to_string(m_scrap) + "~" + std::to_string(GetUpgradeCeiling()) + "~" +
-        (m_quartermasterUpgrade ? "1" : "0") + "~" + (upgradable.empty() ? "0" : "1"));
+    SendAddon("quartermaster~" + std::to_string(GetStockTier()) + "~" + std::to_string(m_scrap));
 }
 
 uint32 BonkPlayer::GetUpgradeCeiling() const
 {
-    return std::max(BONK_STOCK_TIER_MAX, GetAccountBestLevel());
+    return std::max(1u, m_record.bestLevel);
 }
 
 std::vector<Item*> BonkPlayer::GetUpgradableGear() const
@@ -2413,13 +2323,13 @@ void BonkPlayer::SendFoundUpgrades() const
             for (auto const& offer : m_rerollOffers)
                 offers.push_back({ offer.first, offer.second });
         SendAddon("qmup~" + std::to_string(item->GetGUIDLow()) + "~" + std::to_string(item->GetEntry()) + "~" + std::to_string(tier) + "~" +
-            std::to_string(cost) + "~" + (tier < ceiling ? "1" : "0") + "~" + (item->IsEquipped() ? "1" : "0") + "~" +
+            std::to_string(cost) + "~" + (tier < ceiling && found.upgrades < BONK_FOUND_MAX_UPGRADES ? "1" : "0") + "~" + (item->IsEquipped() ? "1" : "0") + "~" +
             BonkFound::DescribeLines(found, tier) + "~" + BonkFound::DescribeExtra(item, tier) + "~" +
             std::to_string(BonkFound::GetRerollCost(found.rerolls)) + "~" + std::to_string(found.rerollLine) + "~" +
             (offers.empty() ? "~" : std::to_string(m_rerollLine) + "~" + BonkFound::DescribeOffers(offers, tier)) + "~" +
-            BonkFound::DescribeRanges(tier));
+            BonkFound::DescribeRanges(tier) + "~" + std::to_string(BONK_FOUND_MAX_UPGRADES - std::min(found.upgrades, BONK_FOUND_MAX_UPGRADES)));
     }
-    SendAddon("qmupend~" + std::to_string(m_scrap) + "~" + std::to_string(ceiling));
+    SendAddon("qmupend~" + std::to_string(m_scrap));
 }
 
 Item* BonkPlayer::FindUpgradableGear(uint32 guidLow) const
@@ -2439,7 +2349,7 @@ void BonkPlayer::DiscardFoundReroll()
 
 bool BonkPlayer::RerollFoundGear(uint32 guidLow, uint8 lineIndex, std::string& error)
 {
-    if (!m_player->FindNearestCreature(BONK_TIER_VENDOR, BONK_GEAR_VENDOR_RANGE))
+    if (!m_player->FindNearestCreature(BONK_GEAR_VENDOR, BONK_GEAR_VENDOR_RANGE))
     {
         error = GetString(BONK_STRING_TALK_TO_QUARTERMASTER_TO_REROLL);
         return false;
@@ -2498,36 +2408,9 @@ bool BonkPlayer::PickFoundReroll(uint32 guidLow, uint8 choice, std::string& erro
     return true;
 }
 
-Item* BonkPlayer::ReplaceGearEntry(Item* item, uint32 entry)
-{
-    uint8 const bag = item->GetBagSlot();
-    uint8 const slot = item->GetSlot();
-    bool const equipped = item->IsEquipped();
-    uint32 const oldEntry = item->GetEntry();
-    auto create = [&](uint32 newEntry) -> Item*
-    {
-        if (equipped)
-        {
-            uint16 dest;
-            if (m_player->CanEquipNewItem(slot, dest, newEntry, false) != EQUIP_ERR_OK)
-                return nullptr;
-            return m_player->EquipNewItem(dest, newEntry, true);
-        }
-        ItemPosCountVec dest;
-        if (m_player->CanStoreNewItem(bag, slot, dest, newEntry, 1) != EQUIP_ERR_OK)
-            return nullptr;
-        return m_player->StoreNewItem(dest, newEntry, true);
-    };
-    m_player->DestroyItem(bag, slot, true);
-    if (Item* fresh = create(entry))
-        return fresh;
-    create(oldEntry);
-    return nullptr;
-}
-
 bool BonkPlayer::UpgradeFoundGear(uint32 guidLow, std::string& error)
 {
-    if (!m_player->FindNearestCreature(BONK_TIER_VENDOR, BONK_GEAR_VENDOR_RANGE))
+    if (!m_player->FindNearestCreature(BONK_GEAR_VENDOR, BONK_GEAR_VENDOR_RANGE))
     {
         error = GetString(BONK_STRING_TALK_TO_QUARTERMASTER_TO_UPGRADE);
         return false;
@@ -2541,9 +2424,15 @@ bool BonkPlayer::UpgradeFoundGear(uint32 guidLow, std::string& error)
     }
     uint32 const tier = BonkFound::GetItemTier(item);
     uint32 const cost = BonkFound::GetUpgradeCost(tier);
+    uint8 const quality = uint8(item->GetProto()->Quality);
+    if (found.upgrades >= BONK_FOUND_MAX_UPGRADES)
+    {
+        error = GetString(BONK_STRING_ITEM_FULLY_UPGRADED, { item->GetProto()->Name1, std::to_string(BONK_FOUND_MAX_UPGRADES) });
+        return false;
+    }
     if (tier >= GetUpgradeCeiling())
     {
-        error = GetString(BONK_STRING_CLEAR_LEVEL_TO_RAISE, { GetLevelName(tier + 1), BonkFound::DescribeTier(tier + 1, m_locale) });
+        error = GetString(BONK_STRING_CLEAR_LEVEL_TO_RAISE, { GetLevelName(tier + 1), BonkFound::DescribeItemLevel(tier + 1, quality, m_locale) });
         return false;
     }
     if (m_scrap < cost)
@@ -2556,29 +2445,13 @@ bool BonkPlayer::UpgradeFoundGear(uint32 guidLow, std::string& error)
     if (guidLow == m_rerollItem)
         DiscardFoundReroll();
     found.tier = tier + 1;
-    if (found.tier <= BONK_TIER_GEAR_TIERS)
-    {
-        uint32 const entry = BonkMgr::GetGearAtTier(item->GetEntry(), found.tier);
-        if (!entry)
-        {
-            error = GetString(BONK_STRING_ITEM_CANT_BE_UPGRADED, { name });
-            return false;
-        }
-        item = ReplaceGearEntry(item, entry);
-        if (!item)
-        {
-            error = GetString(BONK_STRING_NO_ROOM_TO_UPGRADE, { name });
-            return false;
-        }
-        m_player->SendNewItem(item, 1, true, false);
-        SendAddon("qmupselect~" + std::to_string(guidLow) + "~" + std::to_string(item->GetGUIDLow()));
-    }
+    ++found.upgrades;
     BonkFound::Remember(item, found);
 
     m_scrap -= cost;
     CharacterDatabase.PExecute("INSERT INTO `bonk_account` (`account`, `scrap`) VALUES (%u, %u) ON DUPLICATE KEY UPDATE `scrap` = VALUES(`scrap`)",
         GetProgressAccount(), m_scrap);
-    Notify(BONK_STRING_ITEM_IS_NOW, { name, BonkFound::DescribeTier(found.tier, m_locale) });
+    Notify(BONK_STRING_ITEM_IS_NOW, { name, BonkFound::DescribeItemLevel(found.tier, quality, m_locale) });
     SendQuartermaster();
     SendFoundUpgrades();
     SendFoundItems();
@@ -2588,7 +2461,9 @@ bool BonkPlayer::UpgradeFoundGear(uint32 guidLow, std::string& error)
 
 bool BonkPlayer::GiveTestFoundGear(uint32 tier, uint32 lineCount, std::string& error)
 {
-    uint32 const entry = BonkMgr::GetTierGearEntry(m_player->GetClass(), std::min(BONK_TIER_GEAR_TIERS, std::max(1u, tier)), urand(0, BONK_TIER_GEAR_SLOTS - 1));
+    std::vector<uint32> const kinds = BonkMgr::GetGearKindsFor(m_player->GetClassMask());
+    uint32 const entry = kinds.empty() ? 0 :
+        BonkMgr::GetGearEntry(kinds[urand(0, uint32(kinds.size() - 1))], ITEM_QUALITY_RARE, std::min(BONK_GEAR_TIERS, std::max(1u, tier)));
     ItemPosCountVec dest;
     if (!entry || m_player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, entry, 1) != EQUIP_ERR_OK)
     {
@@ -2619,7 +2494,7 @@ void BonkPlayer::SendFoundItems() const
             return;
         uint32 const tier = BonkFound::GetItemTier(item);
         SendAddon("founditem~" + place + "~" + std::to_string(item->GetEntry()) + "~" + std::to_string(tier) + "~" +
-            BonkFound::DescribeLines(found, tier) + "~" + BonkFound::DescribeExtra(item, tier));
+            BonkFound::DescribeLines(found, tier) + "~" + BonkFound::DescribeExtra(item, tier) + "~" + (found.season != BONK_LEADERBOARD_SEASON ? "1" : "0"));
     };
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         send(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot), "inv:" + std::to_string(slot + 1));
@@ -2642,18 +2517,6 @@ void BonkPlayer::SendUpdateNotices()
 {
     if (m_gearNoticePending)
         SendAddon("notice~gear");
-    if (!m_legendaryPromptPending)
-        return;
-    std::vector<Item*> const legendaries = GetOwnedLegendaries();
-    if (legendaries.empty())
-    {
-        ClearLegendaryPrompt();
-        return;
-    }
-    uint32 refund = 0;
-    for (Item const* item : legendaries)
-        refund += BonkFound::GetScrapValue(item);
-    SendAddon("oldlegendaries~" + std::to_string(legendaries.size()) + "~" + std::to_string(refund));
 }
 
 void BonkPlayer::SeeGearNotice()
@@ -2662,173 +2525,6 @@ void BonkPlayer::SeeGearNotice()
         return;
     m_gearNoticePending = false;
     CharacterDatabase.PExecute("UPDATE `bonk_account` SET `gear_notice` = 0 WHERE `account` = %u", GetProgressAccount());
-}
-
-void BonkPlayer::ClearLegendaryPrompt()
-{
-    m_legendaryPromptPending = false;
-    CharacterDatabase.PExecute("UPDATE `bonk_character_notice` SET `old_legendaries` = 0 WHERE `guid` = %u", m_player->GetGUIDLow());
-}
-
-std::vector<Item*> BonkPlayer::GetOwnedLegendaries() const
-{
-    std::vector<Item*> legendaries;
-    auto consider = [&](Item* item)
-    {
-        uint32 kind, tier;
-        if (item && BonkMgr::ReadLegendaryEntry(item->GetEntry(), kind, tier))
-            legendaries.push_back(item);
-    };
-    auto considerBag = [&](uint8 bagSlot)
-    {
-        if (Bag* container = dynamic_cast<Bag*>(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, bagSlot)))
-            for (uint32 slot = 0; slot < container->GetBagSize(); ++slot)
-                consider(container->GetItemByPos(uint8(slot)));
-    };
-    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
-        consider(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
-    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
-        consider(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
-    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-        considerBag(bag);
-    for (uint8 slot = BANK_SLOT_ITEM_START; slot < BANK_SLOT_ITEM_END; ++slot)
-        consider(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
-    for (uint8 bag = BANK_SLOT_BAG_START; bag < BANK_SLOT_BAG_END; ++bag)
-        considerBag(bag);
-    return legendaries;
-}
-
-bool BonkPlayer::ResolveOldLegendaries(bool remove)
-{
-    if (!m_legendaryPromptPending || GetRun())
-        return false;
-    if (remove)
-    {
-        uint32 refund = 0;
-        std::vector<std::pair<uint8, uint8>> places;
-        for (Item const* item : GetOwnedLegendaries())
-        {
-            refund += BonkFound::GetScrapValue(item);
-            places.emplace_back(item->GetBagSlot(), item->GetSlot());
-        }
-        for (auto const& place : places)
-            m_player->DestroyItem(place.first, place.second, true);
-        AddScrap(refund);
-        Notify(BONK_STRING_OLD_LEGENDARIES_REFUNDED, { std::to_string(refund) });
-    }
-    ClearLegendaryPrompt();
-    return true;
-}
-
-std::vector<Item*> BonkPlayer::GetForeignTierPieces() const
-{
-    std::vector<Item*> pieces;
-    auto consider = [&](Item* item)
-    {
-        uint8 classId;
-        uint32 tier, slot;
-        if (item && BonkMgr::ReadTierGearEntry(item->GetEntry(), classId, tier, slot) && classId != m_player->GetClass())
-            pieces.push_back(item);
-    };
-    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
-        consider(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
-    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-        if (Bag* container = dynamic_cast<Bag*>(m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, bag)))
-            for (uint32 slot = 0; slot < container->GetBagSize(); ++slot)
-                consider(container->GetItemByPos(uint8(slot)));
-    return pieces;
-}
-
-uint32 BonkPlayer::GetTierExchangeFee(std::vector<Item*> const& pieces) const
-{
-    uint32 fee = 0;
-    for (Item* piece : pieces)
-        fee += piece->GetProto()->BuyPrice * BONK_TIER_EXCHANGE_FEE_PERCENT / 100;
-    return fee;
-}
-
-void BonkPlayer::ExchangeTierPieces()
-{
-    uint32 exchanged = 0;
-    for (Item* piece : GetForeignTierPieces())
-    {
-        uint8 classId;
-        uint32 tier, slot;
-        BonkMgr::ReadTierGearEntry(piece->GetEntry(), classId, tier, slot);
-        uint32 const blue = BonkMgr::GetTierGearEntry(m_player->GetClass(), tier, slot);
-        uint32 const entry = BonkMgr::IsEpicGear(piece->GetEntry()) ? BonkMgr::GetEpicGearEntry(blue) : blue;
-        uint32 const fee = piece->GetProto()->BuyPrice * BONK_TIER_EXCHANGE_FEE_PERCENT / 100;
-        if (!entry || m_player->GetMoney() < fee)
-            break;
-        uint8 const bag = piece->GetBagSlot();
-        uint8 const slotInBag = piece->GetSlot();
-        uint32 const oldEntry = piece->GetEntry();
-        BonkFoundGear found;
-        bool const wasFound = sBonkFound.Get(piece->GetGUIDLow(), found);
-        m_player->DestroyItem(bag, slotInBag, true);
-        ItemPosCountVec dest;
-        if (m_player->CanStoreNewItem(bag, slotInBag, dest, entry, 1) != EQUIP_ERR_OK)
-        {
-            ItemPosCountVec back;
-            if (m_player->CanStoreNewItem(bag, slotInBag, back, oldEntry, 1) == EQUIP_ERR_OK)
-                m_player->StoreNewItem(back, oldEntry, true);
-            break;
-        }
-        m_player->ModifyMoney(-int32(fee));
-        if (Item* refit = m_player->StoreNewItem(dest, entry, true))
-        {
-            if (wasFound)
-                BonkFound::Remember(refit, found);
-            m_player->SendNewItem(refit, 1, true, false);
-        }
-        ++exchanged;
-    }
-    if (!exchanged)
-        Notify(BONK_STRING_NO_SET_PIECES_TO_REFIT);
-    else
-        Notify(exchanged == 1 ? BONK_STRING_REFITTED_SET_PIECE : BONK_STRING_REFITTED_SET_PIECES, { std::to_string(exchanged) });
-}
-
-void BonkPlayer::SendGearTabs(Creature const* vendor) const
-{
-    if (vendor->GetEntry() != BONK_GEAR_VENDOR)
-        return;
-    std::vector<uint32> const tabs = GetGearTabs(vendor);
-    std::string line = "geartabs~" + std::to_string(GetShownGearTab(tabs));
-    if (tabs.size() >= 2)
-        for (uint32 group : tabs)
-        {
-            BonkTier const* tier = GetGearGroupTier(group);
-            line += "~" + std::to_string(group) + "~" + (tier ? Localize(BONK_FIELD_TIER_NAME, tier->id, tier->name) : GetString(BONK_STRING_GEAR_TAB));
-        }
-    SendAddon(line);
-}
-
-void BonkPlayer::SendRefitOffer() const
-{
-    std::vector<Item*> const foreign = GetForeignTierPieces();
-    SendAddon("qmrefit~" + std::to_string(foreign.size()) + "~" + std::to_string(GetTierExchangeFee(foreign)));
-}
-
-void BonkPlayer::RefitAtQuartermaster()
-{
-    Creature* vendor = m_player->FindNearestCreature(BONK_TIER_VENDOR, BONK_GEAR_VENDOR_RANGE);
-    if (!vendor)
-        return;
-    ExchangeTierPieces();
-    m_player->GetSession()->SendListInventory(vendor->GetObjectGuid());
-}
-
-void BonkPlayer::SelectGearTab(uint32 group)
-{
-    Creature* vendor = m_player->FindNearestCreature(BONK_GEAR_VENDOR, BONK_GEAR_VENDOR_RANGE);
-    if (!vendor)
-        return;
-    std::vector<uint32> const tabs = GetGearTabs(vendor);
-    if (std::find(tabs.begin(), tabs.end(), group) == tabs.end())
-        return;
-    m_gearTab = group;
-    m_player->GetSession()->SendListInventory(vendor->GetObjectGuid());
 }
 
 bool BonkPlayer::StartRun(BonkTier const& tier, std::string& error)
@@ -2999,6 +2695,7 @@ bool BonkPlayer::RecordLevelClear(uint32 level, uint32 clearMs)
     record.bestMs = clearMs;
     CharacterDatabase.PExecute("REPLACE INTO `bonk_account_level` (`account`, `class`, `best_level`, `best_ms`, `best_finale`) VALUES (%u, %u, %u, %u, %u)",
         GetProgressAccount(), uint32(m_player->GetClass()), record.best, record.bestMs, record.finale);
+    BonkCoop::RecordLevel(m_player, m_player->GetClass(), record.best, record.bestMs, record.finale);
     if (!firstClear)
         return false;
 
@@ -3024,6 +2721,145 @@ void BonkPlayer::RecordFinale(uint32 score)
     record.finale = score;
     CharacterDatabase.PExecute("REPLACE INTO `bonk_account_level` (`account`, `class`, `best_level`, `best_ms`, `best_finale`) VALUES (%u, %u, %u, %u, %u)",
         GetProgressAccount(), uint32(m_player->GetClass()), record.best, record.bestMs, record.finale);
+    BonkCoop::RecordLevel(m_player, m_player->GetClass(), record.best, record.bestMs, record.finale);
+}
+
+namespace
+{
+    char const* const LEVEL_BEST_COLUMNS = "`clears`, `first_clear`, `best_ms`, `best_ms_by`, `damage_per_second`, `damage_by`, `kills`, `kills_by`, "
+        "`gold_per_minute`, `gold_by`, `valor_per_minute`, `valor_by`, `finale`, `finale_seconds`";
+
+    BonkPlayer::LevelBest ReadLevelBest(Field* fields)
+    {
+        BonkPlayer::LevelBest best;
+        best.clears = fields[0].GetUInt32();
+        best.firstClear = fields[1].GetUInt32();
+        best.bestMs = fields[2].GetUInt32();
+        best.bestMsBy = fields[3].GetCppString();
+        best.damagePerSecond = fields[4].GetUInt32();
+        best.damageBy = fields[5].GetCppString();
+        best.kills = fields[6].GetUInt32();
+        best.killsBy = fields[7].GetCppString();
+        best.goldPerMinute = fields[8].GetUInt32();
+        best.goldBy = fields[9].GetCppString();
+        best.valorPerMinute = fields[10].GetUInt32();
+        best.valorBy = fields[11].GetCppString();
+        best.finale = fields[12].GetUInt32();
+        best.finaleSeconds = fields[13].GetUInt32();
+        return best;
+    }
+}
+
+void BonkPlayer::LoadLevelBests(uint32 accountId)
+{
+    m_levelBests.clear();
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `class`, `level`, %s FROM `bonk_account_level_best` WHERE `account` = %u",
+        LEVEL_BEST_COLUMNS, accountId));
+    if (!result)
+        return;
+    do
+    {
+        Field* fields = result->Fetch();
+        m_levelBests[{ fields[0].GetUInt8(), fields[1].GetUInt32() }] = ReadLevelBest(fields + 2);
+    } while (result->NextRow());
+}
+
+BonkPlayer::LevelBest BonkPlayer::LoadLevelBest(uint32 account, uint8 classId, uint32 level)
+{
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT %s FROM `bonk_account_level_best` WHERE `account` = %u AND `class` = %u AND `level` = %u",
+        LEVEL_BEST_COLUMNS, account, uint32(classId), level));
+    return result ? ReadLevelBest(result->Fetch()) : LevelBest();
+}
+
+void BonkPlayer::SaveLevelBest(uint32 account, uint8 classId, uint32 level, LevelBest const& best)
+{
+    std::string names[] = { best.bestMsBy, best.damageBy, best.killsBy, best.goldBy, best.valorBy };
+    for (std::string& name : names)
+        CharacterDatabase.escape_string(name);
+    CharacterDatabase.PExecute("REPLACE INTO `bonk_account_level_best` (`account`, `class`, `level`, %s) "
+        "VALUES (%u, %u, %u, %u, %u, %u, '%s', %u, '%s', %u, '%s', %u, '%s', %u, '%s', %u, %u)", LEVEL_BEST_COLUMNS,
+        account, uint32(classId), level, best.clears, best.firstClear, best.bestMs, names[0].c_str(), best.damagePerSecond, names[1].c_str(),
+        best.kills, names[2].c_str(), best.goldPerMinute, names[3].c_str(), best.valorPerMinute, names[4].c_str(), best.finale, best.finaleSeconds);
+}
+
+void BonkPlayer::MergeLevelBest(LevelBest& best, LevelRun const& run)
+{
+    float const seconds = std::max(1.0f, run.ms / float(IN_MILLISECONDS));
+    float const minutes = seconds / float(MINUTE);
+    uint32 const damagePerSecond = uint32(run.damage / seconds);
+    uint32 const goldPerMinute = uint32(run.gold / minutes);
+    uint32 const valorPerMinute = uint32(run.valor / minutes);
+    if (!best.clears)
+        best.firstClear = uint32(time(nullptr));
+    ++best.clears;
+    if (!best.bestMs || run.ms < best.bestMs)
+    {
+        best.bestMs = run.ms;
+        best.bestMsBy = run.name;
+    }
+    if (damagePerSecond > best.damagePerSecond)
+    {
+        best.damagePerSecond = damagePerSecond;
+        best.damageBy = run.name;
+    }
+    if (run.kills > best.kills)
+    {
+        best.kills = run.kills;
+        best.killsBy = run.name;
+    }
+    if (goldPerMinute > best.goldPerMinute)
+    {
+        best.goldPerMinute = goldPerMinute;
+        best.goldBy = run.name;
+    }
+    if (valorPerMinute > best.valorPerMinute)
+    {
+        best.valorPerMinute = valorPerMinute;
+        best.valorBy = run.name;
+    }
+}
+
+bool BonkPlayer::MergeFinaleBest(LevelBest& best, uint32 score, uint32 seconds)
+{
+    if (score <= best.finale)
+        return false;
+    best.finale = score;
+    best.finaleSeconds = seconds;
+    return true;
+}
+
+void BonkPlayer::ApplyLevelBest(uint32 account, uint8 classId, LevelRun const& run)
+{
+    if (!run.level || !run.ms)
+        return;
+    LevelBest best = LoadLevelBest(account, classId, run.level);
+    MergeLevelBest(best, run);
+    SaveLevelBest(account, classId, run.level, best);
+}
+
+void BonkPlayer::ApplyFinaleBest(uint32 account, uint8 classId, uint32 level, uint32 score, uint32 seconds)
+{
+    LevelBest best = LoadLevelBest(account, classId, level);
+    if (MergeFinaleBest(best, score, seconds))
+        SaveLevelBest(account, classId, level, best);
+}
+
+void BonkPlayer::RecordLevelBest(LevelRun const& run)
+{
+    if (!run.level || !run.ms)
+        return;
+    uint8 const classId = m_player->GetClass();
+    LevelBest& best = m_levelBests[{ classId, run.level }];
+    MergeLevelBest(best, run);
+    SaveLevelBest(GetProgressAccount(), classId, run.level, best);
+}
+
+void BonkPlayer::RecordFinaleBest(uint32 level, uint32 score, uint32 seconds)
+{
+    uint8 const classId = m_player->GetClass();
+    LevelBest& best = m_levelBests[{ classId, level }];
+    if (MergeFinaleBest(best, score, seconds))
+        SaveLevelBest(GetProgressAccount(), classId, level, best);
 }
 
 void BonkPlayer::SendAddon(std::string const& line) const
@@ -3181,43 +3017,11 @@ void BonkPlayer::NotifyFind(std::string const& text) const
 
 void BonkPlayer::SendGearInfo() const
 {
-    uint32 const tierGearEnd = BONK_TIER_GEAR_FIRST + BONK_TIER_GEAR_CLASS_COUNT * BONK_TIER_GEAR_TIERS * BONK_TIER_GEAR_SLOTS;
-    auto const isSetPiece = [tierGearEnd](uint32 entry)
-    {
-        uint32 const blue = BonkMgr::GetBlueGearEntry(entry);
-        return blue >= BONK_TIER_GEAR_FIRST && blue < tierGearEnd;
-    };
     for (auto const& itr : sBonkMgr.GetItemStats())
-        if (!isSetPiece(itr.first))
-            SendAddon("gear~" + std::to_string(itr.first) + "~" + std::to_string(itr.second.setId) + "~" + FormatStatList(itr.second.stats));
-
-    SendAddon("tiergear~" + std::to_string(BONK_TIER_GEAR_FIRST) + "~" + std::to_string(BONK_TIER_GEAR_TIERS) + "~" +
-        std::to_string(BONK_TIER_GEAR_SLOTS) + "~" + std::to_string(BONK_TIER_GEAR_CLASS_COUNT) + "~" + std::to_string(BONK_EPIC_GEAR_OFFSET));
-    for (uint32 tier = 1; tier <= BONK_TIER_GEAR_TIERS; ++tier)
-    {
-        uint32 const entry = BONK_TIER_GEAR_FIRST + (tier - 1) * BONK_TIER_GEAR_SLOTS;
-        if (BonkItemStat const* stat = sBonkMgr.GetItemStat(entry))
-            SendAddon("tierstats~" + std::to_string(tier) + "~" + FormatStatList(stat->stats));
-        if (BonkItemStat const* epic = sBonkMgr.GetItemStat(BonkMgr::GetEpicGearEntry(entry)))
-            SendAddon("tierstats~" + std::to_string(tier) + "~" + FormatStatList(epic->stats) + "~epic");
-    }
+        SendAddon("gear~" + std::to_string(itr.first) + "~" + FormatStatList(itr.second.stats));
     for (uint8 effect = 0; effect < MAX_BONK_TRINKET_EFFECT; ++effect)
-        SendAddon("trinkettip~" + std::to_string(BONK_MYTHIC_GEAR_FIRST + (BONK_MYTHIC_GEAR_FIRST_TRINKET + effect) * BONK_TIER_GEAR_TIERS) + "~" +
-            std::to_string(BONK_TIER_GEAR_TIERS) + "~" + GetString(BonkMgr::GetTrinket(BonkTrinketEffect(effect)).text));
-
-    for (auto const& itr : sBonkMgr.GetItemSets())
-    {
-        BonkItemSet const& set = itr.second;
-        std::string pieces;
-        for (uint32 entry : set.items)
-            if (ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry))
-                pieces += (pieces.empty() ? "" : ",") + std::to_string(entry) + ":" + GetItemName(proto);
-        SendAddon("set~" + std::to_string(set.id) + "~" + Localize(BONK_FIELD_ITEM_SET_NAME, set.id, set.name) + "~" + pieces);
-
-        for (BonkItemSetBonus const& bonus : set.bonuses)
-            SendAddon("setbonus~" + std::to_string(set.id) + "~" + std::to_string(bonus.pieces) + "~" + FormatStatList(bonus.stats) + "~" +
-                Localize(BONK_FIELD_ITEM_SET_BONUS_DESCRIPTION, BonkTextKey(set.id, bonus.pieces), bonus.description));
-    }
+        SendAddon("trinkettip~" + std::to_string(BonkMgr::GetGearEntry(BONK_GEAR_FIRST_TRINKET + effect, BONK_GEAR_LOWEST_QUALITY, 1)) + "~" +
+            std::to_string(BONK_GEAR_QUALITIES * BONK_GEAR_TIERS) + "~" + GetString(BonkMgr::GetTrinket(BonkTrinketEffect(effect)).text));
 
     SendAddon("gearend");
     SendFoundItems();
@@ -3243,7 +3047,7 @@ void BonkPlayer::SendStats() const
     SendStatTotals(bonuses.passives, false);
 }
 
-void BonkPlayer::SendStatTotals(float const* totals, bool inRun) const
+void BonkPlayer::SendStatTotals(float const* totals, bool inRun, float const* afterCaps) const
 {
     std::string line = "stats~" + std::string(inRun ? "1" : "0") + "~";
     for (uint8 effect = 0; effect < MAX_BONK_PASSIVE_EFFECT; ++effect)
@@ -3253,7 +3057,18 @@ void BonkPlayer::SendStatTotals(float const* totals, bool inRun) const
             value += BONK_BASE_CRIT;
         line += (effect ? "," : "") + FormatStat(value);
     }
+    line += "~";
+    if (afterCaps)
+        for (uint8 effect = 0; effect < MAX_BONK_PASSIVE_EFFECT; ++effect)
+            line += (effect ? "," : "") + FormatStat(afterCaps[effect]);
     SendAddon(line);
+}
+
+void BonkPlayer::WatchStats(bool watching)
+{
+    m_watchingStats = watching;
+    if (watching)
+        SendStats();
 }
 
 void BonkPlayer::SendTierList() const
@@ -3351,8 +3166,53 @@ namespace
     }
 }
 
+uint32 BonkPlayer::GetEpicLuckBonus() const
+{
+    return m_epicLuckMisses * BONK_EPIC_LUCK_PER_MISS;
+}
+
+void BonkPlayer::CountEpicLuck(bool epicDropped)
+{
+    m_epicLuckMisses = epicDropped ? 0 : m_epicLuckMisses + 1;
+    CharacterDatabase.PExecute("REPLACE INTO `bonk_account_epic_luck` (`account`, `misses`) VALUES (%u, %u)", GetProgressAccount(), m_epicLuckMisses);
+    SendEpicLuck();
+}
+
+void BonkPlayer::SendEpicLuck() const
+{
+    SendAddon("epicluck~" + std::to_string(GetEpicLuckBonus()));
+}
+
+void BonkPlayer::SetBoardChoice(bool show)
+{
+    m_boardChoice = show ? 1 : 0;
+    CharacterDatabase.PExecute("REPLACE INTO `bonk_account_board` (`account`, `show_on_board`) VALUES (%u, %u)", GetProgressAccount(), uint32(m_boardChoice));
+    SendBoardChoice();
+}
+
+void BonkPlayer::SendBoardChoice() const
+{
+    SendAddon("boardchoice~" + std::to_string(m_boardChoice));
+}
+
+bool BonkPlayer::HasBoardGear(uint32 level) const
+{
+    for (uint32 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        Item const* item = m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        uint32 const tier = item ? BonkFound::GetItemTier(item) : 0;
+        if (!tier)
+            continue;
+        BonkFoundGear gear;
+        if (!sBonkFound.Get(item->GetGUIDLow(), gear) || gear.season != BONK_LEADERBOARD_SEASON || tier > level)
+            return false;
+    }
+    return true;
+}
+
 void BonkPlayer::SendLevelPreview(BonkTier const& tier, BonkRunBonuses const& bonuses) const
 {
+    SendEpicLuck();
     static BonkString const CASTER_AIM[] = { BONK_STRING_CASTER_AIM_POOR, BONK_STRING_CASTER_AIM_GOOD, BONK_STRING_CASTER_AIM_PRECISE };
     static BonkString const BOSS_ATTACKS[] = { BONK_STRING_BOSS_ATTACKS_NORMAL, BONK_STRING_BOSS_ATTACKS_MORE, BONK_STRING_BOSS_ATTACKS_RELENTLESS };
     uint32 const step = std::min(2u, tier.eliteAffixes ? tier.eliteAffixes - 1u : 0u);
@@ -3360,7 +3220,6 @@ void BonkPlayer::SendLevelPreview(BonkTier const& tier, BonkRunBonuses const& bo
         std::to_string((tier.chargeIntervalMs + 500) / 1000) + "~" + std::to_string(tier.maxAlive));
     uint32 const best = GetTierBest(tier);
     uint32 const shown = tier.IsEndlessLevels() ? best + 1 : tier.levels;
-    bool const mythic = tier.key == "mythic";
     for (uint32 band = 1; band <= shown; ++band)
     {
         BonkLevel const level = sBonkMgr.GetLevel(tier, band);
@@ -3368,11 +3227,24 @@ void BonkPlayer::SendLevelPreview(BonkTier const& tier, BonkRunBonuses const& bo
         float const damage = tier.damageMultiplier * level.damage * (1.0f + bonuses.enemyDamage / 100.0f);
         float const veterans = tier.veteranChance > 0.0f ? tier.veteranChance + level.veteranChance : 0.0f;
         uint32 const affixes = tier.eliteAffixes + bonuses.eliteAffixes + level.extraAffixes;
-        float const legendary = BonkRun::BossLegendaryChance(tier, band);
-        float const epic = (100.0f - legendary) * BonkRun::BossEpicChance(tier, band) / 100.0f;
+        float const legendary = level.legendaryChance;
+        float const rest = (100.0f - legendary) / 100.0f;
+        float const epic = rest * level.epicChance;
+        float const blue = rest * level.blueChance;
+        float const green = rest * level.greenChance;
         SendAddon("level~" + std::to_string(tier.id) + "~" + std::to_string(band) + "~" + Percent((health - 1.0f) * 100.0f) + "~" +
             Percent((damage - 1.0f) * 100.0f) + "~" + Percent(veterans) + "~" + std::to_string(affixes) + "~" + Percent((level.reward - 1.0f) * 100.0f) + "~" +
-            (mythic ? Chance(legendary) + "~" + Chance(epic) + "~" + Chance(100.0f - legendary - epic) : "~~") + "~" + (band <= best ? "1" : "0"));
+            Chance(legendary) + "~" + Chance(epic) + "~" + Chance(blue) + "~" + Chance(green) + "~" + Chance(std::max(0.0f, 100.0f - legendary - epic - blue - green)) +
+            "~" + (band <= best ? "1" : "0") + "~" + std::to_string(BonkRun::GetLevelDropTier(tier, band)));
+        auto const record = m_levelBests.find({ uint8(m_player->GetClass()), tier.firstLevel + band - 1 });
+        if (record == m_levelBests.end())
+            continue;
+        LevelBest const& levelBest = record->second;
+        SendAddon("levelbest~" + std::to_string(tier.id) + "~" + std::to_string(band) + "~" + std::to_string(levelBest.clears) + "~" +
+            std::to_string(levelBest.firstClear) + "~" + std::to_string(levelBest.bestMs) + "~" + levelBest.bestMsBy + "~" +
+            std::to_string(levelBest.damagePerSecond) + "~" + levelBest.damageBy + "~" + std::to_string(levelBest.kills) + "~" + levelBest.killsBy + "~" +
+            std::to_string(levelBest.goldPerMinute) + "~" + levelBest.goldBy + "~" + std::to_string(levelBest.valorPerMinute) + "~" + levelBest.valorBy + "~" +
+            std::to_string(levelBest.finale) + "~" + std::to_string(levelBest.finaleSeconds));
     }
 }
 

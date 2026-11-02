@@ -1,12 +1,16 @@
 #ifndef BONK_COOP_H
 #define BONK_COOP_H
 
+#include "BonkPlayer.h"
 #include "ObjectGuid.h"
 #include "Common.h"
 
+#include <string>
 #include <vector>
 
 class Player;
+class GameObject;
+struct BonkFoundGear;
 class WorldObject;
 struct BonkMap;
 struct BonkTier;
@@ -18,6 +22,7 @@ namespace BonkCoop
     uint32 CampSeat(Player const* player);
     void JoinHostGroup(Player* guest);
     void OnUninvited(ObjectGuid guid);
+    uint8 GuestLoginRefusal(std::string const& username, uint32 accountId, ObjectGuid character);
     void OnLogout(Player* player);
     bool KeepsAfterDisconnect(Player const* player);
     uint32 RejoinWaitMs();
@@ -40,9 +45,16 @@ namespace BonkCoop
     void UpdateLeash(uint32 diff);
     void OnHostEnteredStage(Player* host, BonkMap const& map, uint32 stage);
     void OnHostFinished(Player* host);
+    void OnHostPortal(Player* host, bool last);
+    BonkRun* GroupPortalRun(Player* player, GameObject const* portal);
+    void RequestNextStage(Player* player);
+    void OnHostEndless(Player* host, uint32 stage);
+    void NoteHostRun(Player const* host, std::string const& playing);
     void BeginGroupRun(Player* host, uint32 players);
     bool Down(Player* player);
     bool IsDowned(Player const* player);
+    uint32 StandingCount(Player* player);
+    void WatchNext(Player* player, bool forward);
     void UpdateDowned(uint32 diff);
     void UpdateSharedPause(uint32 diff);
     std::vector<Player*> RunGroupOf(Player* player);
@@ -51,6 +63,20 @@ namespace BonkCoop
     void HideObjectFor(ObjectGuid object, ObjectGuid player);
     bool IsObjectHiddenFor(ObjectGuid object, ObjectGuid player);
     void ForgetHiddenObject(ObjectGuid object);
+    void ShowOnlyTo(ObjectGuid object, ObjectGuid player);
+    void ForgetShownOnly(ObjectGuid object);
+    bool IsShownOnlyToOther(ObjectGuid object, ObjectGuid viewer);
+    void PlaceGroupVaults(Player* host, GameObject const* portal, float side);
+    Player* VaultOwner(Player* viewer, GameObject const* vault);
+    void Record(Player const* guest, std::string const& entry);
+    void UpdateLedger();
+    bool IsPlayingElsewhere(std::string const& username);
+    void SyncGuest(Player* guest);
+    void ForgetGuest(Player const* guest);
+    void RecordMail(Player const* guest, uint32 entry, std::string const& subject, std::string const& body, BonkFoundGear const* found);
+    void RecordLevel(Player const* guest, uint32 classId, uint32 bestLevel, uint32 bestMs, uint32 finale);
+    void RecordLevelBest(Player const* guest, uint32 classId, BonkPlayer::LevelRun const& run);
+    void RecordFinaleBest(Player const* guest, uint32 classId, uint32 level, uint32 score, uint32 seconds);
 }
 
 #endif
