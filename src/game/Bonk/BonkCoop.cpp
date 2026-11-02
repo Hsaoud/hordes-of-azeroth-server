@@ -32,6 +32,7 @@ namespace
     };
     char const* const GUEST_CHARACTER_TABLES[] = { "bonk_character_title", "bonk_trinket_reset", "bonk_ironman" };
     uint32 const REMOVE_DELAY_MS = 3000;
+    char const* const REMOVED_FILE = "coop/removed.txt";
 
     std::mutex s_removedLock;
     std::mutex s_seatsLock;
@@ -52,6 +53,12 @@ namespace
                 return candidate;
         }
         return nullptr;
+    }
+
+    void NoteRemovedForLauncher(std::string const& username)
+    {
+        std::ofstream out(REMOVED_FILE, std::ios::binary | std::ios::app);
+        out << username << '\n';
     }
 
     bool WasRemoved(uint32 accountId)
@@ -271,6 +278,12 @@ void BonkCoop::OnUninvited(ObjectGuid guid)
         std::lock_guard<std::mutex> guard(s_removedLock);
         s_removedAccounts.insert(guest->GetSession()->GetAccountId());
     }
+    NoteRemovedForLauncher(guest->GetSession()->GetUsername());
+    if (!guest->GetSession()->IsConnected())
+    {
+        guest->GetSession()->KickDisconnectedFromWorld();
+        return;
+    }
     guest->GetBonkPlayer()->SendAddon("coopremoved");
     guest->m_Events.AddLambdaEventAtOffset([guid]
     {
@@ -311,6 +324,8 @@ namespace
 {
     void RemoveGuestAccount(uint32 accountId)
     {
+        CharacterDatabase.DirectPExecute("DELETE f FROM `bonk_item_found` f JOIN `mail_items` mi ON mi.`item_guid` = f.`item_guid` "
+            "JOIN `characters` c ON c.`guid` = mi.`receiver_guid` WHERE c.`account` = %u", accountId);
         CharacterDatabase.DirectPExecute("DELETE f FROM `bonk_item_found` f JOIN `character_inventory` ci ON ci.`item_guid` = f.`item_guid` "
             "JOIN `characters` c ON c.`guid` = ci.`guid` WHERE c.`account` = %u", accountId);
         CharacterDatabase.DirectPExecute("DELETE i, ci FROM `character_inventory` ci JOIN `characters` c ON c.`guid` = ci.`guid` "

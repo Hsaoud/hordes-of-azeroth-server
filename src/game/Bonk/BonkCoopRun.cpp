@@ -118,7 +118,10 @@ namespace
     {
         bool sharedPause = true;
         bool sharedXp = true;
+        time_t readAt = 0;
     };
+
+    time_t const SETTINGS_REREAD_SECONDS = 2;
 
     std::map<ObjectGuid, GroupSettings> s_settings;
 
@@ -162,13 +165,13 @@ namespace
     GroupSettings SettingsOf(Player const* player)
     {
         ObjectGuid const host = SettingsHostOf(player);
+        time_t const now = time(nullptr);
         auto found = s_settings.find(host);
-        if (found != s_settings.end())
+        if (found != s_settings.end() && now - found->second.readAt < SETTINGS_REREAD_SECONDS)
             return found->second;
         std::map<std::string, std::string> const file = ReadHostSettingsFile();
-        if (file.empty())
-            return GroupSettings();
         GroupSettings settings;
+        settings.readAt = now;
         auto pause = file.find("pause");
         auto xp = file.find("xp");
         settings.sharedPause = pause == file.end() || pause->second != "0";
@@ -222,7 +225,7 @@ namespace
     bool AnyoneStanding(Player* host)
     {
         for (Player* member : GroupMembers(host))
-            if (member->IsAlive())
+            if (member->IsAlive() && !BonkCoop::IsAway(member))
                 return true;
         return false;
     }
@@ -230,7 +233,7 @@ namespace
     Player* FindReviver(Player* downed, std::vector<Player*> const& members)
     {
         for (Player* member : members)
-            if (member != downed && member->IsAlive() && member->IsInWorld() && member->GetMapId() == downed->GetMapId() &&
+            if (member != downed && member->IsAlive() && member->IsInWorld() && !BonkCoop::IsAway(member) && member->GetMapId() == downed->GetMapId() &&
                 member->GetDistance2d(downed) <= REVIVE_RADIUS)
                 return member;
         return nullptr;
@@ -437,7 +440,7 @@ namespace
     bool EveryoneArrived(std::vector<Player*> const& members)
     {
         for (Player* member : members)
-            if (!member->IsInWorld() || member->IsBeingTeleported())
+            if (!BonkCoop::IsAway(member) && (!member->IsInWorld() || member->IsBeingTeleported()))
                 return false;
         return true;
     }
@@ -1024,12 +1027,14 @@ bool BonkCoop::IsGroupHost(Player const* player)
 
 bool BonkCoop::SharesPause(Player const* player)
 {
-    return SettingsOf(player).sharedPause;
+    auto running = s_groups.find(HostOf(player));
+    return running != s_groups.end() ? running->second.sharedPause : SettingsOf(player).sharedPause;
 }
 
 bool BonkCoop::SharesXp(Player const* player)
 {
-    return SettingsOf(player).sharedXp;
+    auto running = s_groups.find(HostOf(player));
+    return running != s_groups.end() ? running->second.sharedXp : SettingsOf(player).sharedXp;
 }
 
 void BonkCoop::SetSharedPause(Player* host, bool shared)

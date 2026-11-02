@@ -272,18 +272,19 @@ namespace
         return line.compare(0, 13 + strlen(table) + 1, std::string("INSERT INTO `") + table + "`") == 0;
     }
 
-    std::string StripBank(std::string const& dump)
+    std::string StripHomeOnly(std::string const& dump)
     {
         std::set<std::string> bankBags;
         std::set<std::string> bankItems;
         std::istringstream first(dump);
         std::string line;
-        std::vector<std::vector<std::string>> inventory;
         while (std::getline(first, line))
         {
+            std::vector<std::string> const values = DumpValues(line);
+            if (IsDumpOf(line, "mail_items") && values.size() >= 2)
+                bankItems.insert(values[1]);
             if (!IsDumpOf(line, "character_inventory"))
                 continue;
-            std::vector<std::string> const values = DumpValues(line);
             if (values.size() < 4 || values[1] != "0")
                 continue;
             uint32 const slot = uint32(std::strtoul(values[2].c_str(), nullptr, 10));
@@ -306,7 +307,7 @@ namespace
         while (std::getline(third, line))
         {
             std::vector<std::string> const values = DumpValues(line);
-            bool drop = false;
+            bool drop = IsDumpOf(line, "mail") || IsDumpOf(line, "mail_items");
             if (IsDumpOf(line, "character_inventory"))
                 drop = values.size() >= 4 && bankItems.count(values[3]);
             else if (IsDumpOf(line, "item_instance") || IsDumpOf(line, "bonk_item_found"))
@@ -352,7 +353,7 @@ namespace
 
     std::string Load(uint32 accountId, std::string const& name, uint32 guid)
     {
-        WriteFile(DUMP_FILE, StripBank(ReadFile(DUMP_FILE)));
+        WriteFile(DUMP_FILE, StripHomeOnly(ReadFile(DUMP_FILE)));
         PlayerDumpReader reader;
         DumpReturn const loaded = reader.LoadDump(DUMP_FILE, accountId, name, guid);
         if (loaded != DUMP_SUCCESS)

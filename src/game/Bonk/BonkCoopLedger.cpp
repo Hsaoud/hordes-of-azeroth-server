@@ -126,6 +126,18 @@ namespace
         return true;
     }
 
+    GameBudget BudgetOf(HomeTarget const& home)
+    {
+        std::lock_guard<std::mutex> guard(s_budgetLock);
+        return s_budgets[std::to_string(home.accountId) + ":" + home.game];
+    }
+
+    void RestoreBudget(HomeTarget const& home, GameBudget const& budget)
+    {
+        std::lock_guard<std::mutex> guard(s_budgetLock);
+        s_budgets[std::to_string(home.accountId) + ":" + home.game] = budget;
+    }
+
     std::string OverLimit(std::string const& kind)
     {
         return "more " + kind + " than a session can earn";
@@ -889,17 +901,22 @@ namespace
             sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op ledger: account %u refused entry %u (%s)", accountId, seq, problem.c_str());
             return prefix + "refused\t" + problem + "\n";
         }
+        GameBudget const budgetBefore = BudgetOf(home);
         CharacterDatabase.BeginTransaction();
         std::string const problem = ApplyEntry(home, fields);
         if (!problem.empty())
         {
             CharacterDatabase.RollbackTransaction();
+            RestoreBudget(home, budgetBefore);
             sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op ledger: account %u refused entry %u (%s)", accountId, seq, problem.c_str());
             return prefix + "refused\t" + problem + "\n";
         }
         CharacterDatabase.PExecute("INSERT INTO `bonk_coop_applied` (`account`, `game`, `seq`) VALUES (%u, '%s', %u)", accountId, game.c_str(), seq);
         if (!CharacterDatabase.CommitTransactionDirect())
+        {
+            RestoreBudget(home, budgetBefore);
             return prefix + "retry\n";
+        }
         return prefix + "ok\n";
     }
 
@@ -910,8 +927,11 @@ namespace
             std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
             out << text;
         }
-        std::remove(path.c_str());
+#if PLATFORM == PLATFORM_WINDOWS
+        MoveFileExA(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+#else
         std::rename(temporary.c_str(), path.c_str());
+#endif
     }
 
     std::string ReadWhole(std::string const& path)
@@ -962,6 +982,24 @@ namespace
             username.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == std::string::npos;
     }
 
+    void LeaveAllGuests()
+    {
+        std::unique_ptr<QueryResult> result(LoginDatabase.Query("SELECT `username` FROM `account` WHERE `username` LIKE 'HOAC%'"));
+        uint32 count = 0;
+        if (result)
+        {
+            do
+            {
+                std::string const username = result->Fetch()[0].GetCppString();
+                if (IsGuestName(username) && s_leaving.emplace(username, Leaving()).second)
+                    ++count;
+            }
+            while (result->NextRow());
+        }
+        if (count)
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: a new hosting session removes %u guest accounts left from before", count);
+    }
+
     void ReadLeaveRequests()
     {
         std::remove(LEAVE_WORK_FILE);
@@ -971,8 +1009,12 @@ namespace
         std::remove(LEAVE_WORK_FILE);
         std::string username;
         while (in >> username)
-            if (IsGuestName(username))
+        {
+            if (username == "*")
+                LeaveAllGuests();
+            else if (IsGuestName(username))
                 s_leaving.emplace(username, Leaving());
+        }
     }
 
     void LogOutIfLeaving(Player* guest, std::string const& username)
