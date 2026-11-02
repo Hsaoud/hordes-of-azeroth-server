@@ -38,6 +38,7 @@ namespace BonkCoop
     void SetSharedPause(Player* host, bool shared);
     void SetSharedXp(Player* host, bool shared);
     void DeleteGuestAccounts();
+    bool DeleteGuestAccount(std::string const& username);
     void Update(uint32 diff);
     bool RequestGroupStart(Player* host, BonkTier const& tier, BonkRunChoice const& choice);
     void AnswerReady(Player* player, bool ready);

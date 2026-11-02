@@ -32,6 +32,10 @@ namespace
     char const* const INBOX_FILE = "coop/ledger.in";
     char const* const INBOX_ANSWER_FILE = "coop/ledger.answer";
     char const* const ONLINE_GUESTS_FILE = "coop/guests-online.txt";
+    char const* const LEAVE_FILE = "coop/leave.req";
+    char const* const LEAVE_WORK_FILE = "coop/leave.work";
+    time_t const GUEST_REMOVE_SECONDS = 10;
+    time_t const LEDGER_KEEP_SECONDS = 300;
     size_t const MAX_GAME_LENGTH = 64;
     uint32 const GUEST_SYNC_MS = 5000;
     uint32 const HOME_MAIL_SENDER = 900009;
@@ -943,19 +947,43 @@ namespace
         return answers;
     }
 
-    std::string LogoutRequestPath(std::string const& username)
+    struct Leaving
     {
-        return "coop/logout-" + username + ".req";
+        time_t offlineSince = 0;
+        bool loggingOut = false;
+        bool removed = false;
+    };
+
+    std::map<std::string, Leaving> s_leaving;
+
+    bool IsGuestName(std::string const& username)
+    {
+        return username.compare(0, 4, "HOAC") == 0 && username.size() <= 32 &&
+            username.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == std::string::npos;
     }
 
-    void LogOutIfAsked(Player* guest, std::string const& username)
+    void ReadLeaveRequests()
     {
-        std::string const path = LogoutRequestPath(username);
-        std::ifstream probe(path, std::ios::binary);
-        if (!probe.good())
+        std::remove(LEAVE_WORK_FILE);
+        if (std::rename(LEAVE_FILE, LEAVE_WORK_FILE) != 0)
             return;
-        probe.close();
-        std::remove(path.c_str());
+        std::istringstream in(ReadWhole(LEAVE_WORK_FILE));
+        std::remove(LEAVE_WORK_FILE);
+        std::string username;
+        while (in >> username)
+            if (IsGuestName(username))
+                s_leaving.emplace(username, Leaving());
+    }
+
+    void LogOutIfLeaving(Player* guest, std::string const& username)
+    {
+        auto found = s_leaving.find(username);
+        if (found == s_leaving.end())
+            return;
+        found->second.offlineSince = 0;
+        if (found->second.loggingOut)
+            return;
+        found->second.loggingOut = true;
         WorldSession* session = guest->GetSession();
         sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s left the party, logging out now", guest->GetName());
         if (!session->IsConnected())
@@ -1058,6 +1086,45 @@ bool BonkCoop::IsPlayingElsewhere(std::string const& username)
     return time(nullptr) - time_t(stamp) < AWAY_FRESH_SECONDS;
 }
 
+namespace
+{
+    void RemoveLedgerFiles(std::string const& username)
+    {
+        std::remove(OutboxPath(username).c_str());
+        std::remove(AnswersPath(username).c_str());
+        s_lastSeq.erase(username);
+    }
+
+    void RemoveLeftGuests(std::set<std::string> const& present)
+    {
+        time_t const now = time(nullptr);
+        for (auto itr = s_leaving.begin(); itr != s_leaving.end();)
+        {
+            Leaving& leaving = itr->second;
+            if (present.count(itr->first))
+            {
+                ++itr;
+                continue;
+            }
+            if (!leaving.offlineSince)
+                leaving.offlineSince = now;
+            if (!leaving.removed && now - leaving.offlineSince >= GUEST_REMOVE_SECONDS)
+            {
+                BonkCoop::DeleteGuestAccount(itr->first);
+                leaving.removed = true;
+            }
+            std::lock_guard<std::mutex> guard(s_outboxLock);
+            if (leaving.removed && now - leaving.offlineSince >= LEDGER_KEEP_SECONDS && !s_unwritten.count(itr->first))
+            {
+                RemoveLedgerFiles(itr->first);
+                itr = s_leaving.erase(itr);
+                continue;
+            }
+            ++itr;
+        }
+    }
+}
+
 void BonkCoop::UpdateLedger()
 {
     std::ifstream probe(INBOX_FILE, std::ios::binary);
@@ -1072,6 +1139,8 @@ void BonkCoop::UpdateLedger()
     bool const syncGuests = s_guestTimer >= GUEST_SYNC_MS;
     if (syncGuests)
         s_guestTimer = 0;
+    ReadLeaveRequests();
+    std::set<std::string> present;
     std::string online;
     {
         std::lock_guard<std::mutex> guard(s_outboxLock);
@@ -1093,7 +1162,9 @@ void BonkCoop::UpdateLedger()
         if (syncGuests && player->IsInWorld())
             SyncGuest(player);
         ReadAnswers(username);
-        LogOutIfAsked(player, username);
+        present.insert(username);
+        LogOutIfLeaving(player, username);
     }
     WriteWhole(ONLINE_GUESTS_FILE, online);
+    RemoveLeftGuests(present);
 }
