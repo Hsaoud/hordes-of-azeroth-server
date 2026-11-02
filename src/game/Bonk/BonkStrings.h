@@ -870,6 +870,7 @@ enum BonkString : uint32
     BONK_STRING_COOP_WANTS_NEXT_STAGE                   = 958,
     BONK_STRING_COOP_NEXT_STAGE_NOT_READY               = 959,
     BONK_STRING_COOP_ANOTHER_CHANCE                     = 960,
+    BONK_STRING_RULE_DOT_BURST                          = 963,
 };
 
 struct BonkStringText
