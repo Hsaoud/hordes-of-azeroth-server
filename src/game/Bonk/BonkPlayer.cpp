@@ -458,9 +458,9 @@ std::string BonkPlayer::DescribeFoundGear() const
         if (!tier)
             continue;
         BonkFoundGear gear;
-        bool const known = sBonkFound.Get(item->GetGUIDLow(), gear);
+        sBonkFound.Get(item->GetGUIDLow(), gear);
         found += (found.empty() ? "" : ",") + std::to_string(slot) + ":" + std::to_string(tier) + ":" + std::to_string(gear.lines.size()) + ":" +
-            std::to_string(known ? gear.season : 0);
+            std::to_string(gear.season);
     }
     return found;
 }
@@ -3204,7 +3204,8 @@ bool BonkPlayer::HasBoardGear(uint32 level) const
         if (!tier)
             continue;
         BonkFoundGear gear;
-        if (!sBonkFound.Get(item->GetGUIDLow(), gear) || gear.season != BONK_LEADERBOARD_SEASON || tier > level)
+        sBonkFound.Get(item->GetGUIDLow(), gear);
+        if (gear.season != BONK_LEADERBOARD_SEASON || tier > level)
             return false;
     }
     return true;

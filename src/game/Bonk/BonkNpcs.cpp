@@ -24,6 +24,7 @@ namespace
     uint32 const BONK_TEXT_MASTERY_SOON  = 900009;
     uint32 const BONK_TEXT_VAULT_EMPTY   = 900010;
     uint32 const BONK_TEXT_VAULT         = 900011;
+    uint32 const BONK_TEXT_PORTAL_FINAL  = 900016;
     uint32 const BONK_TEXT_COOP          = 900190;
 
     uint32 const COOP_ACTION_PAUSE = GOSSIP_ACTION_INFO_DEF + 1;
@@ -40,6 +41,7 @@ namespace
         PORTAL_ACTION_HOME = GOSSIP_ACTION_INFO_DEF + 2,
         PORTAL_ACTION_HOME_SURE = GOSSIP_ACTION_INFO_DEF + 3,
         PORTAL_ACTION_BACK = GOSSIP_ACTION_INFO_DEF + 4,
+        PORTAL_ACTION_ENDLESS = GOSSIP_ACTION_INFO_DEF + 5,
     };
 
     uint32 const SENDER_VAULT_PUT  = GOSSIP_SENDER_MAIN + 1;
@@ -272,11 +274,20 @@ bool GOHello_go_bonk_portal(Player* player, GameObject* go)
     if (!portalRun)
         return true;
 
+    if (portalRun->GetStage() >= portalRun->GetTier().stages)
+    {
+        if (portalRun == run)
+            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_TAXI, run->GetString(BONK_STRING_PORTAL_FINISH_RUN).c_str(), GOSSIP_SENDER_MAIN, PORTAL_ACTION_HOME);
+        if (portalRun->GetNextMap())
+            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, run->GetString(BONK_STRING_PORTAL_CONTINUE_ENDLESS).c_str(), GOSSIP_SENDER_MAIN, PORTAL_ACTION_ENDLESS);
+        player->SEND_GOSSIP_MENU(BONK_TEXT_PORTAL_FINAL, go->GetObjectGuid());
+        return true;
+    }
+
     if (BonkMap const* next = portalRun->GetNextMap())
     {
         std::string const mapName = run->Localize(BONK_FIELD_MAP_NAME, next->id, next->name);
-        std::string const text = portalRun->GetStage() >= portalRun->GetTier().stages ? run->GetString(BONK_STRING_PORTAL_FINALE, { mapName }) :
-            run->GetString(BONK_STRING_PORTAL_NEXT_STAGE, { std::to_string(portalRun->GetStage() + 1), mapName });
+        std::string const text = run->GetString(BONK_STRING_PORTAL_NEXT_STAGE, { std::to_string(portalRun->GetStage() + 1), mapName });
         player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, text.c_str(), GOSSIP_SENDER_MAIN, PORTAL_ACTION_NEXT);
     }
     if (portalRun == run)
@@ -288,6 +299,14 @@ bool GOHello_go_bonk_portal(Player* player, GameObject* go)
 bool GOGossipSelect_go_bonk_portal(Player* player, GameObject* go, uint32 , uint32 action)
 {
     BonkRun* run = player->GetBonkPlayer()->GetRun();
+    if (run && action == PORTAL_ACTION_ENDLESS && player->GetBonkPlayer()->IsAddonReady() && (run->IsOwnPortal(go) || BonkCoop::GroupPortalRun(player, go)))
+    {
+        player->CLOSE_GOSSIP_MENU();
+        player->GetBonkPlayer()->SendAddon("portalendless");
+        return true;
+    }
+    if (action == PORTAL_ACTION_ENDLESS)
+        action = PORTAL_ACTION_NEXT;
     if (run && action == PORTAL_ACTION_NEXT && BonkCoop::InGroupRun(player) && (run->IsOwnPortal(go) || BonkCoop::GroupPortalRun(player, go)))
     {
         player->CLOSE_GOSSIP_MENU();
@@ -303,7 +322,8 @@ bool GOGossipSelect_go_bonk_portal(Player* player, GameObject* go, uint32 , uint
     if (action == PORTAL_ACTION_HOME && player->GetBonkPlayer()->IsAddonReady())
     {
         player->CLOSE_GOSSIP_MENU();
-        player->GetBonkPlayer()->SendAddon(std::string("portalhome~") + (run->IsVaultEmptyWithFinds() ? "1" : "0"));
+        player->GetBonkPlayer()->SendAddon(std::string("portalhome~") + (run->IsVaultEmptyWithFinds() ? "1" : "0") + "~" +
+            (run->GetStage() >= run->GetTier().stages ? "1" : "0"));
         return true;
     }
     if (action == PORTAL_ACTION_HOME && run->IsVaultEmptyWithFinds())

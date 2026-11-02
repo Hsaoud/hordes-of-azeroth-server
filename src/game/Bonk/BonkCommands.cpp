@@ -181,6 +181,24 @@ bool ChatHandler::HandleBonkHomeCommand(char*)
     return true;
 }
 
+bool ChatHandler::HandleBonkEndlessCommand(char*)
+{
+    Player* player = m_session->GetPlayer();
+    BonkRun* run = player->GetBonkPlayer()->GetRun();
+    if (!run)
+    {
+        SendSysMessage(GetString(m_session, BONK_STRING_NOT_IN_A_RUN).c_str());
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    if (BonkCoop::InGroupRun(player))
+        BonkCoop::RequestNextStage(player);
+    else if (run->GetStage() >= run->GetTier().stages)
+        run->EnterNextStage();
+    return true;
+}
+
 bool ChatHandler::HandleBonkPickCommand(char* args)
 {
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();

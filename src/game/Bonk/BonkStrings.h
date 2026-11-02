@@ -873,6 +873,8 @@ enum BonkString : uint32
     BONK_STRING_RULE_DOT_BURST                          = 963,
     BONK_STRING_PASSIVE_LABEL_BURNING_DAMAGE            = 964,
     BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE              = 965,
+    BONK_STRING_PORTAL_FINISH_RUN                       = 966,
+    BONK_STRING_PORTAL_CONTINUE_ENDLESS                 = 967,
 };
 
 struct BonkStringText

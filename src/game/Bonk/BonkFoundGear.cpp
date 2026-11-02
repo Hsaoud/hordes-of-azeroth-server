@@ -119,6 +119,7 @@ void BonkFoundStore::Load()
 {
     std::lock_guard<std::mutex> guard(m_lock);
     m_items.clear();
+    CharacterDatabase.DirectExecute("DELETE `f` FROM `bonk_item_found` `f` LEFT JOIN `item_instance` `i` ON `i`.`guid` = `f`.`item_guid` WHERE `i`.`guid` IS NULL");
     std::unique_ptr<QueryResult> result(CharacterDatabase.Query(
         "SELECT `item_guid`, `tier`, `line1_effect`, `line1_roll`, `line2_effect`, `line2_roll`, `rerolls`, `reroll_line`, `upgrades`, `season` FROM `bonk_item_found`"));
     if (result)
