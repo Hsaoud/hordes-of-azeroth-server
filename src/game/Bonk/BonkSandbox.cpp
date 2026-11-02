@@ -1176,6 +1176,9 @@ void BonkRun::ClearSandboxEnemies()
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
     m_pendingDotBursts.clear();
+    m_volleyHits = 0;
+    m_explosiveArrows = 0;
+    m_explosiveArrowReadyMs = 0;
     m_dotBurstTimes.clear();
     m_dotBurstLookTimes.clear();
     m_dotStacks.clear();

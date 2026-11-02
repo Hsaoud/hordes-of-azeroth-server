@@ -352,7 +352,9 @@ void BonkRun::HealPriest(float percent, uint32 textSpellId, bool atonement)
 
 void BonkRun::ShieldFromRenew(uint32 overheal)
 {
-    uint32 const cap = uint32(m_player->GetMaxHealth() * m_mastery.Special(BONK_SPECIAL_RENEW_SHIELD) / 100.0f);
+    OwnedWeapon const* ward = FindOwnedByRoot(BONK_WEAPON_POWER_WORD_SHIELD);
+    float const wardPercent = ward ? GetShieldPercent(ward->weapon, ward->damageBonus, GetSpellUpgrade(*ward, BONK_SPELL_UPGRADE_SHIELD_SIZE)) : 0.0f;
+    uint32 const cap = uint32(m_player->GetMaxHealth() * std::max(wardPercent, m_mastery.Special(BONK_SPECIAL_RENEW_SHIELD)) / 100.0f);
     if (m_spellShield < cap)
         AddSpellShield(std::min(overheal, cap - m_spellShield));
 }

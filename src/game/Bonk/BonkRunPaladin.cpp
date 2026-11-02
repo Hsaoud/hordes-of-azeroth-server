@@ -65,6 +65,7 @@ namespace
     float const BONK_VERDICT_DAMAGE           = 3.0f;
     uint32 const BONK_COMMAND_EVERY           = 2;
     uint32 const BONK_CRUSADER_COMMAND_EVERY  = 1;
+    uint32 const BONK_STORM_COMMAND_BURSTS    = 4;
     int32 const BONK_SEAL_OF_JUSTICE_STUN_MS  = 1000;
     float const BONK_TEMPLAR_SHARE_FACTOR     = 2.0f;
     uint32 const BONK_VENGEANCE_MAX_STACKS    = 5;
@@ -257,6 +258,21 @@ void BonkRun::ResolvePaladinStrike(Creature* target, bool crit)
     if (command && ++m_paladinStrikes % every == 0)
         BurstSealOfCommand(target);
     HealFromSealOfLight(crit);
+}
+
+void BonkRun::ChargeCommandFromStorm(std::vector<Creature*> const& struck)
+{
+    OwnedWeapon const* command = FindOwnedSeal(BONK_WEAPON_SEAL_OF_COMMAND);
+    if (!command)
+        return;
+    uint32 const every = command->weapon.id == BONK_WEAPON_SEAL_OF_THE_CRUSADER ? BONK_CRUSADER_COMMAND_EVERY : BONK_COMMAND_EVERY;
+    uint32 bursts = 0;
+    for (size_t i = 1; i < struck.size() && bursts < BONK_STORM_COMMAND_BURSTS; ++i)
+        if (++m_paladinStrikes % every == 0)
+        {
+            BurstSealOfCommand(struck[i]);
+            ++bursts;
+        }
 }
 
 void BonkRun::BurstSealOfCommand(Creature* target)
@@ -682,6 +698,7 @@ void BonkRun::SpinDivineStorm(OwnedWeapon& owned, SpellEntry const* spellInfo)
         }
     }
     ResolvePaladinStrike(mobs.front(), crit);
+    ChargeCommandFromStorm(mobs);
     if (crit)
         TriggerArtOfWar();
     float const cap = owned.weapon.id == BONK_WEAPON_DIVINE_TEMPEST ? BONK_DIVINE_TEMPEST_HEAL_CAP : BONK_DIVINE_STORM_HEAL_CAP;

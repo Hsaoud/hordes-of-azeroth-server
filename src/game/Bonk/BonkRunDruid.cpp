@@ -52,6 +52,8 @@ namespace
     uint32 const BONK_KIT_ROAR_IMPACT         = 693;
     size_t const BONK_ROAR_LOOKS              = 6;
     float const BONK_TREE_REJUVENATION_PACE   = 0.67f;
+    uint32 const BONK_THORNS_MOONFIRE         = 2;
+    uint32 const BONK_BLOOM_HASTE_MS          = 3000;
     uint32 const BONK_TREE_EXTRA_TREANTS      = 1;
     uint32 const BONK_KIT_SHAPESHIFT_SMOKE    = 3610;
     uint32 const BONK_KIT_TREANT_SPROUT       = 7504;
@@ -229,6 +231,7 @@ bool BonkRun::IsDruidHero() const
 
 void BonkRun::ResetDruidState()
 {
+    m_bloomHasteUntil = 0;
     m_druidLookMs.clear();
     m_thornsTimes.clear();
     m_tranquilityPulsesLeft = 0;
@@ -801,7 +804,8 @@ void BonkRun::BloomRejuvenation(OwnedWeapon& owned, SpellEntry const* spellInfo)
     OnRejuvenationTick(owned, spellInfo);
     if (TakeDruidLookSlot(owned.weapon.id))
         ShowStrike(m_player, spellInfo, m_player);
-    HealDruid(owned, owned.weapon.healPct);
+    if (HealDruid(owned, owned.weapon.healPct) > 0.0f)
+        m_bloomHasteUntil = m_totalMs + BONK_BLOOM_HASTE_MS;
 
     std::vector<Creature*> mobs = GetDruidTargets(owned.weapon.range * GetWeaponArea(owned));
     mobs.resize(std::min<size_t>(mobs.size(), GetWeaponTargets(owned)));
@@ -897,6 +901,8 @@ void BonkRun::OnDruidStruck(Creature* attacker)
         look = sSpellMgr.GetSpellEntry(thorns->weapon.spellId);
     HitAsDruid(*thorns, look, attacker, GetWeaponDamage(*thorns));
     OnThornsStrike(*thorns, look, attacker);
+    if (attacker->IsAlive())
+        ApplyDruidMoonfire(*thorns, attacker, BONK_THORNS_MOONFIRE);
 }
 
 uint32 BonkRun::ApplyDruidDamageTaken(uint32 damage) const

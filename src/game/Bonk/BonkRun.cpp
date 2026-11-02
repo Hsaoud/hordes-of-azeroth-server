@@ -368,6 +368,12 @@ float const BONK_START_POLY_REACH   = 10.0f;
     size_t const BONK_MAX_NEW_VENOM_CLOUDS = 8;
     uint32 const BONK_SPELL_VENOM_CLOUD_LOOK = 21070;
     uint32 const BONK_KIT_VENOM_BURST      = 6377;
+    uint32 const BONK_WEAPON_VOLLEY        = 137;
+    uint32 const BONK_VOLLEY_HITS_PER_ARROW = 25;
+    uint32 const BONK_MAX_EXPLOSIVE_ARROWS = 2;
+    uint32 const BONK_EXPLOSIVE_ARROW_GAP_MS = 500;
+    float const BONK_EXPLOSIVE_ARROW_RADIUS = 8.0f;
+    uint32 const BONK_KIT_EXPLOSIVE_ARROW  = 286;
     uint32 const BONK_CLUSTER_BOMBLETS     = 5;
     float const BONK_BOMBLET_MIN_TOSS      = 3.0f;
     float const BONK_BOMBLET_MAX_TOSS      = 6.0f;
@@ -1704,6 +1710,9 @@ void BonkRun::StartStage()
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
     m_pendingDotBursts.clear();
+    m_volleyHits = 0;
+    m_explosiveArrows = 0;
+    m_explosiveArrowReadyMs = 0;
     m_dotBurstTimes.clear();
     m_dotBurstLookTimes.clear();
     m_dotStacks.clear();
@@ -6300,6 +6309,7 @@ void BonkRun::StrikeWith(OwnedWeapon& owned, SpellEntry const* spellInfo, Creatu
 
     OnMageStrike(owned, shotInfo, target, shotShare, source ? static_cast<Unit const*>(source) : m_player);
     OnShamanStrike(owned, shotInfo, target, shotShare);
+    CurseFromShadowBolt(owned, target);
     OnPriestStrike(owned, shotInfo, target, shotShare);
     OnWarlockStrike(owned, shotInfo, target, shotShare);
     OnDruidStrike(owned, shotInfo, target);
@@ -7170,7 +7180,7 @@ void BonkRun::StartKeywordCloud(OwnedWeapon const& owned, float x, float y, floa
     cloud.stacks = kind.stacks;
     if (kind.bloodRing || kind.natureRing)
         ShowRingAt(cloud, z, kind.natureRing ? BonkHeroRing::Nature : BonkHeroRing::BloodAura);
-    else
+    else if (kind.lookSpellId)
         cloud.area = PlaceAreaVisual(m_player, kind.lookSpellId, x, y, z, cloud.radius, uint32(cloud.leftMs));
     m_keywordClouds.push_back(cloud);
     if (kind.burstKit)
@@ -8325,6 +8335,12 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
+        if (cast.explosiveArrow)
+        {
+            ExplodeArrow(*owned, info, cast);
+            continue;
+        }
+
         if (cast.venomBolts)
         {
             FireVenomBolts(*owned, info, cast);
@@ -8355,7 +8371,7 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
-        if (cast.blinkLanding || cast.pyroblastSplash || cast.iceShard || cast.frostShatter || cast.livingBomb || cast.meteor ||
+        if (cast.blinkLanding || cast.blinkChill || cast.pyroblastSplash || cast.iceShard || cast.frostShatter || cast.livingBomb || cast.meteor ||
             cast.phaseRush || cast.presenceOfMind)
         {
             ResolveMageCast(*owned, info, cast);
@@ -9547,6 +9563,7 @@ void BonkRun::OnPetBite(Creature* pet, Unit* victim)
         return;
     OnShamanPetBite(pet, victim);
     OnPriestPetBite(pet, victim);
+    MarkFromPack(pet, victim);
     if (!IsPetFrenzied() || !IsSummon(pet))
         return;
 
@@ -9571,6 +9588,49 @@ void BonkRun::OnPetBite(Creature* pet, Unit* victim)
                     QueuePetCleave(*owned, pet, victim);
             return;
         }
+}
+
+void BonkRun::MarkFromPack(Creature* pet, Unit* victim)
+{
+    Creature* prey = victim->ToCreature();
+    if (!prey || !prey->IsAlive() || !IsSummon(pet) || !HasBehavior(BONK_BEHAVIOR_WRATH) || GetKeywordStacks(prey, BONK_KEYWORD_HUNTERS_MARK))
+        return;
+    ApplyKeyword(prey, BONK_KEYWORD_HUNTERS_MARK, 1);
+}
+
+void BonkRun::OnHunterDamage(uint32 root, Unit* victim)
+{
+    if (root == BONK_WEAPON_VOLLEY)
+    {
+        if (m_explosiveArrows < BONK_MAX_EXPLOSIVE_ARROWS && FindOwnedByRoot(BONK_WEAPON_AIMED_SHOT) && ++m_volleyHits >= BONK_VOLLEY_HITS_PER_ARROW)
+        {
+            m_volleyHits = 0;
+            ++m_explosiveArrows;
+        }
+        return;
+    }
+    if (root != BONK_WEAPON_AIMED_SHOT || !m_explosiveArrows || m_totalMs < m_explosiveArrowReadyMs || !victim->IsCreature())
+        return;
+    OwnedWeapon const* aimed = FindOwnedByRoot(BONK_WEAPON_AIMED_SHOT);
+    if (!aimed)
+        return;
+    --m_explosiveArrows;
+    m_explosiveArrowReadyMs = m_totalMs + BONK_EXPLOSIVE_ARROW_GAP_MS;
+    PendingCast arrow;
+    arrow.weaponId = aimed->weapon.id;
+    arrow.spellId = aimed->weapon.spellId;
+    arrow.explosiveArrow = true;
+    victim->GetPosition(arrow.x, arrow.y, arrow.z);
+    m_pendingCasts.push_back(arrow);
+}
+
+void BonkRun::ExplodeArrow(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast)
+{
+    ShowKitAt(BONK_KIT_EXPLOSIVE_ARROW, cast.x, cast.y, cast.z);
+    float const damage = GetWeaponDamage(owned);
+    for (Creature* mob : GetMobsNear(cast.x, cast.y, BONK_EXPLOSIVE_ARROW_RADIUS * GetWeaponArea(owned)))
+        if (mob->IsAlive())
+            DealShamanHit(spellInfo, owned.weapon.spellId, mob, damage);
 }
 
 void BonkRun::QueuePetCleave(OwnedWeapon const& owned, Creature* pet, Unit* victim)
@@ -13908,6 +13968,9 @@ void BonkRun::CleanUp()
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
     m_pendingDotBursts.clear();
+    m_volleyHits = 0;
+    m_explosiveArrows = 0;
+    m_explosiveArrowReadyMs = 0;
     m_dotBurstTimes.clear();
     m_dotBurstLookTimes.clear();
     m_dotStacks.clear();

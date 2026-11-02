@@ -106,6 +106,7 @@ namespace
     uint32 const BONK_POISON_BOMB_STACKS      = 4;
     uint32 const BONK_MUTILATE_STACKS_PER     = 5;
     uint32 const BONK_EVISCERATE_CHAIN        = 3;
+    int32 const BONK_SPREE_EVISCERATE_MS      = 500;
     float const BONK_EVISCERATE_REACH         = 8.0f;
     uint32 const BONK_SHURIKEN_STORM_JUMPS    = 2;
     float const BONK_SHURIKEN_STORM_REACH     = 10.0f;
@@ -638,6 +639,7 @@ void BonkRun::StrikeSpree(OwnedWeapon& owned, SpellEntry const* spellInfo, bool 
         m_spreeStriking = true;
         StabRogue(owned, look ? look : spellInfo, target, 1.0f, true);
         m_spreeStriking = false;
+        ReduceTimer(BONK_WEAPON_EVISCERATE, BONK_SPREE_EVISCERATE_MS);
         PlayKitAt(ObjectGuid(), x, y, z, BONK_KIT_SPREE_SLASH, false);
         SwingRogueBlades();
         if (owned.weapon.id == BONK_WEAPON_MURDEROUS_INTENT && !target->IsAlive() && m_spreeBonus < BONK_MURDEROUS_CAP)

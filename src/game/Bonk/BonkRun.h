@@ -258,6 +258,8 @@ class BonkRun
         void PreviewSpawnLook();
         static ObjectGuid GetMissileLookSource();
         float GetDotGrowth(Unit const* victim, uint32 spellId) const;
+        void OnHunterDamage(uint32 root, Unit* victim);
+        float GetDrainedDotScale(Unit const* victim, uint32 spellId) const;
         static float GetAgonyPeakScale();
         static uint32 GetAgonyPeakTicks();
 
@@ -1799,6 +1801,8 @@ class BonkRun
             bool fanOfKnives = false;
             bool shadowyShuriken = false;
             bool poisonBomb = false;
+            bool blinkChill = false;
+            bool explosiveArrow = false;
             bool hammerOfWrath = false;
             bool lightsHammer = false;
             bool lightsHammerLaunch = false;
@@ -2204,6 +2208,7 @@ class BonkRun
         };
         std::map<ObjectGuid, PetState> m_petStates;
         std::vector<ObjectGuid> m_drainBeams;
+        void CurseFromShadowBolt(OwnedWeapon const& owned, Unit* victim);
         struct ImpVolley
         {
             ObjectGuid pet;
@@ -2266,6 +2271,7 @@ class BonkRun
         void ResolveCriticalStrikes();
         void OpenDeepWound(OwnedWeapon const& owned, Creature* mob);
         float GetDeepWoundsCritChance(Unit const* victim) const;
+        void TearBleed(OwnedWeapon const& owned, Creature* mob);
         void PruneDeepWounds();
         OwnedWeapon const* FindOwnedByBehavior(BonkWeaponBehavior behavior) const;
         bool WasStruckRecently() const;
@@ -2378,6 +2384,7 @@ class BonkRun
         void QueueMissiles(OwnedWeapon const& owned, SpellEntry const* spellInfo, Creature* target, float share);
         void FireMissileVolley(OwnedWeapon& owned, uint32 extraMissiles);
         void LandBlink(OwnedWeapon& owned);
+        void ChillBlinkLanding(OwnedWeapon const& blink);
         uint32 GetElementalFamily() const;
         std::vector<Creature*> PickGroupCenters(std::vector<Creature*> const& mobs, float radius, uint32 count) const;
         bool IsFrostSpellOnFrozen(SpellEntry const* spell, Unit const* victim) const;
@@ -2420,6 +2427,7 @@ class BonkRun
         void DischargeStatic(PendingCast const& cast);
         bool DealShamanHit(SpellEntry const* spellInfo, uint32 creditSpellId, Unit* target, float damage);
         void ChargeLightningShield();
+        void RestoreLightningCharges(uint32 charges);
         void ShowLightningShield(uint32 charges);
         void ZapWithLightningShield(OwnedWeapon const& shield, Creature* target);
         void ZapNearestWithLightningShield(OwnedWeapon const& shield);
@@ -2604,6 +2612,7 @@ class BonkRun
         OwnedWeapon const* FindOwnedSeal(uint32 rootId) const;
         bool StrikeAsPaladin(SpellEntry const* look, uint32 creditSpellId, Creature* target, float damage, float twice);
         void BurstSealOfCommand(Creature* target);
+        void ChargeCommandFromStorm(std::vector<Creature*> const& struck);
         void HealFromSealOfLight(bool crit);
         void HealPaladin(float percent, uint32 textSpellId);
         std::vector<Creature*> GetPaladinTargets(float range) const;
@@ -2895,6 +2904,7 @@ class BonkRun
         uint32 m_sliceAndDiceUntil = 0;
         uint32 m_borrowedTimeUntil = 0;
         uint32 m_flurryUntil = 0;
+        uint32 m_bloomHasteUntil = 0;
         uint32 m_shadowBoltHits = 0;
         uint32 m_bloodtalonsStacks = 0;
         std::vector<uint32> m_starlordUntil;
@@ -3038,7 +3048,7 @@ class BonkRun
         bool GetPetAbilityKeyword(OwnedWeapon const& owned, BonkPetAbility const& ability, PendingKeyword& keyword) const;
         void ConsumePendingKeywords();
         float ConsumeDotStacks(Creature* mob, BonkKeywordInfo const& info);
-        float GetDotDamageLeft(Creature const* mob, BonkKeyword keyword) const;
+        float GetDotDamageLeft(Creature const* mob, BonkKeyword keyword, uint32 withinMs = 0) const;
         struct DyingKeyword
         {
             uint32 stacks = 0;
@@ -3058,6 +3068,11 @@ class BonkRun
             std::map<uint32, float> leftDamage;
         };
         std::vector<PendingDotBurst> m_pendingDotBursts;
+        uint32 m_volleyHits = 0;
+        uint32 m_explosiveArrows = 0;
+        uint32 m_explosiveArrowReadyMs = 0;
+        void MarkFromPack(Creature* pet, Unit* victim);
+        void ExplodeArrow(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast);
         std::vector<uint32> m_dotBurstTimes;
         std::vector<uint32> m_dotBurstLookTimes;
         static bool BurstsOnDeath(uint8 keyword);

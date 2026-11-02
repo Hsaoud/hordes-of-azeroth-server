@@ -116,6 +116,7 @@ void BonkRun::OnClassSpellHit(uint32 creditSpellId, Unit* victim)
         return;
     QueueTalentSlowAndStun(*owned, victim);
     QueueTalentKeyword(*owned, victim);
+    CurseFromShadowBolt(*owned, victim);
 }
 
 bool BonkRun::GetWeaponKeyword(OwnedWeapon const& owned, PendingKeyword& keyword) const
@@ -265,7 +266,7 @@ float BonkRun::ConsumeDotStacks(Creature* mob, BonkKeywordInfo const& info)
     return damage;
 }
 
-float BonkRun::GetDotDamageLeft(Creature const* mob, BonkKeyword keyword) const
+float BonkRun::GetDotDamageLeft(Creature const* mob, BonkKeyword keyword, uint32 withinMs) const
 {
     BonkKeywordInfo const* info = sBonkMgr.GetKeyword(keyword);
     auto victim = m_dotStacks.find(mob->GetObjectGuid());
@@ -279,7 +280,10 @@ float BonkRun::GetDotDamageLeft(Creature const* mob, BonkKeyword keyword) const
     float damage = 0.0f;
     for (DotStack const& stack : stacks->second)
         if (TimeLeft(stack.untilMs, now))
-            damage += stack.points * float(stack.untilMs - now) / tickMs;
+        {
+            uint32 const leftMs = stack.untilMs - now;
+            damage += stack.points * float(withinMs ? std::min(leftMs, withinMs) : leftMs) / tickMs;
+        }
     return damage;
 }
 

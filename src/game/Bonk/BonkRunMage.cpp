@@ -14,6 +14,9 @@
 
 namespace
 {
+    uint32 const BONK_BLINK_CHILL             = 2;
+    int32 const BONK_BLINK_NOVA_RESET_MS      = 60000;
+    uint32 const BONK_WEAPON_FROST_NOVA       = 402;
     uint32 const BONK_BLINK_CHARGES           = 1;
     uint32 const BONK_SHIMMER_CHARGES         = 2;
     float const BONK_BLINK_RECHARGE_RATE      = 1.0f / 0.7f;
@@ -287,6 +290,16 @@ void BonkRun::OnDash()
     if (HasBehavior(BONK_BEHAVIOR_ARCANE_POWER))
         m_arcanePowerUntilMs = m_totalMs + BONK_ARCANE_POWER_MS;
 
+    if (blink)
+    {
+        PendingCast chill;
+        chill.weaponId = blink->weapon.id;
+        chill.spellId = blink->weapon.spellId;
+        chill.leftMs = BONK_BLINK_LAND_MS;
+        chill.blinkChill = true;
+        m_pendingCasts.push_back(chill);
+    }
+
     for (OwnedWeapon const& owned : m_weapons)
         if (owned.weapon.HasFlag(BONK_WEAPON_FLAG_ON_BLINK))
         {
@@ -297,6 +310,14 @@ void BonkRun::OnDash()
             landing.blinkLanding = true;
             m_pendingCasts.push_back(landing);
         }
+}
+
+void BonkRun::ChillBlinkLanding(OwnedWeapon const& blink)
+{
+    for (Creature* mob : GetMobsInRange(GetWeaponRadius(blink)))
+        if (mob->IsAlive())
+            ApplyWeaponKeyword(blink, mob, BONK_KEYWORD_CHILL, BONK_BLINK_CHILL);
+    ReduceTimer(BONK_WEAPON_FROST_NOVA, BONK_BLINK_NOVA_RESET_MS);
 }
 
 void BonkRun::LandBlink(OwnedWeapon& owned)
@@ -317,6 +338,8 @@ void BonkRun::ResolveMageCast(OwnedWeapon& owned, SpellEntry const* spellInfo, P
 {
     if (cast.blinkLanding)
         LandBlink(owned);
+    else if (cast.blinkChill)
+        ChillBlinkLanding(owned);
     else if (cast.pyroblastSplash)
         SplashPyroblast(owned, spellInfo, cast);
     else if (cast.iceShard)
@@ -611,7 +634,7 @@ bool BonkRun::GetMageCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind)
     }
     kind.pulseEveryMs = BONK_FIRE_CLOUD_PULSE_MS;
     kind.stacks = BONK_FIRE_CLOUD_STACKS;
-    kind.lookSpellId = BONK_SPELL_BURNING_GROUND_LOOK;
+    kind.lookSpellId = owned.weapon.behavior == BONK_BEHAVIOR_METEOR ? 0 : BONK_SPELL_BURNING_GROUND_LOOK;
     return true;
 }
 

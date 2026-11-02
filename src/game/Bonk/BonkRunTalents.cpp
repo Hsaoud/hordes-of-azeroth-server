@@ -556,6 +556,8 @@ float BonkRun::GetTalentHaste() const
         haste += m_mastery.Special(BONK_SPECIAL_BORROWED_TIME);
     if (m_flurryUntil > now)
         haste += m_mastery.Special(BONK_SPECIAL_FLURRY);
+    if (m_bloomHasteUntil > now)
+        haste += BONK_BLOOM_HASTE;
     haste += m_mastery.Special(BONK_SPECIAL_UNRELENTING_STORM) * CountTimedStacks(m_unrelentingUntil, now);
     haste += m_mastery.Special(BONK_SPECIAL_HARVESTER_OF_SOULS) * CountTimedStacks(m_harvestUntil, now);
     haste += m_mastery.Special(BONK_SPECIAL_STARLORD) * CountTimedStacks(m_starlordUntil, now);
@@ -704,6 +706,7 @@ void BonkRun::OnTalentDamage(Unit* victim, SpellEntry const* spell)
         return;
     uint32 const root = rootItr->second;
     OnSpecNodeDamage(root, crit, victim, spell);
+    OnHunterDamage(root, victim);
 
     if (crit && BonkMastery::GetSpec(root) == BONK_TREE_FIRE)
     {

@@ -73,6 +73,7 @@ namespace
     float const BONK_MAELSTROM_RANGE          = 30.0f;
     uint32 const BONK_OVERCHARGE_TARGETS      = 3;
     uint32 const BONK_MAELSTROM_CHAIN_TARGETS = 2;
+    uint32 const BONK_STORMSTRIKE_MAELSTROM_HITS = 2;
     uint32 const BONK_STATIC_SURGE_STACKS     = 5;
 
     uint32 const BONK_LIGHTNING_SHIELD_CHARGES = 3;
@@ -255,8 +256,12 @@ void BonkRun::OnShamanStrike(OwnedWeapon& owned, SpellEntry const*, Creature* ta
     if (weapon.behavior == BONK_BEHAVIOR_EARTH_SHOCK)
     {
         BonkKeywordInfo const* staticInfo = sBonkMgr.GetKeyword(BONK_KEYWORD_STATIC);
-        if (staticInfo && GetKeywordStacks(target, BONK_KEYWORD_STATIC) && QueueStaticDischarge(target, weapon.spellId))
+        uint32 const charge = GetKeywordStacks(target, BONK_KEYWORD_STATIC);
+        if (staticInfo && charge && QueueStaticDischarge(target, weapon.spellId))
+        {
             target->RemoveAurasByCasterSpell(staticInfo->spellId, m_player->GetObjectGuid());
+            RestoreLightningCharges(charge);
+        }
         if (weapon.id == BONK_WEAPON_EARTHQUAKE)
             StartKeywordCloud(owned, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
         return;
@@ -265,7 +270,8 @@ void BonkRun::OnShamanStrike(OwnedWeapon& owned, SpellEntry const*, Creature* ta
     if (weapon.behavior != BONK_BEHAVIOR_STORMSTRIKE)
         return;
 
-    CountMaelstromHit();
+    for (uint32 hit = 0; hit < BONK_STORMSTRIKE_MAELSTROM_HITS; ++hit)
+        CountMaelstromHit();
     SpendStaticShock(target);
     if (!target->IsAlive())
         return;
@@ -493,6 +499,14 @@ void BonkRun::ChargeLightningShield()
         return;
     if (m_lightningCharges < BONK_LIGHTNING_SHIELD_CHARGES)
         ++m_lightningCharges;
+    ShowLightningShield(m_lightningCharges);
+}
+
+void BonkRun::RestoreLightningCharges(uint32 charges)
+{
+    if (!m_player->IsAlive() || !HasBehavior(BONK_BEHAVIOR_LIGHTNING_SHIELD))
+        return;
+    m_lightningCharges = std::min(m_lightningCharges + charges, BONK_LIGHTNING_SHIELD_CHARGES);
     ShowLightningShield(m_lightningCharges);
 }
 
