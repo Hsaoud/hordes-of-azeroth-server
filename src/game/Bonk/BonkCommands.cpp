@@ -752,6 +752,25 @@ bool ChatHandler::HandleBonkGodCommand(char* args)
     return true;
 }
 
+bool ChatHandler::HandleBonkChestCommand(char*)
+{
+    Player* player = m_session->GetPlayer();
+    BonkRun* run = player->GetBonkPlayer()->GetRun();
+    if (!run || !run->IsActive())
+    {
+        SendSysMessage("Start a run first.");
+        return false;
+    }
+    Player* spot = GetSelectedPlayer();
+    if (!run->SpawnFreeChestAt(spot ? spot : player))
+    {
+        SendSysMessage("The chest couldn't be placed there.");
+        return false;
+    }
+    PSendSysMessage("Free chest placed next to %s.", (spot ? spot : player)->GetName());
+    return true;
+}
+
 bool ChatHandler::HandleBonkQuestsCommand(char*)
 {
     Player* player = m_session->GetPlayer();

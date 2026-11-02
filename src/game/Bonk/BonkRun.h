@@ -190,6 +190,7 @@ class BonkRun
         void OnHeroDamaged();
         bool IsPaused() const { return m_paused; }
         bool IsChoosing() const { return m_ownPaused; }
+        bool SpawnFreeChestAt(WorldObject const* spot) { return SpawnChest(true, spot->GetPositionX() + 1.5f, spot->GetPositionY(), spot->GetPositionZ()); }
         std::vector<ObjectGuid> const& GetMobGuids() const { return m_mobs; }
         std::vector<ObjectGuid> const& GetEnemyGuids() const { return m_groupEnemies.empty() ? m_mobs : m_groupEnemies; }
         void RefreshGroupEnemies();

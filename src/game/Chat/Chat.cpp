@@ -294,6 +294,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "portal",         SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkPortalCommand,          "", nullptr },
         { "coopsettings",   SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkCoopSettingsCommand,    "", nullptr },
         { "god",            SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkGodCommand,             "", nullptr },
+        { "chest",          SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkChestCommand,           "", nullptr },
         { "card",           SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkCardCommand,            "", nullptr },
         { "evolve",         SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkEvolveCommand,          "", nullptr },
         { "passive",        SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkPassiveCommand,         "", nullptr },
