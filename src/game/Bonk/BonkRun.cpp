@@ -3201,6 +3201,13 @@ bool BonkRun::FindMobPosition(float& x, float& y, float& z, float minDistance, f
 
 void BonkRun::UpdatePerch(uint32 diff)
 {
+    if (!m_player->IsAlive())
+    {
+        m_perched = false;
+        m_perchChecks = 0;
+        m_reachChecks = 0;
+        return;
+    }
     if (m_perched)
         UpdateFlyers(diff);
 
@@ -3274,7 +3281,7 @@ bool BonkRun::HasStrandedMobs() const
         if (!ai || ai->IsFlyer() || !ai->CanBePulled() || mob->IsMoving() ||
             mob->HasUnitState(UNIT_STATE_STUNNED | UNIT_STATE_ROOT | UNIT_STATE_CONFUSED | UNIT_STATE_FLEEING))
             continue;
-        if (mob->GetMotionMaster()->GetCurrentMovementGeneratorType() != CHASE_MOTION_TYPE)
+        if (mob->GetMotionMaster()->GetCurrentMovementGeneratorType() != CHASE_MOTION_TYPE || mob->GetVictim() != m_player)
             continue;
         ++stranded;
     }
