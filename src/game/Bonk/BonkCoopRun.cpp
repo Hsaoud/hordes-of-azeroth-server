@@ -70,7 +70,7 @@ namespace
     uint32 const REJOIN_WAIT_MS = 120000;
     uint32 const CHOICE_WAIT_MS = 20000;
     uint32 const WAIT_SEND_MS = 1000;
-    uint32 const REVIVE_MS = 3000;
+    uint32 const REVIVE_MS = 5000;
     uint32 const DOWNED_SEND_MS = 250;
     float const REVIVE_RADIUS = 5.0f;
     float const REVIVE_HEALTH = 0.3f;
