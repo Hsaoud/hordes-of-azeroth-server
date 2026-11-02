@@ -868,6 +868,8 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_COOP_NEXT_STAGE_NOT_READY,               "{1} isn't ready. The party stays at the portal." },
         { BONK_STRING_COOP_ANOTHER_CHANCE,                     "The new revive gives fallen players another chance. Stand in their ring to bring them back." },
         { BONK_STRING_RULE_DOT_BURST,                          "When a burning, bleeding or poisoned enemy dies, the damage its stacks had left bursts onto up to 4 enemies within 8 yards, half on each." },
+        { BONK_STRING_PASSIVE_LABEL_BURNING_DAMAGE,            "Burning damage" },
+        { BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE,              "Bleed damage" },
     };
     return texts;
 }

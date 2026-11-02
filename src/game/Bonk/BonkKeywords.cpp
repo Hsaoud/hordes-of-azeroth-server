@@ -181,7 +181,7 @@ void BonkRun::OnKillingBlow(Unit* victim)
             fullMs = std::max(fullMs, stack.fullMs);
             ++bySpell[stack.spellId];
             if (BurstsOnDeath(itr.first) && TimeLeft(stack.untilMs, now))
-                dying.leftDamage[stack.spellId] += stack.points * float(stack.untilMs - now) / tickMs;
+                dying.leftDamage[stack.spellId] += stack.points / BONK_DOT_POINT_SCALE * float(stack.untilMs - now) / tickMs;
         }
         dying.fullMs = fullMs;
         dying.stacks = uint32(stacks->second.size());
@@ -257,7 +257,7 @@ float BonkRun::ConsumeDotStacks(Creature* mob, BonkKeywordInfo const& info)
     float damage = 0.0f;
     for (DotStack const& stack : stacks->second)
         if (TimeLeft(stack.untilMs, now))
-            damage += stack.points * float(stack.untilMs - now) / tickMs;
+            damage += stack.points / BONK_DOT_POINT_SCALE * float(stack.untilMs - now) / tickMs;
 
     victim->second.erase(stacks);
     if (victim->second.empty())
@@ -282,7 +282,7 @@ float BonkRun::GetDotDamageLeft(Creature const* mob, BonkKeyword keyword, uint32
         if (TimeLeft(stack.untilMs, now))
         {
             uint32 const leftMs = stack.untilMs - now;
-            damage += stack.points * float(withinMs ? std::min(leftMs, withinMs) : leftMs) / tickMs;
+            damage += stack.points / BONK_DOT_POINT_SCALE * float(withinMs ? std::min(leftMs, withinMs) : leftMs) / tickMs;
         }
     return damage;
 }
@@ -786,18 +786,39 @@ int32 BonkRun::GetKeywordPoints(BonkKeywordInfo const& info) const
         case BONK_KEYWORD_AGONY:
         case BONK_KEYWORD_MOONFIRE:
         {
-            float const scale = ((info.id == BONK_KEYWORD_POISON ? GetPoisonDamageScale() : 1.0f) + GetKeywordTalentDamage(info.id) / 100.0f) *
-                GetDotCardScale();
-            return std::max(1, int32(GetMobHealth(GetMobLevel()) * info.valuePerStack * info.tickMs / IN_MILLISECONDS * scale));
+            float const scale = (GetDotPassiveScale(BonkKeyword(info.id)) + GetKeywordTalentDamage(info.id) / 100.0f) * GetDotCardScale();
+            return std::max(1, int32(GetMobHealth(GetMobLevel()) * info.valuePerStack * info.tickMs / IN_MILLISECONDS * scale * BONK_DOT_POINT_SCALE));
         }
         default:
             return 0;
     }
 }
 
+float BonkRun::GetDotTickDamage(BonkKeywordInfo const& info) const
+{
+    return GetKeywordPoints(info) / BONK_DOT_POINT_SCALE;
+}
+
+float BonkRun::GetDotPointShare(uint32 spellId)
+{
+    BonkKeywordInfo const* info = sBonkMgr.GetKeywordBySpell(spellId);
+    return info && info->IsDamageOverTime() ? 1.0f / BONK_DOT_POINT_SCALE : 1.0f;
+}
+
 float BonkRun::GetPoisonDamageScale() const
 {
     return std::max(0.0f, 1.0f + GetPassiveTotal(BONK_PASSIVE_POISON_DAMAGE) / 100.0f);
+}
+
+float BonkRun::GetDotPassiveScale(BonkKeyword keyword) const
+{
+    switch (keyword)
+    {
+        case BONK_KEYWORD_POISON:  return GetPoisonDamageScale();
+        case BONK_KEYWORD_BURNING: return std::max(0.0f, 1.0f + GetPassiveTotal(BONK_PASSIVE_BURNING_DAMAGE) / 100.0f);
+        case BONK_KEYWORD_BLEED:   return std::max(0.0f, 1.0f + GetPassiveTotal(BONK_PASSIVE_BLEED_DAMAGE) / 100.0f);
+        default:                   return 1.0f;
+    }
 }
 
 void BonkRun::SpreadKeywords(Creature const* dead)

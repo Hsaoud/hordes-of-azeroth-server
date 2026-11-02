@@ -850,7 +850,7 @@ void BonkRun::Exsanguinate(OwnedWeapon& owned, SpellEntry const* spellInfo, Crea
     BonkKeywordInfo const* poison = sBonkMgr.GetKeyword(BONK_KEYWORD_POISON);
     if (!poison || !poison->tickMs)
         return;
-    float const perStack = float(GetKeywordPoints(*poison)) * BONK_EXSANGUINATE_SECONDS * IN_MILLISECONDS / poison->tickMs;
+    float const perStack = GetDotTickDamage(*poison) * BONK_EXSANGUINATE_SECONDS * IN_MILLISECONDS / poison->tickMs;
     std::vector<Creature*> mobs = GetMobsInRange(GetWeaponRadius(owned), target);
     mobs.push_back(target);
     for (Creature* mob : mobs)

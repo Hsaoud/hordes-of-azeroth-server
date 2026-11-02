@@ -833,7 +833,7 @@ void BonkRun::SpikeDecay(OwnedWeapon const& owned, Creature* target)
     if (!info || !holder || !shadow || !stacks || !info->tickMs)
         return;
     float const ticksLeft = float(std::max(0, holder->GetAuraDuration())) / float(info->tickMs);
-    float const damage = float(GetKeywordPoints(*info)) * stacks * ticksLeft * (1.0f + owned.damageBonus / 100.0f);
+    float const damage = GetDotTickDamage(*info) * stacks * ticksLeft * (1.0f + owned.damageBonus / 100.0f);
     target->RemoveAurasByCasterSpell(BONK_SPELL_DECAY_CARRIER, m_player->GetObjectGuid());
     DealShamanHit(shadow, owned.weapon.spellId, target, damage);
 }

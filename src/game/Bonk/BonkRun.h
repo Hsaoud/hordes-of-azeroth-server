@@ -260,6 +260,7 @@ class BonkRun
         float GetDotGrowth(Unit const* victim, uint32 spellId) const;
         void OnHunterDamage(uint32 root, Unit* victim);
         float GetDrainedDotScale(Unit const* victim, uint32 spellId) const;
+        static float GetDotPointShare(uint32 spellId);
         static float GetAgonyPeakScale();
         static uint32 GetAgonyPeakTicks();
 
@@ -2138,6 +2139,7 @@ class BonkRun
         Creature* SummonPet(OwnedWeapon const& owned, uint32 entry, float x, float y, float z, float orientation);
         Creature* SummonGlyphHelper(uint32 entry, float x, float y, float z, float orientation);
         float GetPoisonDamageScale() const;
+        float GetDotPassiveScale(BonkKeyword keyword) const;
 
         bool m_keywordlessHits = false;
         uint32 m_meterPartSpell = 0;
@@ -3031,6 +3033,7 @@ class BonkRun
         static float GetSlowedStrength(float damageBonus, float slowedUpgrade);
         SpellAuraHolder* AddKeywordAura(Creature* mob, BonkKeywordInfo const& info, uint32 stacks, uint32 durationMs, int32 points = 0);
         int32 GetKeywordPoints(BonkKeywordInfo const& info) const;
+        float GetDotTickDamage(BonkKeywordInfo const& info) const;
         struct DotStack
         {
             uint32 untilMs = 0;

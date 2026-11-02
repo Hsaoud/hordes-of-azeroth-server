@@ -253,6 +253,8 @@ namespace
             case BONK_PASSIVE_SHIELD:        return BONK_STRING_STRENGTH_SHIELD_LABEL;
             case BONK_PASSIVE_LUCK:          return BONK_STRING_STAT_LUCK;
             case BONK_PASSIVE_POISON_DAMAGE: return BONK_STRING_PASSIVE_LABEL_POISON_DAMAGE;
+            case BONK_PASSIVE_BURNING_DAMAGE: return BONK_STRING_PASSIVE_LABEL_BURNING_DAMAGE;
+            case BONK_PASSIVE_BLEED_DAMAGE: return BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE;
             default:                         return BonkString(0);
         }
     }
@@ -1946,6 +1948,17 @@ bool BonkMgr::HasPoisonSpell(uint32 classMask) const
     {
         BonkWeapon const& weapon = itr.second;
         return (!weapon.classMask || (weapon.classMask & classMask)) && weapon.AppliesPoison();
+    });
+}
+
+bool BonkMgr::HasKeywordSpell(uint32 classMask, BonkKeyword keyword) const
+{
+    if (keyword == BONK_KEYWORD_POISON)
+        return HasPoisonSpell(classMask);
+    return std::any_of(m_weapons.begin(), m_weapons.end(), [classMask, keyword](std::pair<uint32 const, BonkWeapon> const& itr)
+    {
+        BonkWeapon const& weapon = itr.second;
+        return (!weapon.classMask || (weapon.classMask & classMask)) && weapon.applies == keyword;
     });
 }
 

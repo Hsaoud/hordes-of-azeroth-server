@@ -12721,7 +12721,13 @@ bool BonkRun::GivePassive(uint32 passiveId, std::string& error)
 
 bool BonkRun::IsPassiveAllowed(BonkPassive const& passive) const
 {
-    return passive.effect != BONK_PASSIVE_POISON_DAMAGE || sBonkMgr.HasPoisonSpell(m_player->GetClassMask());
+    switch (passive.effect)
+    {
+        case BONK_PASSIVE_POISON_DAMAGE:  return sBonkMgr.HasKeywordSpell(m_player->GetClassMask(), BONK_KEYWORD_POISON);
+        case BONK_PASSIVE_BURNING_DAMAGE: return sBonkMgr.HasKeywordSpell(m_player->GetClassMask(), BONK_KEYWORD_BURNING);
+        case BONK_PASSIVE_BLEED_DAMAGE:   return sBonkMgr.HasKeywordSpell(m_player->GetClassMask(), BONK_KEYWORD_BLEED);
+        default:                          return true;
+    }
 }
 
 size_t BonkRun::GetSpellSlots() const
