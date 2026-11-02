@@ -452,6 +452,10 @@ namespace
 
     bool RowRankAllowed(std::string const& table, std::vector<std::string> const& values)
     {
+        if (table != "bonk_account_upgrade" && table != "bonk_account_talent")
+            return true;
+        if (values.size() < 2)
+            return false;
         uint32 const id = uint32(std::strtoul(values[0].c_str(), nullptr, 10));
         uint32 const rank = uint32(std::strtoul(values[1].c_str(), nullptr, 10));
         if (table == "bonk_account_upgrade")
