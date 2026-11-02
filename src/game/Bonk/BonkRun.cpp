@@ -13943,6 +13943,9 @@ void BonkRun::Abort()
     if (m_state == STATE_FINISHED)
         return;
 
+    if (!IsCoopGuest() && BonkCoop::InGroupRun(m_player))
+        BonkCoop::OnHostFinished(m_player);
+
     if (m_state == STATE_RUNNING || m_state == STATE_PORTAL || (m_state == STATE_ENTERING && m_stage > 1))
     {
         m_player->GetBonkPlayer()->RecordRun(0, m_totalMs / IN_MILLISECONDS, m_kills, m_goldEarned);

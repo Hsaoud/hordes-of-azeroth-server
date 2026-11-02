@@ -213,7 +213,7 @@ void BonkCoop::JoinHostGroup(Player* guest)
     {
         std::vector<ObjectGuid> away;
         for (Group::MemberSlot const& slot : group->GetMemberSlots())
-            if (slot.guid != host->GetObjectGuid() && !sObjectMgr.GetPlayer(slot.guid))
+            if (slot.guid != host->GetObjectGuid() && !ObjectAccessor::FindPlayerNotInWorld(slot.guid))
                 away.push_back(slot.guid);
         for (ObjectGuid const& guid : away)
             if (Group* current = host->GetGroup())

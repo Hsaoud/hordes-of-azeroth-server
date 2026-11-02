@@ -31,6 +31,7 @@ namespace
 {
     char const* const INBOX_FILE = "coop/ledger.in";
     char const* const INBOX_ANSWER_FILE = "coop/ledger.answer";
+    char const* const ONLINE_GUESTS_FILE = "coop/guests-online.txt";
     size_t const MAX_GAME_LENGTH = 64;
     uint32 const GUEST_SYNC_MS = 5000;
     uint32 const HOME_MAIL_SENDER = 900009;
@@ -139,9 +140,25 @@ namespace
     std::mutex s_outboxLock;
     std::map<std::string, uint32> s_lastSeq;
 
+    std::map<std::string, std::string> s_unwritten;
+
     std::string OutboxPath(std::string const& username)
     {
         return "coop/ledger-" + username + ".out";
+    }
+
+    void FlushOutbox(std::string const& username)
+    {
+        auto found = s_unwritten.find(username);
+        if (found == s_unwritten.end())
+            return;
+        std::ofstream out(OutboxPath(username), std::ios::binary | std::ios::app);
+        if (!out)
+            return;
+        out << found->second;
+        out.flush();
+        if (out)
+            s_unwritten.erase(found);
     }
 
     std::string AnswersPath(std::string const& username)
@@ -926,6 +943,27 @@ namespace
         return answers;
     }
 
+    std::string LogoutRequestPath(std::string const& username)
+    {
+        return "coop/logout-" + username + ".req";
+    }
+
+    void LogOutIfAsked(Player* guest, std::string const& username)
+    {
+        std::string const path = LogoutRequestPath(username);
+        std::ifstream probe(path, std::ios::binary);
+        if (!probe.good())
+            return;
+        probe.close();
+        std::remove(path.c_str());
+        WorldSession* session = guest->GetSession();
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s left the party, logging out now", guest->GetName());
+        if (!session->IsConnected())
+            session->KickDisconnectedFromWorld();
+        else if (!session->IsLogingOut())
+            session->LogoutRequest(time(nullptr) - 20);
+    }
+
     void ReadAnswers(std::string const& username)
     {
         std::string const path = AnswersPath(username);
@@ -956,8 +994,8 @@ void BonkCoop::Record(Player const* guest, std::string const& entry)
     auto found = s_lastSeq.find(username);
     uint32 const seq = (found == s_lastSeq.end() ? LastSeqInFile(path) : found->second) + 1;
     s_lastSeq[username] = seq;
-    std::ofstream out(path, std::ios::binary | std::ios::app);
-    out << seq << '\t' << entry << '\n';
+    s_unwritten[username] += std::to_string(seq) + "\t" + entry + "\n";
+    FlushOutbox(username);
 }
 
 void BonkCoop::SyncGuest(Player* guest)
@@ -1034,13 +1072,28 @@ void BonkCoop::UpdateLedger()
     bool const syncGuests = s_guestTimer >= GUEST_SYNC_MS;
     if (syncGuests)
         s_guestTimer = 0;
+    std::string online;
+    {
+        std::lock_guard<std::mutex> guard(s_outboxLock);
+        std::vector<std::string> waiting;
+        for (auto const& unwritten : s_unwritten)
+            waiting.push_back(unwritten.first);
+        for (std::string const& username : waiting)
+            FlushOutbox(username);
+        for (auto const& unwritten : s_unwritten)
+            online += unwritten.first + "\n";
+    }
     for (auto const& entry : sObjectAccessor.GetPlayers())
     {
         Player* player = entry.second;
         if (!player || !IsGuestAccount(player))
             continue;
+        std::string const username = player->GetSession()->GetUsername();
+        online += username + "\n";
         if (syncGuests && player->IsInWorld())
             SyncGuest(player);
-        ReadAnswers(player->GetSession()->GetUsername());
+        ReadAnswers(username);
+        LogOutIfAsked(player, username);
     }
+    WriteWhole(ONLINE_GUESTS_FILE, online);
 }
