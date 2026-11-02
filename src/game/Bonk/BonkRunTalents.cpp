@@ -556,6 +556,8 @@ float BonkRun::GetTalentHaste() const
         haste += m_mastery.Special(BONK_SPECIAL_BORROWED_TIME);
     if (m_flurryUntil > now)
         haste += m_mastery.Special(BONK_SPECIAL_FLURRY);
+    if (m_bloomHasteUntil > now)
+        haste += BONK_BLOOM_HASTE;
     haste += m_mastery.Special(BONK_SPECIAL_UNRELENTING_STORM) * CountTimedStacks(m_unrelentingUntil, now);
     haste += m_mastery.Special(BONK_SPECIAL_HARVESTER_OF_SOULS) * CountTimedStacks(m_harvestUntil, now);
     haste += m_mastery.Special(BONK_SPECIAL_STARLORD) * CountTimedStacks(m_starlordUntil, now);
@@ -704,6 +706,7 @@ void BonkRun::OnTalentDamage(Unit* victim, SpellEntry const* spell)
         return;
     uint32 const root = rootItr->second;
     OnSpecNodeDamage(root, crit, victim, spell);
+    OnHunterDamage(root, victim);
 
     if (crit && BonkMastery::GetSpec(root) == BONK_TREE_FIRE)
     {
@@ -754,7 +757,7 @@ void BonkRun::OnTalentDamage(Unit* victim, SpellEntry const* spell)
 
     if (crit && ((root == BONK_WEAPON_JUDGEMENT && m_mastery.Special(BONK_SPECIAL_RIGHTEOUS_VERDICT) > 0.0f) ||
         (root == BONK_WEAPON_DIVINE_STORM && m_mastery.Special(BONK_SPECIAL_FINAL_RECKONING) > 0.0f)))
-        ReduceTimer(BONK_WEAPON_HAMMER_OF_WRATH, BONK_INSTANT_RECHARGE_MS);
+        ReduceTimer(BONK_WEAPON_AVENGERS_SHIELD_PALADIN, BONK_INSTANT_RECHARGE_MS);
     if (root == BONK_WEAPON_SEAL_COMMAND && roll_chance_f(m_mastery.Special(BONK_SPECIAL_EMPYREAN_POWER)))
         ReduceTimer(BONK_WEAPON_DIVINE_STORM, BONK_INSTANT_RECHARGE_MS);
 }

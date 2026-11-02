@@ -260,6 +260,9 @@ class BonkRun
         void PreviewSpawnLook();
         static ObjectGuid GetMissileLookSource();
         float GetDotGrowth(Unit const* victim, uint32 spellId) const;
+        void OnHunterDamage(uint32 root, Unit* victim);
+        float GetDrainedDotScale(Unit const* victim, uint32 spellId) const;
+        static float GetDotPointShare(uint32 spellId);
         static float GetAgonyPeakScale();
         static uint32 GetAgonyPeakTicks();
 
@@ -897,8 +900,10 @@ class BonkRun
         bool IsReckless() const;
         void DropTraps(OwnedWeapon& owned, bool armed = false);
         void UpdateTraps(uint32 diff);
-        void SpringTrap(OwnedWeapon& owned, float x, float y, float z);
+        void SpringTrap(OwnedWeapon& owned, float x, float y, float z, float share = 1.0f, bool echo = false);
         void DespawnTraps();
+        void ClearPendingTrapLooks();
+        std::vector<uint32> m_trapLookTimes;
         void ThrowTrap(OwnedWeapon& owned, float x, float y, float z);
         void ShowTrapSprung(OwnedWeapon const& owned, uint32 prop, float x, float y, float z);
         uint32 PlaceTrapProp(uint32 display, float x, float y, float z);
@@ -1800,6 +1805,10 @@ class BonkRun
             bool killingSpree = false;
             bool fanOfKnives = false;
             bool shadowyShuriken = false;
+            bool poisonBomb = false;
+            bool blinkChill = false;
+            bool explosiveArrow = false;
+            bool volatileEcho = false;
             bool hammerOfWrath = false;
             bool lightsHammer = false;
             bool lightsHammerLaunch = false;
@@ -1935,6 +1944,21 @@ class BonkRun
             uint32 untilMs = 0;
         };
         std::vector<Snake> m_snakes;
+        struct Viper
+        {
+            ObjectGuid guid;
+            ObjectGuid target;
+            uint32 weaponId = 0;
+            uint32 untilMs = 0;
+            uint32 moveMs = 0;
+        };
+        std::vector<Viper> m_vipers;
+        void ReleaseVipers(OwnedWeapon const& owned, float x, float y, float z);
+        void UpdateVipers();
+        void BurstViper(OwnedWeapon const& owned, Creature* viper, Creature* bitten);
+        void DespawnVipers();
+        void OnHunterCloudPulse(OwnedWeapon const& owned, KeywordCloud const& cloud);
+        bool GetHunterCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind) const;
         void ReleaseSnakes(OwnedWeapon const& owned, float x, float y, float z);
         void DressSnakes();
         void UpdateSnakes();
@@ -2117,6 +2141,7 @@ class BonkRun
         Creature* SummonPet(OwnedWeapon const& owned, uint32 entry, float x, float y, float z, float orientation);
         Creature* SummonGlyphHelper(uint32 entry, float x, float y, float z, float orientation);
         float GetPoisonDamageScale() const;
+        float GetDotPassiveScale(BonkKeyword keyword) const;
 
         bool m_keywordlessHits = false;
         uint32 m_meterPartSpell = 0;
@@ -2205,6 +2230,7 @@ class BonkRun
         };
         std::map<ObjectGuid, PetState> m_petStates;
         std::vector<ObjectGuid> m_drainBeams;
+        void CurseFromShadowBolt(OwnedWeapon const& owned, Unit* victim);
         struct ImpVolley
         {
             ObjectGuid pet;
@@ -2266,6 +2292,8 @@ class BonkRun
         void EnrageOnKill(uint32 killingSpell);
         void ResolveCriticalStrikes();
         void OpenDeepWound(OwnedWeapon const& owned, Creature* mob);
+        float GetDeepWoundsCritChance(Unit const* victim) const;
+        void TearBleed(OwnedWeapon const& owned, Creature* mob);
         void PruneDeepWounds();
         OwnedWeapon const* FindOwnedByBehavior(BonkWeaponBehavior behavior) const;
         bool WasStruckRecently() const;
@@ -2378,6 +2406,7 @@ class BonkRun
         void QueueMissiles(OwnedWeapon const& owned, SpellEntry const* spellInfo, Creature* target, float share);
         void FireMissileVolley(OwnedWeapon& owned, uint32 extraMissiles);
         void LandBlink(OwnedWeapon& owned);
+        void ChillBlinkLanding(OwnedWeapon const& blink);
         uint32 GetElementalFamily() const;
         std::vector<Creature*> PickGroupCenters(std::vector<Creature*> const& mobs, float radius, uint32 count) const;
         bool IsFrostSpellOnFrozen(SpellEntry const* spell, Unit const* victim) const;
@@ -2420,6 +2449,7 @@ class BonkRun
         void DischargeStatic(PendingCast const& cast);
         bool DealShamanHit(SpellEntry const* spellInfo, uint32 creditSpellId, Unit* target, float damage);
         void ChargeLightningShield();
+        void RestoreLightningCharges(uint32 charges);
         void ShowLightningShield(uint32 charges);
         void ZapWithLightningShield(OwnedWeapon const& shield, Creature* target);
         void ZapNearestWithLightningShield(OwnedWeapon const& shield);
@@ -2581,6 +2611,9 @@ class BonkRun
         void OnRogueCloudPulse(OwnedWeapon const& owned, KeywordCloud const& cloud);
         void SortMostPoisonFirst(std::vector<Creature*>& mobs) const;
         void CastEnvenom(OwnedWeapon& owned, SpellEntry const* spellInfo);
+        void ThrowPoisonBomb(OwnedWeapon& owned);
+        void EviscerateOnward(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* slain, std::vector<Creature*> taken);
+        void LandPoisonBomb(OwnedWeapon& owned, PendingCast const& cast);
         void SplashVenom(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target);
         void Exsanguinate(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target);
         void TossShurikens(OwnedWeapon& owned, SpellEntry const* spellInfo);
@@ -2601,13 +2634,15 @@ class BonkRun
         OwnedWeapon const* FindOwnedSeal(uint32 rootId) const;
         bool StrikeAsPaladin(SpellEntry const* look, uint32 creditSpellId, Creature* target, float damage, float twice);
         void BurstSealOfCommand(Creature* target);
+        void ChargeCommandFromStorm(std::vector<Creature*> const& struck);
         void HealFromSealOfLight(bool crit);
         void HealPaladin(float percent, uint32 textSpellId);
         std::vector<Creature*> GetPaladinTargets(float range) const;
         void StrikeAsCrusader(OwnedWeapon& owned, SpellEntry const* spellInfo);
         void LandCrusaderStrike(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast);
         void PassJudgement(OwnedWeapon& owned, SpellEntry const* spellInfo);
-        void ThrowHammerOfWrath(OwnedWeapon& owned, SpellEntry const* spellInfo);
+        void ThrowAvengersShield(OwnedWeapon& owned, SpellEntry const* spellInfo);
+        void StrikeWithAvengersShield(OwnedWeapon const& owned, Creature* target);
         void LandHammerOfWrath(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast);
         void DropLightsHammers(OwnedWeapon& owned, SpellEntry const* spellInfo);
         void LaunchLightsHammer(OwnedWeapon const& owned, PendingCast const& cast);
@@ -2635,7 +2670,6 @@ class BonkRun
         void ShowJudgedDebuff(Creature* target);
         float GetVengeanceScale(Creature* target);
         void DropExplodingHammer(OwnedWeapon const& owned);
-        void BurstSanctifiedWrath(OwnedWeapon const& owned, SpellEntry const* spellInfo, Creature* target, float damage);
         void TryPaladinLastStands();
         uint32 ApplyPaladinDamageTaken(uint32 damage) const;
         float GetSealOfLightHeal(float damageBonus) const;
@@ -2892,6 +2926,7 @@ class BonkRun
         uint32 m_sliceAndDiceUntil = 0;
         uint32 m_borrowedTimeUntil = 0;
         uint32 m_flurryUntil = 0;
+        uint32 m_bloomHasteUntil = 0;
         uint32 m_shadowBoltHits = 0;
         uint32 m_bloodtalonsStacks = 0;
         std::vector<uint32> m_starlordUntil;
@@ -3000,6 +3035,7 @@ class BonkRun
         static float GetSlowedStrength(float damageBonus, float slowedUpgrade);
         SpellAuraHolder* AddKeywordAura(Creature* mob, BonkKeywordInfo const& info, uint32 stacks, uint32 durationMs, int32 points = 0);
         int32 GetKeywordPoints(BonkKeywordInfo const& info) const;
+        float GetDotTickDamage(BonkKeywordInfo const& info) const;
         struct DotStack
         {
             uint32 untilMs = 0;
@@ -3035,6 +3071,7 @@ class BonkRun
         bool GetPetAbilityKeyword(OwnedWeapon const& owned, BonkPetAbility const& ability, PendingKeyword& keyword) const;
         void ConsumePendingKeywords();
         float ConsumeDotStacks(Creature* mob, BonkKeywordInfo const& info);
+        float GetDotDamageLeft(Creature const* mob, BonkKeyword keyword, uint32 withinMs = 0) const;
         struct DyingKeyword
         {
             uint32 stacks = 0;
@@ -3042,8 +3079,29 @@ class BonkRun
             uint32 spellId = 0;
             uint32 leftMs = 0;
             uint32 fullMs = 0;
+            std::map<uint32, float> leftDamage;
         };
         std::map<ObjectGuid, std::map<uint8, DyingKeyword>> m_dyingKeywords;
+        struct PendingDotBurst
+        {
+            ObjectGuid dead;
+            float x = 0.0f;
+            float y = 0.0f;
+            uint8 keyword = 0;
+            std::map<uint32, float> leftDamage;
+        };
+        std::vector<PendingDotBurst> m_pendingDotBursts;
+        uint32 m_volleyHits = 0;
+        uint32 m_explosiveArrows = 0;
+        uint32 m_explosiveArrowReadyMs = 0;
+        void MarkFromPack(Creature* pet, Unit* victim);
+        void ExplodeArrow(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast);
+        std::vector<uint32> m_dotBurstTimes;
+        std::vector<uint32> m_dotBurstLookTimes;
+        static bool BurstsOnDeath(uint8 keyword);
+        void QueueDotBurst(Creature const* dead, uint8 keyword, DyingKeyword const& dying);
+        void ReleaseDotBursts();
+        void ShowDotBurst(Creature* dead, uint8 keyword);
         std::map<ObjectGuid, std::map<uint8, std::vector<DotStack>>> m_dotStacks;
         uint32 m_dotTimer = 0;
         std::set<std::pair<ObjectGuid, uint8>> m_keywordTimers;

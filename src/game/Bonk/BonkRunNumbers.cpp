@@ -63,6 +63,11 @@ namespace
         return std::to_string(uint32(std::max(1.0f, std::round(value))));
     }
 
+    std::string ShownTick(float value)
+    {
+        return value < 10.0f ? FormatNumber(value, "%.1f") : ShownNumber(value);
+    }
+
     std::string ShownSeconds(float ms, LocaleConstant locale)
     {
         float const seconds = ms / 1000.0f;
@@ -383,7 +388,7 @@ float BonkRun::GetShownTick(OwnedWeapon const& owned, float extraPower) const
         return 0.0f;
     float const scale = 1.0f + (owned.damageBonus + GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_PET_DAMAGE)) / 100.0f;
     float const strength = IsStackStrengthSpell(owned.weapon) ? std::max(1.0f, owned.weapon.damageFraction) : 1.0f;
-    float const points = std::max(1.0f, std::round(GetKeywordPoints(*info) * scale * strength));
+    float const points = GetDotTickDamage(*info) * scale * strength;
     return points * GetDamageMultiplier(sSpellMgr.GetSpellEntry(info->spellId), nullptr, 1.0f, extraPower);
 }
 
@@ -392,7 +397,7 @@ std::string BonkRun::DescribeShownRange(OwnedWeapon const& owned, float extraPow
     if (float const hit = GetShownHit(owned, extraPower))
         return DescribeRange(hit, GetShownSpread(owned), GetLocale());
     if (float const tick = GetShownTick(owned, extraPower))
-        return GetString(BONK_STRING_TICK_PER_STACK, { std::to_string(uint32(std::max(1.0f, std::round(tick)))) });
+        return GetString(BONK_STRING_TICK_PER_STACK, { ShownTick(tick) });
     return "";
 }
 
@@ -410,7 +415,7 @@ std::string BonkRun::DescribeShownDamage(OwnedWeapon const& owned) const
     if (float const tick = GetShownTick(owned, 0.0f))
         if (BonkKeywordInfo const* info = sBonkMgr.GetKeyword(owned.weapon.applies))
         {
-            std::string const ticks = GetString(BONK_STRING_SCHOOL_DAMAGE_TICK_PER_STACK, { std::to_string(uint32(std::max(1.0f, std::round(tick)))),
+            std::string const ticks = GetString(BONK_STRING_SCHOOL_DAMAGE_TICK_PER_STACK, { ShownTick(tick),
                 GetSchoolName(sSpellMgr.GetSpellEntry(info->spellId), GetLocale()), Localize(BONK_FIELD_KEYWORD_NAME, uint32(info->id), info->name) });
             text = text.empty() ? ticks : GetString(BONK_STRING_LIST_ITEM, { text, ticks });
         }
@@ -535,8 +540,8 @@ void BonkRun::AddDamageStats(OwnedWeapon const& owned, OwnedWeapon const& next, 
     float const tick = GetShownTick(next, 0.0f);
     if (tick <= 0.0f)
         return;
-    std::string const tickBefore = ShownNumber(GetShownTick(owned, 0.0f));
-    std::string const tickAfter = ShownNumber(tick);
+    std::string const tickBefore = ShownTick(GetShownTick(owned, 0.0f));
+    std::string const tickAfter = ShownTick(tick);
     if (tickBefore == tickAfter)
         return;
     if (BonkKeywordInfo const* info = sBonkMgr.GetKeyword(next.weapon.applies))

@@ -377,9 +377,12 @@ enum BonkWeaponFlags : uint32
     BONK_WEAPON_FLAG_AOE              = 0x4000000,
     BONK_WEAPON_FLAG_TOTEM            = 0x8000000,
     BONK_WEAPON_FLAG_LONG_JUMPS       = 0x10000000,
+    BONK_WEAPON_FLAG_VIPERS           = 0x20000000,
+    BONK_WEAPON_FLAG_VOLATILE         = 0x40000000,
 };
 
 float const BONK_CLEAVE_RADIUS    = 6.0f;
+float const BONK_DOT_POINT_SCALE  = 100.0f;
 float const BONK_SPREAD_RADIUS    = 10.0f;
 float const BONK_LONG_JUMP_RADIUS = 20.0f;
 
@@ -579,7 +582,7 @@ enum BonkWeaponBehavior : uint8
     BONK_BEHAVIOR_JUSTICE_HAMMER = 112,
     BONK_BEHAVIOR_DIVINE_SHIELD = 113,
     BONK_BEHAVIOR_LAY_ON_HANDS  = 114,
-    BONK_BEHAVIOR_HAMMER_OF_WRATH = 115,
+    BONK_BEHAVIOR_PALADIN_SHIELD = 115,
     BONK_BEHAVIOR_LIGHTS_HAMMER = 116,
     BONK_BEHAVIOR_CORRUPTION    = 117,
     BONK_BEHAVIOR_CURSE_OF_AGONY = 118,
@@ -860,6 +863,8 @@ enum BonkPassiveEffect : uint8
     BONK_PASSIVE_SHIELD      = 17,
     BONK_PASSIVE_LUCK        = 18,
     BONK_PASSIVE_POISON_DAMAGE = 19,
+    BONK_PASSIVE_BURNING_DAMAGE = 20,
+    BONK_PASSIVE_BLEED_DAMAGE = 21,
     MAX_BONK_PASSIVE_EFFECT
 };
 
@@ -1346,6 +1351,7 @@ class BonkMgr
         std::vector<BonkWeapon const*> GetEvolutions(uint32 weaponId) const;
         bool HasStarterSpell(uint32 classMask) const;
         bool HasPoisonSpell(uint32 classMask) const;
+        bool HasKeywordSpell(uint32 classMask, BonkKeyword keyword) const;
         std::string DescribeEvolutionNames(uint32 weaponId, LocaleConstant locale) const;
         std::string DescribeEvolutionAdds(BonkWeapon const& evolved, LocaleConstant locale) const;
 

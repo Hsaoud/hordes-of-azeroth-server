@@ -9,6 +9,10 @@
 
 namespace
 {
+    uint32 const BONK_DRAIN_HEALED_BEAMS      = 2;
+    float const BONK_DRAINED_DOT_SCALE        = 1.2f;
+    uint32 const BONK_SHADOW_BOLT_AGONY       = 1;
+    uint32 const BONK_WEAPON_CURSE_OF_AGONY   = 905;
     uint32 const BONK_WEAPON_IMP              = 900;
     uint32 const BONK_WEAPON_VOIDWALKER       = 901;
     uint32 const BONK_WEAPON_SUCCUBUS         = 902;
@@ -207,10 +211,27 @@ void BonkRun::DrainLife(OwnedWeapon& owned, SpellEntry const* spellInfo)
         }
     if (drained && owned.weapon.healPct > 0.0f && m_player->IsAlive())
     {
-        uint32 const heal = std::max(1u, uint32(m_player->GetMaxHealth() * owned.weapon.healPct * drained / 100.0f));
+        uint32 const heal = std::max(1u, uint32(m_player->GetMaxHealth() * owned.weapon.healPct * std::min(drained, BONK_DRAIN_HEALED_BEAMS) / 100.0f));
         OnDrainOverheal(heal);
         HealHero(heal, owned.weapon.spellId);
     }
+}
+
+float BonkRun::GetDrainedDotScale(Unit const* victim, uint32 spellId) const
+{
+    BonkKeywordInfo const* info = sBonkMgr.GetKeywordBySpell(spellId);
+    if (!info || (info->id != BONK_KEYWORD_DECAY && info->id != BONK_KEYWORD_AGONY))
+        return 1.0f;
+    return std::find(m_drainBeams.begin(), m_drainBeams.end(), victim->GetObjectGuid()) != m_drainBeams.end() ? BONK_DRAINED_DOT_SCALE : 1.0f;
+}
+
+void BonkRun::CurseFromShadowBolt(OwnedWeapon const& owned, Unit* victim)
+{
+    Creature* mob = victim->ToCreature();
+    if (!mob || GetRootWeapon(owned.weapon) != BONK_WEAPON_SHADOW_BOLT || !GetKeywordStacks(mob, BONK_KEYWORD_AGONY))
+        return;
+    if (OwnedWeapon* curse = FindOwnedByRoot(BONK_WEAPON_CURSE_OF_AGONY))
+        ApplyWeaponKeyword(*curse, mob, BONK_KEYWORD_AGONY, BONK_SHADOW_BOLT_AGONY);
 }
 
 void BonkRun::BurnHellfire(OwnedWeapon& owned, SpellEntry const* spellInfo)

@@ -236,6 +236,7 @@ namespace
             .Line(BONK_STRING_RULE_DOT_REFRESH)
             .Line(BONK_STRING_RULE_DOT_POWER)
             .Line(BONK_STRING_RULE_DOT_SPREAD)
+            .Line(BONK_STRING_RULE_DOT_BURST)
             .Line(BONK_STRING_RULE_DOT_BOSSES)
             .Line(BONK_STRING_RULE_DOT_LEECH);
     }

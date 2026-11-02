@@ -872,6 +872,9 @@ enum BonkString : uint32
     BONK_STRING_COOP_ANOTHER_CHANCE                     = 960,
     BONK_STRING_COOP_BANK_AT_HOME                       = 961,
     BONK_STRING_COOP_LEAVE_FROM_MENU                    = 962,
+    BONK_STRING_RULE_DOT_BURST                          = 963,
+    BONK_STRING_PASSIVE_LABEL_BURNING_DAMAGE            = 964,
+    BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE              = 965,
 };
 
 struct BonkStringText

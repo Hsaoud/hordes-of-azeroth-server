@@ -368,6 +368,12 @@ float const BONK_START_POLY_REACH   = 10.0f;
     size_t const BONK_MAX_NEW_VENOM_CLOUDS = 8;
     uint32 const BONK_SPELL_VENOM_CLOUD_LOOK = 21070;
     uint32 const BONK_KIT_VENOM_BURST      = 6377;
+    uint32 const BONK_WEAPON_VOLLEY        = 137;
+    uint32 const BONK_VOLLEY_HITS_PER_ARROW = 25;
+    uint32 const BONK_MAX_EXPLOSIVE_ARROWS = 2;
+    uint32 const BONK_EXPLOSIVE_ARROW_GAP_MS = 500;
+    float const BONK_EXPLOSIVE_ARROW_RADIUS = 8.0f;
+    uint32 const BONK_KIT_EXPLOSIVE_ARROW  = 286;
     uint32 const BONK_CLUSTER_BOMBLETS     = 5;
     float const BONK_BOMBLET_MIN_TOSS      = 3.0f;
     float const BONK_BOMBLET_MAX_TOSS      = 6.0f;
@@ -382,6 +388,22 @@ float const BONK_START_POLY_REACH   = 10.0f;
     float const BONK_SNAKE_SPREAD          = 1.5f;
     uint32 const BONK_SNAKE_ATTACK_MS      = 1500;
     float const BONK_SNAKE_SCALE           = 1.5f;
+    uint32 const BONK_VIPERS_PER_TRAP      = 4;
+    size_t const BONK_MAX_VIPERS           = 24;
+    float const BONK_VIPER_REACH           = 20.0f;
+    float const BONK_VIPER_SPEED           = 14.0f;
+    float const BONK_VIPER_BITE_RANGE      = 2.0f;
+    uint32 const BONK_VIPER_LIFE_MS        = 1500;
+    uint32 const BONK_VIPER_REPATH_MS      = 300;
+    int32 const BONK_VIPER_CLOUD_PULSE_MS  = 500;
+    size_t const BONK_MAX_VIPER_CLOUDS     = 16;
+    uint32 const BONK_WEAPON_CORROSIVE_VIPERS = 226;
+    uint32 const BONK_WEAPON_VENOM_BURST   = 227;
+    uint32 const BONK_VENOM_BURST_STACKS   = 5;
+    float const BONK_VENOM_BURST_RADIUS    = 5.0f;
+    uint32 const BONK_KIT_VIPER_BURST      = 6377;
+    int32 const BONK_VOLATILE_ECHO_MS      = 2000;
+    float const BONK_VOLATILE_ECHO_SHARE   = 0.6f;
     uint32 const BONK_SPELL_PLAGUE_LOOK    = 19502;
     uint32 const BONK_KIT_PLAGUE_RISE      = 219;
     int32 const BONK_PLAGUE_RISE_DELAY_MS  = 500;
@@ -444,6 +466,7 @@ float const BONK_START_POLY_REACH   = 10.0f;
     uint32 const BONK_TRAP_CHECK_MS        = 100;
     uint32 const BONK_THROWN_TRAP_ARM_MS   = 400;
     float const BONK_TRAP_THROW_RANGE      = 20.0f;
+    size_t const BONK_TRAP_LOOKS_PER_SEC   = 3;
     float const BONK_LINE_WIDTH            = 3.0f;
     float const BONK_LINE_GROUP_RADIUS     = 8.0f;
     float const BONK_WOLF_SCALE            = 0.8f;
@@ -1690,6 +1713,7 @@ void BonkRun::StartStage()
     m_shotSourceTimer = BONK_SHOT_SOURCE_CHECK_MS;
     m_trickShotTimes.clear();
     ClearHunterEvolutions();
+    ClearPendingTrapLooks();
     m_pendingCasts.clear();
     m_heldShotSources.clear();
     m_telegraphs.Dismiss(m_player);
@@ -1703,6 +1727,12 @@ void BonkRun::StartStage()
     m_pendingKeywords.clear();
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
+    m_pendingDotBursts.clear();
+    m_volleyHits = 0;
+    m_explosiveArrows = 0;
+    m_explosiveArrowReadyMs = 0;
+    m_dotBurstTimes.clear();
+    m_dotBurstLookTimes.clear();
     m_dotStacks.clear();
     m_crowdControl.clear();
     m_buffs.clear();
@@ -4657,7 +4687,7 @@ uint32 BonkRun::GetMissileDelay(SpellCaster const* caster, Unit const* target, f
 float BonkRun::GetCritChance(SpellEntry const* spell, Unit const* victim, Unit const* attacker) const
 {
     float const chance = GetPaladinCritChance(spell, GetRogueCritChance(spell,
-        BONK_BASE_CRIT + GetPassiveTotal(BONK_PASSIVE_CRIT) + GetTalentCritChance(victim, attacker)));
+        BONK_BASE_CRIT + GetPassiveTotal(BONK_PASSIVE_CRIT) + GetTalentCritChance(victim, attacker) + GetDeepWoundsCritChance(victim)));
     return IsAlwaysCrit(spell, victim) ? 100.0f + chance : chance;
 }
 
@@ -6297,6 +6327,7 @@ void BonkRun::StrikeWith(OwnedWeapon& owned, SpellEntry const* spellInfo, Creatu
 
     OnMageStrike(owned, shotInfo, target, shotShare, source ? static_cast<Unit const*>(source) : m_player);
     OnShamanStrike(owned, shotInfo, target, shotShare);
+    CurseFromShadowBolt(owned, target);
     OnPriestStrike(owned, shotInfo, target, shotShare);
     OnWarlockStrike(owned, shotInfo, target, shotShare);
     OnDruidStrike(owned, shotInfo, target);
@@ -7121,6 +7152,9 @@ BonkRun::KeywordCloudKind BonkRun::GetCloudKind(OwnedWeapon const& owned) const
     KeywordCloudKind druid;
     if (GetDruidCloudKind(owned, druid))
         return druid;
+    KeywordCloudKind hunter;
+    if (GetHunterCloudKind(owned, hunter))
+        return hunter;
 
     KeywordCloudKind venom;
     venom.lifeMs = BONK_VENOM_CLOUD_MS;
@@ -7167,7 +7201,7 @@ void BonkRun::StartKeywordCloud(OwnedWeapon const& owned, float x, float y, floa
     cloud.stacks = kind.stacks;
     if (kind.bloodRing || kind.natureRing)
         ShowRingAt(cloud, z, kind.natureRing ? BonkHeroRing::Nature : BonkHeroRing::BloodAura);
-    else
+    else if (kind.lookSpellId)
         cloud.area = PlaceAreaVisual(m_player, kind.lookSpellId, x, y, z, cloud.radius, uint32(cloud.leftMs));
     m_keywordClouds.push_back(cloud);
     if (kind.burstKit)
@@ -7235,6 +7269,7 @@ void BonkRun::PulseKeywordCloud(OwnedWeapon const& owned, KeywordCloud const& cl
     }
     OnShamanCloudPulse(owned, cloud);
     OnRogueCloudPulse(owned, cloud);
+    OnHunterCloudPulse(owned, cloud);
 }
 
 void BonkRun::ScatterBomblets(OwnedWeapon const& owned, SpellEntry const* spellInfo, float x, float y, float z)
@@ -7392,6 +7427,135 @@ void BonkRun::DespawnSnakes()
             if (Creature* snake = map->GetCreature(released.guid))
                 snake->DespawnOrUnsummon();
     m_snakes.clear();
+}
+
+void BonkRun::ReleaseVipers(OwnedWeapon const& owned, float x, float y, float z)
+{
+    std::vector<Creature*> prey = GetMobsNear(x, y, BONK_VIPER_REACH * GetWeaponArea(owned));
+    std::sort(prey.begin(), prey.end(), [x, y](Creature const* a, Creature const* b) { return a->GetDistance2d(x, y) < b->GetDistance2d(x, y); });
+    uint32 const count = BONK_VIPERS_PER_TRAP + GetSpellCount(owned);
+    float const speed = BONK_VIPER_SPEED * GetSummonSpeedRate(GetStat(BONK_PASSIVE_MOVE_SPEED));
+    for (uint32 i = 0; i < count && i < prey.size(); ++i)
+    {
+        if (m_vipers.size() >= BONK_MAX_VIPERS)
+            break;
+        Creature* target = prey[i];
+        if (!target->IsAlive())
+            continue;
+        s_nextHelperLevel = m_player->GetLevel();
+        Creature* viper = m_player->SummonCreature(BONK_SNAKE, x, y, z, m_player->GetAngle(target), TEMPSUMMON_TIMED_DESPAWN,
+            BONK_OBJECT_LIFETIME_SEC * IN_MILLISECONDS, false, 0, nullptr);
+        if (!viper)
+            continue;
+        viper->SetOwnerGuid(m_player->GetObjectGuid());
+        viper->SetUInt32Value(UNIT_CREATED_BY_SPELL, owned.weapon.spellId);
+        viper->SetFactionTemplateId(m_player->GetFactionTemplateId());
+        viper->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER | UNIT_FLAG_NOT_SELECTABLE);
+        viper->SetInvincibilityHpThreshold(viper->GetMaxHealth());
+        viper->SetObjectScale(GetSummonLookScale(owned, BONK_SNAKE_SCALE));
+        viper->GetMotionMaster()->MovePoint(0, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(),
+            MOVE_PATHFINDING | MOVE_RUN_MODE | MOVE_FORCE_DESTINATION, speed);
+
+        Viper released;
+        released.guid = viper->GetObjectGuid();
+        released.target = target->GetObjectGuid();
+        released.weaponId = owned.weapon.id;
+        released.untilMs = m_totalMs + BONK_VIPER_LIFE_MS;
+        released.moveMs = m_totalMs + BONK_VIPER_REPATH_MS;
+        m_vipers.push_back(released);
+    }
+}
+
+void BonkRun::UpdateVipers()
+{
+    if (m_vipers.empty())
+        return;
+    Map* map = m_player->GetMap();
+    float const speed = BONK_VIPER_SPEED * GetSummonSpeedRate(GetStat(BONK_PASSIVE_MOVE_SPEED));
+    for (auto itr = m_vipers.begin(); itr != m_vipers.end();)
+    {
+        Creature* viper = map->GetCreature(itr->guid);
+        OwnedWeapon const* owned = FindOwned(itr->weaponId);
+        Creature* target = map->GetCreature(itr->target);
+        if (!viper || !owned)
+        {
+            if (viper)
+                viper->DespawnOrUnsummon();
+            itr = m_vipers.erase(itr);
+            continue;
+        }
+        bool const arrived = target && target->IsAlive() && viper->GetDistance2d(target) <= BONK_VIPER_BITE_RANGE;
+        bool const lost = !target || !target->IsAlive() || int32(itr->untilMs - m_totalMs) <= 0;
+        if (arrived || lost)
+        {
+            BurstViper(*owned, viper, arrived ? target : nullptr);
+            viper->DespawnOrUnsummon();
+            itr = m_vipers.erase(itr);
+            continue;
+        }
+        if (int32(itr->moveMs - m_totalMs) <= 0)
+        {
+            itr->moveMs = m_totalMs + BONK_VIPER_REPATH_MS;
+            viper->GetMotionMaster()->MovePoint(0, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(),
+                MOVE_PATHFINDING | MOVE_RUN_MODE | MOVE_FORCE_DESTINATION, speed);
+        }
+        ++itr;
+    }
+}
+
+void BonkRun::BurstViper(OwnedWeapon const& owned, Creature* viper, Creature* bitten)
+{
+    if (bitten && m_mastery.entrapment.count(GetRootWeapon(owned.weapon)))
+        if (BonkMobAI const* ai = dynamic_cast<BonkMobAI const*>(bitten->AI()))
+            if (ai->GetKind() == BONK_SPAWN_NORMAL)
+                ApplyKeyword(bitten, BONK_KEYWORD_FROZEN, 1, 0, 1.0f, owned.weapon.spellId);
+    float const x = viper->GetPositionX(), y = viper->GetPositionY(), z = viper->GetPositionZ();
+    PlayKitAt(ObjectGuid(), x, y, z, BONK_KIT_VIPER_BURST, true);
+    if (owned.weapon.id == BONK_WEAPON_VENOM_BURST)
+    {
+        SpellEntry const* look = sSpellMgr.GetSpellEntry(owned.weapon.spellId);
+        float const damage = GetWeaponDamage(owned);
+        for (Creature* mob : GetMobsNear(x, y, BONK_VENOM_BURST_RADIUS * GetWeaponArea(owned)))
+        {
+            if (!mob->IsAlive())
+                continue;
+            if (look)
+                DealShamanHit(look, owned.weapon.spellId, mob, damage);
+            if (mob->IsAlive())
+                ApplyWeaponKeyword(owned, mob, BONK_KEYWORD_POISON, BONK_VENOM_BURST_STACKS);
+        }
+    }
+    StartKeywordCloud(owned, x, y, z);
+}
+
+void BonkRun::DespawnVipers()
+{
+    if (Map* map = m_player->FindMap())
+        for (Viper const& released : m_vipers)
+            if (Creature* viper = map->GetCreature(released.guid))
+                viper->DespawnOrUnsummon();
+    m_vipers.clear();
+}
+
+bool BonkRun::GetHunterCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind) const
+{
+    if (!owned.weapon.HasFlag(BONK_WEAPON_FLAG_VIPERS))
+        return false;
+    kind.lifeMs = owned.weapon.durationMs;
+    kind.pulseEveryMs = BONK_VIPER_CLOUD_PULSE_MS;
+    kind.stacks = owned.weapon.applyStacks;
+    kind.maxAlive = BONK_MAX_VIPER_CLOUDS;
+    kind.lookSpellId = BONK_SPELL_VENOM_CLOUD_LOOK;
+    return true;
+}
+
+void BonkRun::OnHunterCloudPulse(OwnedWeapon const& owned, KeywordCloud const& cloud)
+{
+    if (owned.weapon.id != BONK_WEAPON_CORROSIVE_VIPERS)
+        return;
+    for (Creature* mob : GetMobsNear(cloud.x, cloud.y, cloud.radius))
+        if (mob->IsAlive())
+            ApplyWeaponKeyword(owned, mob, BONK_KEYWORD_NATURE_VULNERABILITY, 1);
 }
 
 bool BonkRun::IsSnake(ObjectGuid const& guid) const
@@ -8216,6 +8380,13 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
+        if (cast.volatileEcho)
+        {
+            ShowTrapSprung(*owned, 0, cast.x, cast.y, cast.z);
+            SpringTrap(*owned, cast.x, cast.y, cast.z, BONK_VOLATILE_ECHO_SHARE, true);
+            continue;
+        }
+
         if (cast.recast)
         {
             float const area = GetWeaponArea(*owned);
@@ -8322,6 +8493,12 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
+        if (cast.explosiveArrow)
+        {
+            ExplodeArrow(*owned, info, cast);
+            continue;
+        }
+
         if (cast.venomBolts)
         {
             FireVenomBolts(*owned, info, cast);
@@ -8352,7 +8529,7 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
-        if (cast.blinkLanding || cast.pyroblastSplash || cast.iceShard || cast.frostShatter || cast.livingBomb || cast.meteor ||
+        if (cast.blinkLanding || cast.blinkChill || cast.pyroblastSplash || cast.iceShard || cast.frostShatter || cast.livingBomb || cast.meteor ||
             cast.phaseRush || cast.presenceOfMind)
         {
             ResolveMageCast(*owned, info, cast);
@@ -8371,7 +8548,7 @@ void BonkRun::UpdatePendingCasts(uint32 diff)
             continue;
         }
 
-        if (cast.killingSpree || cast.fanOfKnives || cast.shadowyShuriken)
+        if (cast.killingSpree || cast.fanOfKnives || cast.shadowyShuriken || cast.poisonBomb)
         {
             ResolveRogueCast(*owned, info, cast);
             continue;
@@ -9264,11 +9441,20 @@ void BonkRun::PutAwayTrap(Trap const& trap)
             go->Delete();
 }
 
+void BonkRun::ClearPendingTrapLooks()
+{
+    for (PendingCast const& cast : m_pendingCasts)
+        if ((cast.releaseLook || cast.springTrap) && cast.prop)
+            SendBonkPropGone(m_player, cast.prop);
+    m_trapLookTimes.clear();
+}
+
 void BonkRun::ShowTrapSprung(OwnedWeapon const& owned, uint32 prop, float x, float y, float z)
 {
     TrapLook const* look = GetTrapLook(uint32(owned.weapon.behaviorValue));
-    SendBonkPropGone(m_player, prop);
-    if (!look)
+    if (prop)
+        SendBonkPropGone(m_player, prop);
+    if (!look || owned.weapon.HasFlag(BONK_WEAPON_FLAG_VIPERS) || !TakeRateSlot(m_trapLookTimes, BONK_TRAP_LOOKS_PER_SEC))
         return;
     PendingCast release;
     release.weaponId = owned.weapon.id;
@@ -9282,8 +9468,14 @@ void BonkRun::ShowTrapSprung(OwnedWeapon const& owned, uint32 prop, float x, flo
 void BonkRun::UpdateTraps(uint32 diff)
 {
     m_trapTimer += diff;
-    if (m_trapTimer < BONK_TRAP_CHECK_MS || m_traps.empty())
+    if (m_trapTimer < BONK_TRAP_CHECK_MS)
         return;
+    UpdateVipers();
+    if (m_traps.empty())
+    {
+        m_trapTimer = 0;
+        return;
+    }
     int32 const elapsed = int32(m_trapTimer);
     m_trapTimer = 0;
 
@@ -9329,7 +9521,7 @@ void BonkRun::UpdateTraps(uint32 diff)
     }
 }
 
-void BonkRun::SpringTrap(OwnedWeapon& owned, float x, float y, float z)
+void BonkRun::SpringTrap(OwnedWeapon& owned, float x, float y, float z, float share, bool echo)
 {
     BonkWeapon const& weapon = owned.weapon;
     SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(weapon.spellId);
@@ -9341,13 +9533,30 @@ void BonkRun::SpringTrap(OwnedWeapon& owned, float x, float y, float z)
         ReleaseSnakes(owned, x, y, z);
         return;
     }
+    if (weapon.HasFlag(BONK_WEAPON_FLAG_VIPERS))
+    {
+        ReleaseVipers(owned, x, y, z);
+        return;
+    }
 
     FiringWeapon firing(m_player->GetBonkPlayer());
     float const radius = GetWeaponRadius(owned) * (1.0f + GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_TRAP_AREA) / 100.0f);
     ScaleRadius(spellInfo, radius);
     optional<int32> basePoints[MAX_EFFECT_INDEX];
-    GetBasePoints(owned, spellInfo, 1.0f, basePoints);
+    GetBasePoints(owned, spellInfo, share, basePoints);
     CastAtGround(m_player, spellInfo, basePoints, x, y, z);
+    if (weapon.HasFlag(BONK_WEAPON_FLAG_VOLATILE) && !echo)
+    {
+        PendingCast blast;
+        blast.weaponId = weapon.id;
+        blast.spellId = weapon.spellId;
+        blast.leftMs = BONK_VOLATILE_ECHO_MS;
+        blast.volatileEcho = true;
+        blast.x = x;
+        blast.y = y;
+        blast.z = z;
+        m_pendingCasts.push_back(blast);
+    }
     if (spellInfo->Id == BONK_SPELL_FROST_TRAP_AURA)
         PlayKitAt(ObjectGuid(), x, y, z, BONK_KIT_FROST_TRAP_SOUND, true);
     SpringEntrapment(owned, x, y, radius);
@@ -9544,6 +9753,7 @@ void BonkRun::OnPetBite(Creature* pet, Unit* victim)
         return;
     OnShamanPetBite(pet, victim);
     OnPriestPetBite(pet, victim);
+    MarkFromPack(pet, victim);
     if (!IsPetFrenzied() || !IsSummon(pet))
         return;
 
@@ -9568,6 +9778,49 @@ void BonkRun::OnPetBite(Creature* pet, Unit* victim)
                     QueuePetCleave(*owned, pet, victim);
             return;
         }
+}
+
+void BonkRun::MarkFromPack(Creature* pet, Unit* victim)
+{
+    Creature* prey = victim->ToCreature();
+    if (!prey || !prey->IsAlive() || !IsSummon(pet) || !HasBehavior(BONK_BEHAVIOR_WRATH) || GetKeywordStacks(prey, BONK_KEYWORD_HUNTERS_MARK))
+        return;
+    ApplyKeyword(prey, BONK_KEYWORD_HUNTERS_MARK, 1);
+}
+
+void BonkRun::OnHunterDamage(uint32 root, Unit* victim)
+{
+    if (root == BONK_WEAPON_VOLLEY)
+    {
+        if (m_explosiveArrows < BONK_MAX_EXPLOSIVE_ARROWS && FindOwnedByRoot(BONK_WEAPON_AIMED_SHOT) && ++m_volleyHits >= BONK_VOLLEY_HITS_PER_ARROW)
+        {
+            m_volleyHits = 0;
+            ++m_explosiveArrows;
+        }
+        return;
+    }
+    if (root != BONK_WEAPON_AIMED_SHOT || !m_explosiveArrows || m_totalMs < m_explosiveArrowReadyMs || !victim->IsCreature())
+        return;
+    OwnedWeapon const* aimed = FindOwnedByRoot(BONK_WEAPON_AIMED_SHOT);
+    if (!aimed)
+        return;
+    --m_explosiveArrows;
+    m_explosiveArrowReadyMs = m_totalMs + BONK_EXPLOSIVE_ARROW_GAP_MS;
+    PendingCast arrow;
+    arrow.weaponId = aimed->weapon.id;
+    arrow.spellId = aimed->weapon.spellId;
+    arrow.explosiveArrow = true;
+    victim->GetPosition(arrow.x, arrow.y, arrow.z);
+    m_pendingCasts.push_back(arrow);
+}
+
+void BonkRun::ExplodeArrow(OwnedWeapon& owned, SpellEntry const* spellInfo, PendingCast const& cast)
+{
+    ShowKitAt(BONK_KIT_EXPLOSIVE_ARROW, cast.x, cast.y, cast.z);
+    float const damage = GetWeaponDamage(owned);
+    for (Creature* mob : GetMobsNear(cast.x, cast.y, BONK_EXPLOSIVE_ARROW_RADIUS * GetWeaponArea(owned)))
+        if (mob->IsAlive())
+            DealShamanHit(spellInfo, owned.weapon.spellId, mob, damage);
 }
 
 void BonkRun::QueuePetCleave(OwnedWeapon const& owned, Creature* pet, Unit* victim)
@@ -10227,6 +10480,7 @@ void BonkRun::DespawnPets()
         owned.pets.clear();
     }
     DespawnSnakes();
+    DespawnVipers();
     DespawnBeasts();
     DespawnSkeletons();
     m_petStates.clear();
@@ -12467,7 +12721,13 @@ bool BonkRun::GivePassive(uint32 passiveId, std::string& error)
 
 bool BonkRun::IsPassiveAllowed(BonkPassive const& passive) const
 {
-    return passive.effect != BONK_PASSIVE_POISON_DAMAGE || sBonkMgr.HasPoisonSpell(m_player->GetClassMask());
+    switch (passive.effect)
+    {
+        case BONK_PASSIVE_POISON_DAMAGE:  return sBonkMgr.HasKeywordSpell(m_player->GetClassMask(), BONK_KEYWORD_POISON);
+        case BONK_PASSIVE_BURNING_DAMAGE: return sBonkMgr.HasKeywordSpell(m_player->GetClassMask(), BONK_KEYWORD_BURNING);
+        case BONK_PASSIVE_BLEED_DAMAGE:   return sBonkMgr.HasKeywordSpell(m_player->GetClassMask(), BONK_KEYWORD_BLEED);
+        default:                          return true;
+    }
 }
 
 size_t BonkRun::GetSpellSlots() const
@@ -13895,6 +14155,7 @@ void BonkRun::CleanUp()
     DespawnShotSources();
     m_trickShotTimes.clear();
     ClearHunterEvolutions();
+    ClearPendingTrapLooks();
     m_pendingCasts.clear();
     m_heldShotSources.clear();
     m_telegraphs.Dismiss(m_player);
@@ -13904,6 +14165,12 @@ void BonkRun::CleanUp()
     m_pendingKeywords.clear();
     m_pendingConsumes.clear();
     m_dyingKeywords.clear();
+    m_pendingDotBursts.clear();
+    m_volleyHits = 0;
+    m_explosiveArrows = 0;
+    m_explosiveArrowReadyMs = 0;
+    m_dotBurstTimes.clear();
+    m_dotBurstLookTimes.clear();
     m_dotStacks.clear();
     m_crowdControl.clear();
     m_buffs.clear();

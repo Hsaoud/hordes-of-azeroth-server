@@ -869,6 +869,9 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_COOP_ANOTHER_CHANCE,                     "The new revive gives fallen players another chance. Stand in their ring to bring them back." },
         { BONK_STRING_COOP_BANK_AT_HOME,                       "Your bank stays in your own game. Use it when you're back home." },
         { BONK_STRING_COOP_LEAVE_FROM_MENU,                    "To leave a co-op game, use Leave game in the menu." },
+        { BONK_STRING_RULE_DOT_BURST,                          "When a burning, bleeding or poisoned enemy dies, the damage its stacks had left bursts onto up to 4 enemies within 8 yards, half on each." },
+        { BONK_STRING_PASSIVE_LABEL_BURNING_DAMAGE,            "Burning damage" },
+        { BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE,              "Bleed damage" },
     };
     return texts;
 }

@@ -24,6 +24,13 @@ namespace
     size_t const BONK_MAX_PENDING_CRITS       = 200;
     size_t const BONK_MAX_DEEP_WOUNDS_PER_SEC = 20;
     size_t const BONK_DEEP_WOUNDS_PRUNE_SIZE  = 256;
+    float const BONK_DEEP_WOUNDS_CRIT_PER_STACK = 1.0f;
+    uint32 const BONK_REND_SWING_BLEED        = 1;
+    uint32 const BONK_MORTAL_TEAR_MS          = 2000;
+    uint32 const BONK_WEAPON_CLEAVE           = 300;
+    uint32 const BONK_WEAPON_REND             = 301;
+    uint32 const BONK_WEAPON_WHIRLWIND        = 306;
+    uint32 const BONK_DEEP_WOUNDS_CRIT_STACKS = 20;
     uint32 const BONK_KIT_DEEP_WOUND          = 220;
     float const BONK_SHIELD_SLAM_MAX_BONUS    = 200.0f;
 
@@ -277,6 +284,21 @@ void BonkRun::OpenDeepWound(OwnedWeapon const& owned, Creature* mob)
         mob->SendPlaySpellVisualKit(BONK_KIT_DEEP_WOUND);
 }
 
+void BonkRun::TearBleed(OwnedWeapon const& owned, Creature* mob)
+{
+    float const torn = GetDotDamageLeft(mob, BONK_KEYWORD_BLEED, BONK_MORTAL_TEAR_MS);
+    SpellEntry const* look = sSpellMgr.GetSpellEntry(owned.weapon.spellId);
+    if (torn > 0.0f && look && mob->IsAlive())
+        DealShamanHit(look, owned.weapon.spellId, mob, torn);
+}
+
+float BonkRun::GetDeepWoundsCritChance(Unit const* victim) const
+{
+    if (!victim || !HasBehavior(BONK_BEHAVIOR_DEEP_WOUNDS))
+        return 0.0f;
+    return std::min(GetKeywordStacks(victim, BONK_KEYWORD_BLEED), BONK_DEEP_WOUNDS_CRIT_STACKS) * BONK_DEEP_WOUNDS_CRIT_PER_STACK;
+}
+
 void BonkRun::SplatterBlood(OwnedWeapon const& owned, Creature* struck, uint32 stacks)
 {
     struck->SendPlaySpellVisualKit(BONK_KIT_BLOODSPLATTER);
@@ -491,6 +513,12 @@ uint32 BonkRun::GetSwingEmote() const
 
 void BonkRun::OnAroundStrike(OwnedWeapon const& owned, Creature* mob)
 {
+    uint32 const root = GetRootWeapon(owned.weapon);
+    if (root == BONK_WEAPON_CLEAVE || root == BONK_WEAPON_WHIRLWIND || root == BONK_WEAPON_THUNDER_CLAP)
+        if (OwnedWeapon const* rend = FindOwnedByRoot(BONK_WEAPON_REND))
+            ApplyWeaponKeyword(*rend, mob, BONK_KEYWORD_BLEED, BONK_REND_SWING_BLEED);
+    if (root == BONK_WEAPON_MORTAL_STRIKE)
+        TearBleed(owned, mob);
     if (owned.weapon.behavior == BONK_BEHAVIOR_BLOODLUST && GetKeywordStacks(mob, BONK_KEYWORD_BLEED))
         m_bloodlustCutMs = std::min(m_bloodlustCutMs + BONK_BLOODLUST_CUT_MS, BONK_BLOODLUST_MAX_CUT_MS);
     if (m_swingKnocksBack)
@@ -1062,7 +1090,9 @@ void BonkRun::LandShield(OwnedWeapon& owned, SpellEntry const* spellInfo, Pendin
         if (next)
             LaunchShield(owned, spellInfo, source, next, cast.share, cast.struck, cast.hops - 1);
     }
-    if (alive)
+    if (alive && owned.weapon.behavior == BONK_BEHAVIOR_PALADIN_SHIELD)
+        StrikeWithAvengersShield(owned, target);
+    else if (alive)
     {
         FiringWeapon firing(m_player->GetBonkPlayer());
         StrikeWith(owned, spellInfo, target, cast.share, true);

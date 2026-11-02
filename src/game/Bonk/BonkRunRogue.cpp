@@ -99,6 +99,15 @@ namespace
     size_t const BONK_CALTROPS_ALIVE          = 3;
     int32 const BONK_CALTROPS_SLOW_MS         = 1500;
     uint32 const BONK_EXSANGUINATE_SECONDS    = 4;
+    uint32 const BONK_SPELL_POISON_VIAL       = 14897;
+    uint32 const BONK_KIT_POISON_BOMB         = 6377;
+    float const BONK_POISON_BOMB_REACH        = 20.0f;
+    float const BONK_POISON_BOMB_SPEED        = 25.0f;
+    uint32 const BONK_POISON_BOMB_STACKS      = 4;
+    uint32 const BONK_MUTILATE_STACKS_PER     = 5;
+    uint32 const BONK_EVISCERATE_CHAIN        = 3;
+    int32 const BONK_SPREE_EVISCERATE_MS      = 500;
+    float const BONK_EVISCERATE_REACH         = 8.0f;
     uint32 const BONK_SHURIKEN_STORM_JUMPS    = 2;
     float const BONK_SHURIKEN_STORM_REACH     = 10.0f;
     int32 const BONK_SHADOWY_SHURIKEN_MS      = 1500;
@@ -192,7 +201,7 @@ bool BonkRun::FireRogueSpell(OwnedWeapon& owned, SpellEntry const* spellInfo)
         case BONK_BEHAVIOR_MUTILATE:        StabNearest(owned, spellInfo); break;
         case BONK_BEHAVIOR_BLADE_FLURRY:    StartBladeFlurry(owned); break;
         case BONK_BEHAVIOR_KILLING_SPREE:   StartKillingSpree(owned); break;
-        case BONK_BEHAVIOR_DEADLY_POISON:
+        case BONK_BEHAVIOR_DEADLY_POISON:   ThrowPoisonBomb(owned); break;
         case BONK_BEHAVIOR_AMBUSH:          owned.timer = BONK_ROGUE_IDLE_MS; break;
         case BONK_BEHAVIOR_FAN_OF_KNIVES:   ThrowFanOfKnives(owned, spellInfo, true); break;
         case BONK_BEHAVIOR_ENVENOM:         CastEnvenom(owned, spellInfo); break;
@@ -212,6 +221,8 @@ void BonkRun::ResolveRogueCast(OwnedWeapon& owned, SpellEntry const* spellInfo, 
         ThrowFanOfKnives(owned, spellInfo, false);
     else if (cast.shadowyShuriken)
         BurstShadowyShuriken(owned, cast);
+    else if (cast.poisonBomb)
+        LandPoisonBomb(owned, cast);
 }
 
 bool BonkRun::IsRogueNear() const
@@ -454,10 +465,34 @@ void BonkRun::StabNearest(OwnedWeapon& owned, SpellEntry const* spellInfo)
         else if (owned.weapon.id == BONK_WEAPON_DEADLY_THROW)
             if (SpellEntry const* crippling = sSpellMgr.GetSpellEntry(BONK_SPELL_CRIPPLING_POISON))
                 SlowNormalMob(mob, crippling, &BONK_DEADLY_THROW_SLOW, BONK_DEADLY_THROW_SLOW_MS);
+        if (owned.weapon.behavior == BONK_BEHAVIOR_EVISCERATE && !mob->IsAlive())
+            EviscerateOnward(owned, spellInfo, mob, targets);
     }
     SwingRogueBlades();
     if (owned.weapon.behavior == BONK_BEHAVIOR_EVISCERATE)
         ThrowDeadlyFan();
+}
+
+void BonkRun::EviscerateOnward(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* slain, std::vector<Creature*> taken)
+{
+    Creature* from = slain;
+    for (uint32 chain = 0; chain < BONK_EVISCERATE_CHAIN; ++chain)
+    {
+        Creature* next = nullptr;
+        for (Creature* mob : GetMobsInRange(BONK_EVISCERATE_REACH, from))
+            if (mob->IsAlive() && std::find(taken.begin(), taken.end(), mob) == taken.end() && m_player->IsWithinLOSInMap(mob))
+            {
+                next = mob;
+                break;
+            }
+        if (!next)
+            return;
+        taken.push_back(next);
+        StabRogue(owned, spellInfo, next, 1.0f, true);
+        if (next->IsAlive())
+            return;
+        from = next;
+    }
 }
 
 void BonkRun::StabOffHand(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target, std::vector<Creature*> const& taken)
@@ -497,7 +532,7 @@ void BonkRun::Mutilate(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature
     uint32 const stabs = blindside ? BONK_BLINDSIDE_STABS : BONK_MUTILATE_STABS;
     for (uint32 stab = 0; stab < stabs && target->IsAlive(); ++stab)
     {
-        PoisonWithRogue(owned, target, owned.weapon.applyStacks);
+        PoisonWithRogue(owned, target, owned.weapon.applyStacks + GetKeywordStacks(target, BONK_KEYWORD_POISON) / BONK_MUTILATE_STACKS_PER);
         if (owned.weapon.id == BONK_WEAPON_TOXIC_BLADE)
             ApplyWeaponKeyword(owned, target, BONK_KEYWORD_NATURE_VULNERABILITY, BONK_TOXIC_BLADE_STACKS);
         StabRogue(owned, spellInfo, target, share, true);
@@ -604,6 +639,7 @@ void BonkRun::StrikeSpree(OwnedWeapon& owned, SpellEntry const* spellInfo, bool 
         m_spreeStriking = true;
         StabRogue(owned, look ? look : spellInfo, target, 1.0f, true);
         m_spreeStriking = false;
+        ReduceTimer(BONK_WEAPON_EVISCERATE, BONK_SPREE_EVISCERATE_MS);
         PlayKitAt(ObjectGuid(), x, y, z, BONK_KIT_SPREE_SLASH, false);
         SwingRogueBlades();
         if (owned.weapon.id == BONK_WEAPON_MURDEROUS_INTENT && !target->IsAlive() && m_spreeBonus < BONK_MURDEROUS_CAP)
@@ -743,7 +779,10 @@ void BonkRun::CastEnvenom(OwnedWeapon& owned, SpellEntry const* spellInfo)
     for (size_t i = 0; i < mobs.size() && i < wanted; ++i)
     {
         Creature* target = mobs[i];
+        float const venom = GetDotDamageLeft(target, BONK_KEYWORD_POISON);
         StabRogue(owned, spellInfo, target, 1.0f, true);
+        if (venom > 0.0f && target->IsAlive())
+            DealShamanHit(spellInfo, owned.weapon.spellId, target, venom);
         if (m_mastery.Special(BONK_SPECIAL_DEATHMARK) > 0.0f && target->IsAlive())
             StabRogue(owned, spellInfo, target, 1.0f, true);
         if (owned.weapon.id == BONK_WEAPON_VENOM_SPLASH)
@@ -753,6 +792,44 @@ void BonkRun::CastEnvenom(OwnedWeapon& owned, SpellEntry const* spellInfo)
     }
     m_envenomUntilMs = m_totalMs + uint32(owned.weapon.durationMs * GetWeaponDurationScale(owned));
     ThrowDeadlyFan();
+}
+
+void BonkRun::ThrowPoisonBomb(OwnedWeapon& owned)
+{
+    float x, y, z;
+    if (!FindLargestGroup(BONK_POISON_BOMB_REACH * GetWeaponArea(owned), x, y, z))
+    {
+        owned.timer = BONK_ROGUE_RETRY_MS;
+        return;
+    }
+    owned.timer = GetWeaponCooldown(owned);
+    if (SpellEntry const* vial = sSpellMgr.GetSpellEntry(BONK_SPELL_POISON_VIAL))
+        ShowMissileFrom(m_player, vial, x, y, z);
+    m_player->SendPlaySpellVisualKit(BONK_KIT_THROW);
+    PendingCast bomb;
+    bomb.weaponId = owned.weapon.id;
+    bomb.spellId = owned.weapon.spellId;
+    bomb.leftMs = int32(m_player->GetDistance(x, y, z) / BONK_POISON_BOMB_SPEED * IN_MILLISECONDS);
+    bomb.poisonBomb = true;
+    bomb.x = x;
+    bomb.y = y;
+    bomb.z = z;
+    m_pendingCasts.push_back(bomb);
+}
+
+void BonkRun::LandPoisonBomb(OwnedWeapon& owned, PendingCast const& cast)
+{
+    ShowKitAt(BONK_KIT_POISON_BOMB, cast.x, cast.y, cast.z);
+    SpellEntry const* look = sSpellMgr.GetSpellEntry(BONK_SPELL_POISON_VIAL);
+    float const damage = GetWeaponDamage(owned);
+    for (Creature* mob : GetMobsNear(cast.x, cast.y, GetWeaponRadius(owned)))
+    {
+        if (!mob->IsAlive())
+            continue;
+        PoisonWithRogue(owned, mob, BONK_POISON_BOMB_STACKS);
+        if (look)
+            DealShamanHit(look, owned.weapon.spellId, mob, damage);
+    }
 }
 
 void BonkRun::SplashVenom(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target)
@@ -773,7 +850,7 @@ void BonkRun::Exsanguinate(OwnedWeapon& owned, SpellEntry const* spellInfo, Crea
     BonkKeywordInfo const* poison = sBonkMgr.GetKeyword(BONK_KEYWORD_POISON);
     if (!poison || !poison->tickMs)
         return;
-    float const perStack = float(GetKeywordPoints(*poison)) * BONK_EXSANGUINATE_SECONDS * IN_MILLISECONDS / poison->tickMs;
+    float const perStack = GetDotTickDamage(*poison) * BONK_EXSANGUINATE_SECONDS * IN_MILLISECONDS / poison->tickMs;
     std::vector<Creature*> mobs = GetMobsInRange(GetWeaponRadius(owned), target);
     mobs.push_back(target);
     for (Creature* mob : mobs)

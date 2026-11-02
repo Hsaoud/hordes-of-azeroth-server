@@ -68,14 +68,16 @@ namespace
     float const BONK_CRASH_SHARE              = 0.5f;
     uint32 const BONK_STORMSTRIKE_STATIC      = 2;
 
-    uint32 const BONK_MAELSTROM_HITS          = 5;
+    uint32 const BONK_MAELSTROM_HITS          = 3;
     int32 const BONK_MAELSTROM_DELAY_MS       = 50;
     float const BONK_MAELSTROM_RANGE          = 30.0f;
     uint32 const BONK_OVERCHARGE_TARGETS      = 3;
+    uint32 const BONK_MAELSTROM_CHAIN_TARGETS = 2;
+    uint32 const BONK_STORMSTRIKE_MAELSTROM_HITS = 2;
     uint32 const BONK_STATIC_SURGE_STACKS     = 5;
 
     uint32 const BONK_LIGHTNING_SHIELD_CHARGES = 3;
-    float const BONK_LIGHTNING_SHIELD_REACH   = 8.0f;
+    float const BONK_LIGHTNING_SHIELD_REACH   = 10.0f;
     float const BONK_LIGHTNING_SHIELD_STEP    = 0.5f;
     float const BONK_LIGHTNING_SHIELD_CAP     = 5.0f;
     float const BONK_EARTH_SHIELD_STEP        = 1.5f;
@@ -101,7 +103,7 @@ namespace
     uint32 const BONK_SHAMAN_TICK_MS          = 1000;
     uint32 const BONK_ASCENDANCE_STACKS       = 3;
     uint32 const BONK_DOOMHAMMER_WINDFURY_EVERY = 2;
-    uint32 const BONK_DOOMHAMMER_MAELSTROM_HITS = 3;
+    uint32 const BONK_DOOMHAMMER_MAELSTROM_HITS = 2;
     uint32 const BONK_TOTEMIC_MASTERY_TOTEMS  = 1;
     float const BONK_TOTEM_REPLANT_RANGE      = 20.0f;
     float const BONK_TOTEM_SLOT_DISTANCE      = 2.5f;
@@ -220,6 +222,8 @@ bool BonkRun::DealShamanHit(SpellEntry const* spellInfo, uint32 creditSpellId, U
 void BonkRun::OnShamanStrike(OwnedWeapon& owned, SpellEntry const*, Creature* target, float share)
 {
     BonkWeapon const& weapon = owned.weapon;
+    if (weapon.behavior != BONK_BEHAVIOR_WINDFURY && weapon.behavior != BONK_BEHAVIOR_STORMSTRIKE && weapon.behavior != BONK_BEHAVIOR_MAELSTROM)
+        CountMaelstromHit();
     if (weapon.behavior == BONK_BEHAVIOR_WINDFURY)
     {
         CountMaelstromHit();
@@ -252,8 +256,12 @@ void BonkRun::OnShamanStrike(OwnedWeapon& owned, SpellEntry const*, Creature* ta
     if (weapon.behavior == BONK_BEHAVIOR_EARTH_SHOCK)
     {
         BonkKeywordInfo const* staticInfo = sBonkMgr.GetKeyword(BONK_KEYWORD_STATIC);
-        if (staticInfo && GetKeywordStacks(target, BONK_KEYWORD_STATIC) && QueueStaticDischarge(target, weapon.spellId))
+        uint32 const charge = GetKeywordStacks(target, BONK_KEYWORD_STATIC);
+        if (staticInfo && charge && QueueStaticDischarge(target, weapon.spellId))
+        {
             target->RemoveAurasByCasterSpell(staticInfo->spellId, m_player->GetObjectGuid());
+            RestoreLightningCharges(charge);
+        }
         if (weapon.id == BONK_WEAPON_EARTHQUAKE)
             StartKeywordCloud(owned, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
         return;
@@ -262,7 +270,8 @@ void BonkRun::OnShamanStrike(OwnedWeapon& owned, SpellEntry const*, Creature* ta
     if (weapon.behavior != BONK_BEHAVIOR_STORMSTRIKE)
         return;
 
-    CountMaelstromHit();
+    for (uint32 hit = 0; hit < BONK_STORMSTRIKE_MAELSTROM_HITS; ++hit)
+        CountMaelstromHit();
     SpendStaticShock(target);
     if (!target->IsAlive())
         return;
@@ -422,26 +431,14 @@ void BonkRun::ReleaseMaelstrom()
     if (maelstrom == m_weapons.end())
         return;
     uint32 const maelstromId = maelstrom->weapon.id;
-
-    OwnedWeapon* chosen = nullptr;
-    for (uint32 preferred : { BONK_WEAPON_CHAIN_LIGHTNING, BONK_WEAPON_LIGHTNING_BOLT })
-    {
-        for (OwnedWeapon& owned : m_weapons)
-            if (GetRootWeapon(owned.weapon) == preferred)
-            {
-                chosen = &owned;
-                break;
-            }
-        if (chosen)
-            break;
-    }
-    if (!chosen)
-        chosen = &*maelstrom;
-
-    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(chosen->weapon.spellId);
+    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(maelstrom->weapon.spellId);
     if (!spellInfo)
         return;
-    uint32 const targets = maelstromId == BONK_WEAPON_OVERCHARGE ? BONK_OVERCHARGE_TARGETS : 1;
+    bool const chained = std::any_of(m_weapons.begin(), m_weapons.end(), [this](OwnedWeapon const& owned)
+    {
+        return GetRootWeapon(owned.weapon) == BONK_WEAPON_CHAIN_LIGHTNING;
+    });
+    uint32 const targets = (maelstromId == BONK_WEAPON_OVERCHARGE ? BONK_OVERCHARGE_TARGETS : 1) + (chained ? BONK_MAELSTROM_CHAIN_TARGETS : 0);
     uint32 fired = 0;
     FiringWeapon firing(m_player->GetBonkPlayer());
     for (Creature* mob : GetMobsInRange(BONK_MAELSTROM_RANGE))
@@ -450,9 +447,9 @@ void BonkRun::ReleaseMaelstrom()
             break;
         if (!m_player->IsWithinLOSInMap(mob))
             continue;
-        StrikeWith(*chosen, spellInfo, mob, 1.0f);
+        StrikeWith(*maelstrom, spellInfo, mob, 1.0f);
         if (maelstromId == BONK_WEAPON_STATIC_SURGE && mob->IsAlive())
-            ApplyShamanKeyword(*chosen, mob, BONK_KEYWORD_STATIC, BONK_STATIC_SURGE_STACKS);
+            ApplyShamanKeyword(*maelstrom, mob, BONK_KEYWORD_STATIC, BONK_STATIC_SURGE_STACKS);
         ++fired;
     }
     if (fired && m_mastery.Special(BONK_SPECIAL_STORMFLURRY) > 0.0f)
@@ -505,6 +502,14 @@ void BonkRun::ChargeLightningShield()
     ShowLightningShield(m_lightningCharges);
 }
 
+void BonkRun::RestoreLightningCharges(uint32 charges)
+{
+    if (!m_player->IsAlive() || !HasBehavior(BONK_BEHAVIOR_LIGHTNING_SHIELD))
+        return;
+    m_lightningCharges = std::min(m_lightningCharges + charges, BONK_LIGHTNING_SHIELD_CHARGES);
+    ShowLightningShield(m_lightningCharges);
+}
+
 void BonkRun::ShowLightningShield(uint32 charges)
 {
     if (!charges)
@@ -539,12 +544,17 @@ void BonkRun::ZapNearestWithLightningShield(OwnedWeapon const& shield)
 {
     if (!m_player->IsAlive())
         return;
+    uint32 const zaps = std::max(1u, m_lightningCharges);
+    uint32 zapped = 0;
     for (Creature* mob : GetMobsInRange(BONK_LIGHTNING_SHIELD_REACH * GetWeaponArea(shield)))
-        if (m_player->IsWithinLOSInMap(mob))
-        {
-            ZapWithLightningShield(shield, mob);
+    {
+        if (zapped >= zaps)
             return;
-        }
+        if (!m_player->IsWithinLOSInMap(mob))
+            continue;
+        ZapWithLightningShield(shield, mob);
+        ++zapped;
+    }
 }
 
 void BonkRun::ZapWithLightningShield(OwnedWeapon const& shield, Creature* target)
