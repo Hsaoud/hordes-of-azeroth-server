@@ -1,4 +1,5 @@
 #include "BonkRun.h"
+#include "BonkCoop.h"
 #include "BonkLocale.h"
 #include "BonkMobAI.h"
 #include "BonkPlayer.h"
@@ -6,6 +7,7 @@
 #include "Creature.h"
 #include "GameObject.h"
 #include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "Utilities/Random.h"
 
@@ -527,26 +529,14 @@ void BonkRun::UseShrine(GameObject* go)
             }
             case BONK_SHRINE_STONE:
             {
-                if (m_bossSpawned)
+                BonkRun* summoner = this;
+                if (IsCoopGuest())
                 {
-                    bonk->Notify(BONK_STRING_BOSS_IS_ALREADY_HERE);
-                    break;
+                    Player* host = ObjectAccessor::FindPlayerNotInWorld(m_coopHost);
+                    summoner = host && host->GetMap() == m_player->GetMap() ? host->GetBonkPlayer()->GetRun() : nullptr;
                 }
-                BonkMapCreature const* creature = PickCreature(BONK_SPAWN_BOSS);
-                if (!creature)
-                    break;
-                float const angle = std::atan2(m_player->GetPositionY() - shrine.spot.y, m_player->GetPositionX() - shrine.spot.x) + M_PI_F;
-                float x = shrine.spot.x + BONK_STONE_BOSS_DISTANCE * std::cos(angle);
-                float y = shrine.spot.y + BONK_STONE_BOSS_DISTANCE * std::sin(angle);
-                float z = m_player->GetMap()->GetHeight(x, y, shrine.spot.z + 5.0f, true, 15.0f);
-                if (z <= INVALID_HEIGHT)
-                {
-                    x = shrine.spot.x;
-                    y = shrine.spot.y;
-                    z = shrine.spot.z;
-                }
-                QueueSummon(creature, x, y, z, 0, ObjectGuid(), true, true);
-                RemoveShrine(i);
+                if (summoner && summoner->SummonBossAtStone(shrine.spot, m_player))
+                    RemoveShrine(i);
                 break;
             }
             default:
@@ -554,6 +544,37 @@ void BonkRun::UseShrine(GameObject* go)
         }
         return;
     }
+}
+
+std::vector<Player*> BonkRun::NoticeGroup(bool wholeGroup) const
+{
+    return wholeGroup ? BonkCoop::RunGroupOf(m_player) : std::vector<Player*>{ m_player };
+}
+
+bool BonkRun::SummonBossAtStone(BonkSpot const& stone, Player* user)
+{
+    if (m_state != STATE_RUNNING)
+        return false;
+    if (m_bossSpawned)
+    {
+        user->GetBonkPlayer()->Notify(BONK_STRING_BOSS_IS_ALREADY_HERE);
+        return false;
+    }
+    BonkMapCreature const* creature = PickCreature(BONK_SPAWN_BOSS);
+    if (!creature)
+        return false;
+    float const angle = std::atan2(user->GetPositionY() - stone.y, user->GetPositionX() - stone.x) + M_PI_F;
+    float x = stone.x + BONK_STONE_BOSS_DISTANCE * std::cos(angle);
+    float y = stone.y + BONK_STONE_BOSS_DISTANCE * std::sin(angle);
+    float z = m_player->GetMap()->GetHeight(x, y, stone.z + 5.0f, true, 15.0f);
+    if (z <= INVALID_HEIGHT)
+    {
+        x = stone.x;
+        y = stone.y;
+        z = stone.z;
+    }
+    QueueSummon(creature, x, y, z, 0, ObjectGuid(), true, true);
+    return true;
 }
 
 void BonkRun::QueueSummon(BonkMapCreature const* creature, float x, float y, float z, uint32 affixes, ObjectGuid const& altar, bool boss,
@@ -590,8 +611,9 @@ void BonkRun::UpdatePendingSummons(uint32 diff)
             PlayKitAt(ObjectGuid(), itr->x, itr->y, itr->z, BONK_KIT_SUMMON_CIRCLE, true);
             int32 const seconds = (itr->leftMs + IN_MILLISECONDS - 1) / IN_MILLISECONDS;
             if (itr->countdown)
-                bonk->Notify(itr->boss ? BONK_STRING_SUMMONS_ANSWERED_ARRIVES_IN : BONK_STRING_ALTAR_GUARDIANS_ARRIVE_IN,
-                    { GetString(seconds == 1 ? BONK_STRING_DURATION_SECOND : BONK_STRING_DURATION_SECONDS, { std::to_string(seconds) }) });
+                for (Player* member : NoticeGroup(itr->boss))
+                    member->GetBonkPlayer()->Notify(itr->boss ? BONK_STRING_SUMMONS_ANSWERED_ARRIVES_IN : BONK_STRING_ALTAR_GUARDIANS_ARRIVE_IN,
+                        { member->GetBonkPlayer()->GetString(seconds == 1 ? BONK_STRING_DURATION_SECOND : BONK_STRING_DURATION_SECONDS, { std::to_string(seconds) }) });
         }
         itr->leftMs -= int32(diff);
         if (itr->leftMs > 0)
@@ -620,7 +642,8 @@ void BonkRun::UpdatePendingSummons(uint32 diff)
         }
         mob->CastSpell(mob, BONK_SPELL_SUMMON_SMOKE, true);
         if (summon.boss)
-            bonk->Notify(BONK_STRING_SUMMONED_ANSWERS, { bonk->GetLocalName(mob) });
+            for (Player* member : NoticeGroup(true))
+                member->GetBonkPlayer()->Notify(BONK_STRING_SUMMONED_ANSWERS, { member->GetBonkPlayer()->GetLocalName(mob) });
         if (summon.altar.IsEmpty())
             continue;
         for (Shrine& shrine : m_shrines)

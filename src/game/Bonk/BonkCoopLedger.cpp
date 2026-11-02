@@ -31,6 +31,11 @@ namespace
 {
     char const* const INBOX_FILE = "coop/ledger.in";
     char const* const INBOX_ANSWER_FILE = "coop/ledger.answer";
+    char const* const ONLINE_GUESTS_FILE = "coop/guests-online.txt";
+    char const* const LEAVE_FILE = "coop/leave.req";
+    char const* const LEAVE_WORK_FILE = "coop/leave.work";
+    time_t const GUEST_REMOVE_SECONDS = 10;
+    time_t const LEDGER_KEEP_SECONDS = 300;
     size_t const MAX_GAME_LENGTH = 64;
     uint32 const GUEST_SYNC_MS = 5000;
     uint32 const HOME_MAIL_SENDER = 900009;
@@ -121,6 +126,25 @@ namespace
         return true;
     }
 
+    GameBudget BudgetOf(HomeTarget const& home)
+    {
+        std::lock_guard<std::mutex> guard(s_budgetLock);
+        return s_budgets[std::to_string(home.accountId) + ":" + home.game];
+    }
+
+    void RestoreBudget(HomeTarget const& home, GameBudget const& budget)
+    {
+        std::lock_guard<std::mutex> guard(s_budgetLock);
+        s_budgets[std::to_string(home.accountId) + ":" + home.game] = budget;
+    }
+
+    void Credit(HomeTarget const& home, std::string const& kind, int64 amount)
+    {
+        std::lock_guard<std::mutex> guard(s_budgetLock);
+        int64& used = s_budgets[std::to_string(home.accountId) + ":" + home.game].used[kind];
+        used = std::max<int64>(0, used - amount);
+    }
+
     std::string OverLimit(std::string const& kind)
     {
         return "more " + kind + " than a session can earn";
@@ -139,9 +163,25 @@ namespace
     std::mutex s_outboxLock;
     std::map<std::string, uint32> s_lastSeq;
 
+    std::map<std::string, std::string> s_unwritten;
+
     std::string OutboxPath(std::string const& username)
     {
         return "coop/ledger-" + username + ".out";
+    }
+
+    void FlushOutbox(std::string const& username)
+    {
+        auto found = s_unwritten.find(username);
+        if (found == s_unwritten.end())
+            return;
+        std::ofstream out(OutboxPath(username), std::ios::binary | std::ios::app);
+        if (!out)
+            return;
+        out << found->second;
+        out.flush();
+        if (out)
+            s_unwritten.erase(found);
     }
 
     std::string AnswersPath(std::string const& username)
@@ -392,6 +432,56 @@ namespace
             out << ',' << uint32(line.effect) << ',' << line.roll;
         out << ",u" << found.upgrades;
         return out.str();
+    }
+
+    std::string ApplyMailItemTaken(HomeTarget const& home, std::vector<std::string> const& fields)
+    {
+        uint32 mailId = 0, itemGuid = 0, entry = 0;
+        if (!ReadCount(fields, 2, mailId) || !ReadCount(fields, 3, itemGuid) || !ReadCount(fields, 4, entry))
+            return "broken mail item entry";
+        if (!home.characterGuid)
+            return "no home character";
+        std::unique_ptr<QueryResult> found(CharacterDatabase.PQuery(
+            "SELECT 1 FROM `mail_items` mi JOIN `mail` m ON m.`id` = mi.`mail_id` WHERE mi.`mail_id` = %u AND mi.`item_guid` = %u AND mi.`item_id` = %u AND m.`receiver_guid` = %u",
+            mailId, itemGuid, entry, home.characterGuid));
+        if (!found)
+            return "that mail item is no longer in the home mailbox";
+        CharacterDatabase.PExecute("DELETE FROM `mail_items` WHERE `item_guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `item_instance` WHERE `guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `bonk_item_found` WHERE `item_guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("UPDATE `mail` SET `has_items` = (SELECT COUNT(*) > 0 FROM `mail_items` WHERE `mail_id` = %u) WHERE `id` = %u", mailId, mailId);
+        CharacterDatabase.PExecute("INSERT INTO `bonk_coop_mail_taken` (`character_guid`, `item_id`) VALUES (%u, %u)", home.characterGuid, entry);
+        return "";
+    }
+
+    std::string ApplyMailMoneyTaken(HomeTarget const& home, std::vector<std::string> const& fields)
+    {
+        uint32 mailId = 0, money = 0;
+        if (!ReadCount(fields, 2, mailId) || !ReadCount(fields, 3, money) || !money)
+            return "broken mail money entry";
+        if (!home.characterGuid)
+            return "no home character";
+        std::unique_ptr<QueryResult> found(CharacterDatabase.PQuery(
+            "SELECT `money` FROM `mail` WHERE `id` = %u AND `receiver_guid` = %u", mailId, home.characterGuid));
+        if (!found || found->Fetch()[0].GetUInt32() < money)
+            return "that mail's gold is no longer in the home mailbox";
+        CharacterDatabase.PExecute("UPDATE `mail` SET `money` = `money` - %u WHERE `id` = %u", money, mailId);
+        Credit(home, "gold", money);
+        return "";
+    }
+
+    std::multiset<uint32> TakenFromMail(uint32 characterGuid)
+    {
+        std::multiset<uint32> entries;
+        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
+            "SELECT `item_id` FROM `bonk_coop_mail_taken` WHERE `character_guid` = %u", characterGuid));
+        if (result)
+        {
+            do
+                entries.insert(result->Fetch()[0].GetUInt32());
+            while (result->NextRow());
+        }
+        return entries;
     }
 
     std::string ApplyMail(HomeTarget const& home, std::vector<std::string> const& fields)
@@ -681,13 +771,21 @@ namespace
             }
         }
         std::set<uint32> const owned = HomeCarriedEntries(home.characterGuid);
+        std::multiset<uint32> fromMail = TakenFromMail(home.characterGuid);
         uint32 const tierCap = TierCap(home);
         std::vector<CarriedItem> allowed;
         for (CarriedItem const& item : carried)
         {
             ItemPrototype const* proto = sObjectMgr.GetItemPrototype(item.entry);
             BonkFoundGear found;
-            bool const familiar = owned.count(item.entry) || BonkMgr::GetGearTier(item.entry) || proto->Class == ITEM_CLASS_CONTAINER;
+            bool familiar = owned.count(item.entry) || BonkMgr::GetGearTier(item.entry) || proto->Class == ITEM_CLASS_CONTAINER;
+            auto const mailed = fromMail.find(item.entry);
+            if (!familiar && mailed != fromMail.end())
+            {
+                familiar = true;
+                fromMail.erase(mailed);
+                CharacterDatabase.PExecute("DELETE FROM `bonk_coop_mail_taken` WHERE `character_guid` = %u AND `item_id` = %u LIMIT 1", home.characterGuid, item.entry);
+            }
             bool const tooMany = item.count > std::max(1u, proto->Stackable);
             bool const tooHigh = item.found != "-" && ReadFound(item.found, found) && found.tier > tierCap;
             if (familiar && !tooMany && !tooHigh)
@@ -748,6 +846,10 @@ namespace
         std::string const& kind = fields[1];
         if (kind == "inventory")
             return ApplyInventory(home, fields);
+        if (kind == "mailitem")
+            return ApplyMailItemTaken(home, fields);
+        if (kind == "mailmoney")
+            return ApplyMailMoneyTaken(home, fields);
         if (kind == "rows")
             return ApplyRows(home, fields);
         if (kind == "gold")
@@ -836,8 +938,11 @@ namespace
         std::string name = character;
         CharacterDatabase.escape_string(name);
         std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `guid` FROM `characters` WHERE `name` = '%s' AND `account` = %u", name.c_str(), home.accountId));
-        if (result)
-            home.characterGuid = result->Fetch()[0].GetUInt32();
+        if (!result)
+            return home;
+        home.characterGuid = result->Fetch()[0].GetUInt32();
+        if (std::unique_ptr<QueryResult> ironman{ CharacterDatabase.PQuery("SELECT 1 FROM `bonk_ironman` WHERE `guid` = %u", home.characterGuid) })
+            home.accountId = BonkPlayer::GetIronmanAccount(home.characterGuid);
         return home;
     }
 
@@ -868,17 +973,22 @@ namespace
             sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op ledger: account %u refused entry %u (%s)", accountId, seq, problem.c_str());
             return prefix + "refused\t" + problem + "\n";
         }
+        GameBudget const budgetBefore = BudgetOf(home);
         CharacterDatabase.BeginTransaction();
         std::string const problem = ApplyEntry(home, fields);
         if (!problem.empty())
         {
             CharacterDatabase.RollbackTransaction();
+            RestoreBudget(home, budgetBefore);
             sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op ledger: account %u refused entry %u (%s)", accountId, seq, problem.c_str());
             return prefix + "refused\t" + problem + "\n";
         }
         CharacterDatabase.PExecute("INSERT INTO `bonk_coop_applied` (`account`, `game`, `seq`) VALUES (%u, '%s', %u)", accountId, game.c_str(), seq);
         if (!CharacterDatabase.CommitTransactionDirect())
+        {
+            RestoreBudget(home, budgetBefore);
             return prefix + "retry\n";
+        }
         return prefix + "ok\n";
     }
 
@@ -889,8 +999,11 @@ namespace
             std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
             out << text;
         }
-        std::remove(path.c_str());
+#if PLATFORM == PLATFORM_WINDOWS
+        MoveFileExA(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+#else
         std::rename(temporary.c_str(), path.c_str());
+#endif
     }
 
     std::string ReadWhole(std::string const& path)
@@ -926,6 +1039,73 @@ namespace
         return answers;
     }
 
+    struct Leaving
+    {
+        time_t offlineSince = 0;
+        bool loggingOut = false;
+        bool removed = false;
+    };
+
+    std::map<std::string, Leaving> s_leaving;
+
+    bool IsGuestName(std::string const& username)
+    {
+        return username.compare(0, 4, "HOAC") == 0 && username.size() <= 32 &&
+            username.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == std::string::npos;
+    }
+
+    void LeaveAllGuests()
+    {
+        std::unique_ptr<QueryResult> result(LoginDatabase.Query("SELECT `username` FROM `account` WHERE `username` LIKE 'HOAC%'"));
+        uint32 count = 0;
+        if (result)
+        {
+            do
+            {
+                std::string const username = result->Fetch()[0].GetCppString();
+                if (IsGuestName(username) && s_leaving.emplace(username, Leaving()).second)
+                    ++count;
+            }
+            while (result->NextRow());
+        }
+        if (count)
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: a new hosting session removes %u guest accounts left from before", count);
+    }
+
+    void ReadLeaveRequests()
+    {
+        std::remove(LEAVE_WORK_FILE);
+        if (std::rename(LEAVE_FILE, LEAVE_WORK_FILE) != 0)
+            return;
+        std::istringstream in(ReadWhole(LEAVE_WORK_FILE));
+        std::remove(LEAVE_WORK_FILE);
+        std::string username;
+        while (in >> username)
+        {
+            if (username == "*")
+                LeaveAllGuests();
+            else if (IsGuestName(username))
+                s_leaving.emplace(username, Leaving());
+        }
+    }
+
+    void LogOutIfLeaving(Player* guest, std::string const& username)
+    {
+        auto found = s_leaving.find(username);
+        if (found == s_leaving.end())
+            return;
+        found->second.offlineSince = 0;
+        if (found->second.loggingOut)
+            return;
+        found->second.loggingOut = true;
+        WorldSession* session = guest->GetSession();
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s left the party, logging out now", guest->GetName());
+        if (!session->IsConnected())
+            session->KickDisconnectedFromWorld();
+        else if (!session->IsLogingOut())
+            session->LogoutRequest(time(nullptr) - 20);
+    }
+
     void ReadAnswers(std::string const& username)
     {
         std::string const path = AnswersPath(username);
@@ -956,8 +1136,8 @@ void BonkCoop::Record(Player const* guest, std::string const& entry)
     auto found = s_lastSeq.find(username);
     uint32 const seq = (found == s_lastSeq.end() ? LastSeqInFile(path) : found->second) + 1;
     s_lastSeq[username] = seq;
-    std::ofstream out(path, std::ios::binary | std::ios::app);
-    out << seq << '\t' << entry << '\n';
+    s_unwritten[username] += std::to_string(seq) + "\t" + entry + "\n";
+    FlushOutbox(username);
 }
 
 void BonkCoop::SyncGuest(Player* guest)
@@ -995,6 +1175,64 @@ void BonkCoop::RecordMail(Player const* guest, uint32 entry, std::string const& 
     Record(guest, "mail\t" + std::to_string(entry) + "\t" + Escape(subject) + "\t" + Escape(body) + "\t" + (found ? WriteFound(*found) : std::string("-")));
 }
 
+namespace
+{
+    struct HomeMailItemLink
+    {
+        uint32 mail = 0;
+        uint32 item = 0;
+    };
+
+    std::mutex s_homeMailLock;
+    std::map<uint32, uint32> s_homeMails;
+    std::map<uint32, HomeMailItemLink> s_homeMailItems;
+}
+
+void BonkCoop::RememberHomeMail(uint32 hostMail, uint32 homeMail)
+{
+    std::lock_guard<std::mutex> guard(s_homeMailLock);
+    s_homeMails[hostMail] = homeMail;
+}
+
+void BonkCoop::RememberHomeMailItem(uint32 hostItem, uint32 homeMail, uint32 homeItem)
+{
+    std::lock_guard<std::mutex> guard(s_homeMailLock);
+    s_homeMailItems[hostItem] = HomeMailItemLink{ homeMail, homeItem };
+}
+
+void BonkCoop::OnMailItemTaken(Player const* guest, uint32 hostMail, uint32 hostItem, uint32 entry)
+{
+    if (!IsGuestAccount(guest))
+        return;
+    HomeMailItemLink link;
+    {
+        std::lock_guard<std::mutex> guard(s_homeMailLock);
+        auto found = s_homeMailItems.find(hostItem);
+        if (found == s_homeMailItems.end())
+            return;
+        link = found->second;
+        s_homeMailItems.erase(found);
+    }
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s took item %u from home mail %u", guest->GetName(), entry, link.mail);
+    Record(guest, "mailitem\t" + std::to_string(link.mail) + "\t" + std::to_string(link.item) + "\t" + std::to_string(entry));
+}
+
+void BonkCoop::OnMailMoneyTaken(Player const* guest, uint32 hostMail, uint32 money)
+{
+    if (!IsGuestAccount(guest) || !money)
+        return;
+    uint32 homeMail = 0;
+    {
+        std::lock_guard<std::mutex> guard(s_homeMailLock);
+        auto found = s_homeMails.find(hostMail);
+        if (found == s_homeMails.end())
+            return;
+        homeMail = found->second;
+    }
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s took %u copper from home mail %u", guest->GetName(), money, homeMail);
+    Record(guest, "mailmoney\t" + std::to_string(homeMail) + "\t" + std::to_string(money));
+}
+
 void BonkCoop::RecordLevel(Player const* guest, uint32 classId, uint32 bestLevel, uint32 bestMs, uint32 finale)
 {
     Record(guest, "level	" + std::to_string(classId) + "	" + std::to_string(bestLevel) + "	" + std::to_string(bestMs) + "	" + std::to_string(finale));
@@ -1020,6 +1258,45 @@ bool BonkCoop::IsPlayingElsewhere(std::string const& username)
     return time(nullptr) - time_t(stamp) < AWAY_FRESH_SECONDS;
 }
 
+namespace
+{
+    void RemoveLedgerFiles(std::string const& username)
+    {
+        std::remove(OutboxPath(username).c_str());
+        std::remove(AnswersPath(username).c_str());
+        s_lastSeq.erase(username);
+    }
+
+    void RemoveLeftGuests(std::set<std::string> const& present)
+    {
+        time_t const now = time(nullptr);
+        for (auto itr = s_leaving.begin(); itr != s_leaving.end();)
+        {
+            Leaving& leaving = itr->second;
+            if (present.count(itr->first))
+            {
+                ++itr;
+                continue;
+            }
+            if (!leaving.offlineSince)
+                leaving.offlineSince = now;
+            if (!leaving.removed && now - leaving.offlineSince >= GUEST_REMOVE_SECONDS)
+            {
+                BonkCoop::DeleteGuestAccount(itr->first);
+                leaving.removed = true;
+            }
+            std::lock_guard<std::mutex> guard(s_outboxLock);
+            if (leaving.removed && now - leaving.offlineSince >= LEDGER_KEEP_SECONDS && !s_unwritten.count(itr->first))
+            {
+                RemoveLedgerFiles(itr->first);
+                itr = s_leaving.erase(itr);
+                continue;
+            }
+            ++itr;
+        }
+    }
+}
+
 void BonkCoop::UpdateLedger()
 {
     std::ifstream probe(INBOX_FILE, std::ios::binary);
@@ -1034,13 +1311,32 @@ void BonkCoop::UpdateLedger()
     bool const syncGuests = s_guestTimer >= GUEST_SYNC_MS;
     if (syncGuests)
         s_guestTimer = 0;
+    ReadLeaveRequests();
+    std::set<std::string> present;
+    std::string online;
+    {
+        std::lock_guard<std::mutex> guard(s_outboxLock);
+        std::vector<std::string> waiting;
+        for (auto const& unwritten : s_unwritten)
+            waiting.push_back(unwritten.first);
+        for (std::string const& username : waiting)
+            FlushOutbox(username);
+        for (auto const& unwritten : s_unwritten)
+            online += unwritten.first + "\n";
+    }
     for (auto const& entry : sObjectAccessor.GetPlayers())
     {
         Player* player = entry.second;
         if (!player || !IsGuestAccount(player))
             continue;
+        std::string const username = player->GetSession()->GetUsername();
+        online += username + "\n";
         if (syncGuests && player->IsInWorld())
             SyncGuest(player);
-        ReadAnswers(player->GetSession()->GetUsername());
+        ReadAnswers(username);
+        present.insert(username);
+        LogOutIfLeaving(player, username);
     }
+    WriteWhole(ONLINE_GUESTS_FILE, online);
+    RemoveLeftGuests(present);
 }

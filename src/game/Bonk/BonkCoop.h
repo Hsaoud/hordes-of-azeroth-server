@@ -38,6 +38,7 @@ namespace BonkCoop
     void SetSharedPause(Player* host, bool shared);
     void SetSharedXp(Player* host, bool shared);
     void DeleteGuestAccounts();
+    bool DeleteGuestAccount(std::string const& username);
     void Update(uint32 diff);
     bool RequestGroupStart(Player* host, BonkTier const& tier, BonkRunChoice const& choice);
     void AnswerReady(Player* player, bool ready);
@@ -74,6 +75,11 @@ namespace BonkCoop
     void SyncGuest(Player* guest);
     void ForgetGuest(Player const* guest);
     void RecordMail(Player const* guest, uint32 entry, std::string const& subject, std::string const& body, BonkFoundGear const* found);
+    void RememberHomeMail(uint32 hostMail, uint32 homeMail);
+    void LinkHomeMail(Player const* guest);
+    void RememberHomeMailItem(uint32 hostItem, uint32 homeMail, uint32 homeItem);
+    void OnMailItemTaken(Player const* guest, uint32 hostMail, uint32 hostItem, uint32 entry);
+    void OnMailMoneyTaken(Player const* guest, uint32 hostMail, uint32 money);
     void RecordLevel(Player const* guest, uint32 classId, uint32 bestLevel, uint32 bestMs, uint32 finale);
     void RecordLevelBest(Player const* guest, uint32 classId, BonkPlayer::LevelRun const& run);
     void RecordFinaleBest(Player const* guest, uint32 classId, uint32 level, uint32 score, uint32 seconds);

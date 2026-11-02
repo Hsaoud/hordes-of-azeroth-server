@@ -36,6 +36,8 @@
 #include "Spell.h"
 #include "Chat.h"
 #include "CharacterDatabaseCache.h"
+#include "Bonk/BonkCoop.h"
+#include "Bonk/BonkStrings.h"
 
 enum StableResultCode
 {
@@ -72,6 +74,12 @@ void WorldSession::HandleBankerActivateOpcode(WorldPackets::Npc::BankerActivate 
 {
     if (!CheckBanker(packet.guid))
         return;
+
+    if (BonkCoop::IsGuestAccount(GetPlayer()))
+    {
+        GetPlayer()->GetBonkPlayer()->Notify(BONK_STRING_COOP_BANK_AT_HOME);
+        return;
+    }
 
     // remove fake death
     if (GetPlayer()->HasUnitState(UNIT_STATE_FEIGN_DEATH))

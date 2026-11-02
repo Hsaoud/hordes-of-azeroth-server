@@ -1,4 +1,5 @@
 #include "BonkCoop.h"
+#include "BonkPlayer.h"
 
 #include "AccountMgr.h"
 #include "Database/DatabaseEnv.h"
@@ -12,6 +13,8 @@
 #include <cstring>
 #include <set>
 #include <fstream>
+#include <map>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -272,13 +275,12 @@ namespace
         return line.compare(0, 13 + strlen(table) + 1, std::string("INSERT INTO `") + table + "`") == 0;
     }
 
-    std::string StripBank(std::string const& dump)
+    std::string StripHomeOnly(std::string const& dump)
     {
         std::set<std::string> bankBags;
         std::set<std::string> bankItems;
         std::istringstream first(dump);
         std::string line;
-        std::vector<std::vector<std::string>> inventory;
         while (std::getline(first, line))
         {
             if (!IsDumpOf(line, "character_inventory"))
@@ -306,7 +308,7 @@ namespace
         while (std::getline(third, line))
         {
             std::vector<std::string> const values = DumpValues(line);
-            bool drop = false;
+            bool drop = IsDumpOf(line, "bonk_ironman");
             if (IsDumpOf(line, "character_inventory"))
                 drop = values.size() >= 4 && bankItems.count(values[3]);
             else if (IsDumpOf(line, "item_instance") || IsDumpOf(line, "bonk_item_found"))
@@ -317,10 +319,152 @@ namespace
         return kept.str();
     }
 
+    std::vector<std::string> DumpFields(std::string const& line)
+    {
+        std::vector<std::string> fields;
+        size_t at = line.find("VALUES (");
+        if (at == std::string::npos)
+            return fields;
+        at += 8;
+        while (at < line.size())
+        {
+            while (at < line.size() && (line[at] == ' ' || line[at] == ','))
+                ++at;
+            if (at >= line.size() || line[at] == ')')
+                break;
+            if (line.compare(at, 4, "NULL") == 0)
+            {
+                fields.push_back("");
+                at += 4;
+                continue;
+            }
+            if (line[at] != '\'')
+                break;
+            std::string value;
+            for (++at; at < line.size() && line[at] != '\''; ++at)
+            {
+                if (line[at] == '\\' && at + 1 < line.size())
+                    ++at;
+                value += line[at];
+            }
+            fields.push_back(value);
+            ++at;
+        }
+        return fields;
+    }
+
+    struct HomeMailItem
+    {
+        uint32 guid = 0;
+        uint32 entry = 0;
+    };
+
+    struct HomeMail
+    {
+        uint32 id = 0;
+        std::string expires;
+        std::string delivers;
+        std::string money;
+        std::vector<HomeMailItem> items;
+    };
+
+    size_t const MAIL_ID = 0;
+    size_t const MAIL_EXPIRE = 9;
+    size_t const MAIL_DELIVER = 10;
+    size_t const MAIL_MONEY = 11;
+    size_t const MAIL_ITEM_MAIL = 0;
+    size_t const MAIL_ITEM_GUID = 1;
+    size_t const MAIL_ITEM_ENTRY = 2;
+
+    std::vector<HomeMail> ReadHomeMail(std::string const& dump)
+    {
+        std::vector<HomeMail> mails;
+        std::istringstream in(dump);
+        std::string line;
+        while (std::getline(in, line))
+        {
+            if (IsDumpOf(line, "mail"))
+            {
+                std::vector<std::string> const fields = DumpFields(line);
+                if (fields.size() <= MAIL_MONEY)
+                    continue;
+                HomeMail mail;
+                mail.id = uint32(std::strtoul(fields[MAIL_ID].c_str(), nullptr, 10));
+                mail.expires = fields[MAIL_EXPIRE];
+                mail.delivers = fields[MAIL_DELIVER];
+                mail.money = fields[MAIL_MONEY];
+                mails.push_back(mail);
+            }
+            else if (IsDumpOf(line, "mail_items"))
+            {
+                std::vector<std::string> const fields = DumpFields(line);
+                if (fields.size() <= MAIL_ITEM_ENTRY)
+                    continue;
+                uint32 const mailId = uint32(std::strtoul(fields[MAIL_ITEM_MAIL].c_str(), nullptr, 10));
+                for (HomeMail& mail : mails)
+                    if (mail.id == mailId)
+                        mail.items.push_back(HomeMailItem{ uint32(std::strtoul(fields[MAIL_ITEM_GUID].c_str(), nullptr, 10)),
+                            uint32(std::strtoul(fields[MAIL_ITEM_ENTRY].c_str(), nullptr, 10)) });
+            }
+        }
+        return mails;
+    }
+
+    std::mutex s_pendingMailLock;
+    std::map<std::string, std::vector<HomeMail>> s_pendingMail;
+
+    void RememberHomeMail(std::vector<HomeMail> const& homeMails, uint32 hostCharacter)
+    {
+        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
+            "SELECT `id`, `expire_time`, `deliver_time`, `money` FROM `mail` WHERE `receiver_guid` = %u ORDER BY `id`", hostCharacter));
+        if (!result)
+            return;
+        size_t index = 0;
+        uint32 linked = 0;
+        do
+        {
+            Field* fields = result->Fetch();
+            if (index >= homeMails.size())
+                break;
+            HomeMail const& home = homeMails[index++];
+            if (fields[1].GetCppString() != home.expires || fields[2].GetCppString() != home.delivers || fields[3].GetCppString() != home.money)
+                continue;
+            uint32 const hostMail = fields[0].GetUInt32();
+            BonkCoop::RememberHomeMail(hostMail, home.id);
+            ++linked;
+            std::vector<HomeMailItem> unmatched = home.items;
+            std::unique_ptr<QueryResult> items(CharacterDatabase.PQuery(
+                "SELECT `item_guid`, `item_id` FROM `mail_items` WHERE `mail_id` = %u ORDER BY `item_guid`", hostMail));
+            if (!items)
+                continue;
+            do
+            {
+                uint32 const hostItem = items->Fetch()[0].GetUInt32();
+                uint32 const entry = items->Fetch()[1].GetUInt32();
+                for (auto itr = unmatched.begin(); itr != unmatched.end(); ++itr)
+                {
+                    if (itr->entry != entry)
+                        continue;
+                    BonkCoop::RememberHomeMailItem(hostItem, home.id, itr->guid);
+                    unmatched.erase(itr);
+                    break;
+                }
+            }
+            while (items->NextRow());
+        }
+        while (result->NextRow());
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op transfer: %u of %u home mails linked for character %u", linked, uint32(homeMails.size()), hostCharacter);
+    }
+
     bool CharacterRowExists(uint32 guid)
     {
         std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT 1 FROM `characters` WHERE `guid` = %u", guid));
         return result != nullptr;
+    }
+
+    uint32 ProgressAccountOf(uint32 guid, uint32 accountId)
+    {
+        return IsIronman(guid) ? BonkPlayer::GetIronmanAccount(guid) : accountId;
     }
 
     std::string WriteExport(uint32 low)
@@ -328,7 +472,7 @@ namespace
         uint32 const accountId = AccountOfCharacter(low);
         PlayerDumpWriter writer;
         WriteFile(DUMP_FILE, writer.GetDump(low));
-        WriteFile(ACCOUNT_FILE, ExportAccountRows(accountId));
+        WriteFile(ACCOUNT_FILE, ExportAccountRows(ProgressAccountOf(low, accountId)));
         return "ok " + std::to_string(low) + " " + std::to_string(accountId);
     }
 
@@ -337,8 +481,6 @@ namespace
         uint32 const low = GuidOfName(name);
         if (!low)
             return "error There is no character called " + name + ".";
-        if (IsIronman(low))
-            return "error Ironman characters play solo only.";
         if (Player* online = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, low)))
         {
             online->SaveToDB();
@@ -352,11 +494,16 @@ namespace
 
     std::string Load(uint32 accountId, std::string const& name, uint32 guid)
     {
-        WriteFile(DUMP_FILE, StripBank(ReadFile(DUMP_FILE)));
+        std::string const dump = StripHomeOnly(ReadFile(DUMP_FILE));
+        WriteFile(DUMP_FILE, dump);
         PlayerDumpReader reader;
         DumpReturn const loaded = reader.LoadDump(DUMP_FILE, accountId, name, guid);
         if (loaded != DUMP_SUCCESS)
             return "error The character couldn't be loaded (" + std::to_string(uint32(loaded)) + ").";
+        {
+            std::lock_guard<std::mutex> guard(s_pendingMailLock);
+            s_pendingMail[name] = ReadHomeMail(dump);
+        }
         if (!ImportAccountRows(ReadFile(ACCOUNT_FILE), accountId))
             return "error The account progress couldn't be loaded.";
         return "ok 0 " + name;
@@ -471,4 +618,18 @@ void BonkCoop::Update(uint32 diff)
         return;
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op transfer: %s", answer.c_str());
     WriteFile(ANSWER_FILE, answer);
+}
+
+void BonkCoop::LinkHomeMail(Player const* guest)
+{
+    std::vector<HomeMail> mails;
+    {
+        std::lock_guard<std::mutex> guard(s_pendingMailLock);
+        auto found = s_pendingMail.find(guest->GetName());
+        if (found == s_pendingMail.end())
+            return;
+        mails.swap(found->second);
+        s_pendingMail.erase(found);
+    }
+    RememberHomeMail(mails, guest->GetGUIDLow());
 }

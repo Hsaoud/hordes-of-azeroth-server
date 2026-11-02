@@ -33,6 +33,7 @@
 #include "SocialMgr.h"
 #include "Util.h"
 #include "Bonk/BonkCoop.h"
+#include "Bonk/BonkStrings.h"
 
 /* differeces from off:
     -you can uninvite yourself - is is useful
@@ -325,6 +326,12 @@ void WorldSession::HandleGroupDisbandOpcode(NullClientPacket const& /*packet*/)
 
     if (_player->InBattleGround())
         return;
+
+    if (BonkCoop::IsInCoopGroup(_player))
+    {
+        _player->GetBonkPlayer()->Notify(BONK_STRING_COOP_LEAVE_FROM_MENU);
+        return;
+    }
 
     /** error handling **/
     /********************/

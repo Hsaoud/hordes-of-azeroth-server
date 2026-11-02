@@ -167,6 +167,8 @@ class BonkRun
         bool PlaceDropLooksNow(std::string& error);
         void ClearDropLooks();
         void UseShrine(GameObject* go);
+        bool SummonBossAtStone(BonkSpot const& stone, Player* user);
+        std::vector<Player*> NoticeGroup(bool wholeGroup) const;
         bool PickLeyBuff(uint32 index, std::string& error);
         void SendLeyBlessings() const;
         uint32 GetGreedRewardPercent() const;

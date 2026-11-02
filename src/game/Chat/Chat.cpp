@@ -283,6 +283,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "notice",         SEC_PLAYER,         false, &ChatHandler::HandleBonkNoticeCommand,          "", nullptr },
         { "board",          SEC_GAMEMASTER,     false, &ChatHandler::HandleBonkBoardCommand,           "", nullptr },
         { "joinboard",      SEC_PLAYER,         false, &ChatHandler::HandleBonkBoardJoinCommand,       "", nullptr },
+        { "boardpage",      SEC_PLAYER,         false, &ChatHandler::HandleBonkBoardPageCommand,       "", nullptr },
         { "strings",        SEC_ADMINISTRATOR,  true,  nullptr,                                        "", bonkStringsCommandTable },
         { "quests",        SEC_PLAYER,         false, &ChatHandler::HandleBonkQuestsCommand,          "", nullptr },
         { "codex",          SEC_PLAYER,         false, &ChatHandler::HandleBonkCodexCommand,           "", nullptr },

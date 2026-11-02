@@ -42,6 +42,7 @@
 #include "AccountMgr.h"
 #include "TransactionLog.h"
 #include "Database/DatabaseImpl.h"
+#include "Bonk/BonkCoop.h"
 
 void WorldSession::SendMailResult(uint32 mailId, MailResponseType mailAction, MailResponseResult mailError, uint32 equipError, uint32 item_guid, uint32 item_count)
 {
@@ -669,6 +670,7 @@ void WorldSession::HandleMailTakeItem(WorldPackets::Mail::MailTakeItem const& pa
         pl->SaveMails();
         CharacterDatabase.CommitTransaction();
 
+        BonkCoop::OnMailItemTaken(loadedPlayer, packet.mailId, itemGuid, itemId);
         SendMailResult(packet.mailId, MAIL_ITEM_TAKEN, MAIL_OK, 0, itemId, count);
     }
     else
@@ -703,6 +705,7 @@ void WorldSession::HandleMailTakeMoney(WorldPackets::Mail::MailTakeMoney const& 
     SendMailResult(packet.mailId, MAIL_MONEY_TAKEN, MAIL_OK);
 
     loadedPlayer->LogModifyMoney(m->money, "Mail", ObjectGuid(HIGHGUID_PLAYER, m->sender));
+    BonkCoop::OnMailMoneyTaken(loadedPlayer, packet.mailId, m->money);
     m->money = 0;
     m->state = MAIL_STATE_CHANGED;
     pl->MarkMailsUpdated();
