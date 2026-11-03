@@ -65,7 +65,7 @@ namespace
     float const BONK_PENANCE_HEAL             = 0.5f;
     float const BONK_PENANCE_BOLT_SPEED       = 30.0f;
     int32 const BONK_PENANCE_BOLT_GAP_MS      = 250;
-    float const BONK_ATONEMENT_CAP            = 10.0f;
+    float const BONK_ATONEMENT_CAP            = 6.0f;
     int32 const BONK_FEAR_MS                  = 2000;
     int32 const BONK_SHACKLE_MS               = 2000;
     uint32 const BONK_SHACKLE_IMMUNE_MS       = 6000;
@@ -86,7 +86,7 @@ namespace
     uint32 const BONK_DIVINE_HYMN_RINGS       = 3;
     float const BONK_LIGHTS_EDGE_BONUS        = 1.0f;
     float const BONK_SANCTIFY_SHARE           = 0.5f;
-    float const BONK_SANCTIFY_HEAL            = 5.0f;
+    float const BONK_SANCTIFY_HEAL            = 3.0f;
     uint32 const BONK_BARRIER_MS              = 5000;
     float const BONK_BARRIER_TAKEN            = 0.75f;
     uint32 const BONK_RAPTURE_BOLTS           = 2;

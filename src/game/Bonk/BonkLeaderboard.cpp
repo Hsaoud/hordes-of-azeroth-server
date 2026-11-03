@@ -23,6 +23,7 @@ namespace
     uint32 const PAGE_ROWS = 50;
     uint32 const SOLO_VIEW = 1;
     uint32 const LAST_GROUP_VIEW = 4;
+    uint32 const FREE_CLIMB_LEVEL = 49;
 
     struct Row
     {
@@ -57,7 +58,7 @@ namespace
         for (char c : line)
             if (static_cast<unsigned char>(c) < 0x20)
                 return false;
-        for (char const* kind : { "updated~", "season~", "solo~", "group~", "mine~", "local~", "cutoff~", "sync~" })
+        for (char const* kind : { "updated~", "season~", "solo~", "group~", "mine~", "local~", "cutoff~", "sync~", "climb~" })
             if (StartsWith(line, kind))
                 return true;
         return false;
@@ -205,6 +206,21 @@ namespace BonkLeaderboard
             bonk->SendAddon("boardrow~" + std::to_string(view) + "~" + std::to_string(classId) + "~" + std::to_string(position + 1) + "~" + rows[position]->line);
         bonk->SendAddon("boardpage~" + std::to_string(view) + "~" + std::to_string(classId) + "~" + std::to_string(offset) + "~" + std::to_string(total));
     }
+}
+
+uint32 BonkLeaderboard::GetClimbTop(uint32 characterGuid)
+{
+    std::lock_guard<std::mutex> guard(s_boardLock);
+    Refresh();
+    std::string const mine = "climb~" + std::to_string(characterGuid) + "~";
+    bool seasonKnown = false;
+    for (std::string const& line : s_board.header)
+    {
+        if (StartsWith(line, mine.c_str()))
+            return std::max(FREE_CLIMB_LEVEL, Number(Fields(line), 2));
+        seasonKnown = seasonKnown || StartsWith(line, "season~");
+    }
+    return seasonKnown ? FREE_CLIMB_LEVEL : 0;
 }
 
 bool GOHello_go_bonk_board(Player* player, GameObject* /*go*/)

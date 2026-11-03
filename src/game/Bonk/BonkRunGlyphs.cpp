@@ -117,7 +117,16 @@ BonkRarity BonkRun::RollGlyphRarity() const
 void BonkRun::OfferGlyphs()
 {
     --m_pendingGlyphPicks;
+    FillGlyphOffer({});
+    ++m_glyphPicksGiven;
+    if (m_glyphOffer.empty())
+        return;
+    SetPaused(true);
+    SendGlyphOffer();
+}
 
+void BonkRun::FillGlyphOffer(std::vector<uint32> const& avoid)
+{
     uint32 const account = m_player->GetBonkPlayer()->GetProgressAccount();
     std::vector<BonkGlyph const*> pool;
     for (auto const& itr : sBonkMgr.GetGlyphs())
@@ -128,6 +137,11 @@ void BonkRun::OfferGlyphs()
             continue;
         pool.push_back(&glyph);
     }
+    if (pool.size() >= avoid.size() + BONK_GLYPH_CHOICES)
+        pool.erase(std::remove_if(pool.begin(), pool.end(), [&avoid](BonkGlyph const* glyph)
+        {
+            return std::find(avoid.begin(), avoid.end(), glyph->id) != avoid.end();
+        }), pool.end());
 
     m_glyphOffer.clear();
     uint32 clean = 0;
@@ -150,12 +164,28 @@ void BonkRun::OfferGlyphs()
         m_glyphOffer.push_back(pool[chosen]->id);
         pool.erase(pool.begin() + chosen);
     }
+}
 
-    ++m_glyphPicksGiven;
+bool BonkRun::RerollGlyphs(std::string& error)
+{
     if (m_glyphOffer.empty())
-        return;
-    SetPaused(true);
+    {
+        error = GetString(BONK_STRING_THERE_IS_NOTHING_TO_REROLL);
+        return false;
+    }
+    if (!m_glyphRerolls)
+    {
+        error = GetString(BONK_STRING_NO_GLYPH_REROLLS_LEFT);
+        SendGlyphOffer();
+        return false;
+    }
+    --m_glyphRerolls;
+    std::vector<uint32> const previous = m_glyphOffer;
+    FillGlyphOffer(previous);
+    if (m_glyphOffer.empty())
+        m_glyphOffer = previous;
     SendGlyphOffer();
+    return true;
 }
 
 void BonkRun::SendGlyphOffer() const
@@ -163,7 +193,7 @@ void BonkRun::SendGlyphOffer() const
     BonkPlayer* bonk = m_player->GetBonkPlayer();
     if (bonk->IsAddonReady())
     {
-        bonk->SendAddon("glyphoffer~" + std::to_string(m_glyphPicksGiven) + "~" + std::to_string(m_glyphOffer.size()));
+        bonk->SendAddon("glyphoffer~" + std::to_string(m_glyphPicksGiven) + "~" + std::to_string(m_glyphOffer.size()) + "~" + std::to_string(m_glyphRerolls));
         for (size_t i = 0; i < m_glyphOffer.size(); ++i)
             bonk->SendAddon("glyphopt~" + std::to_string(i + 1) + "~" + std::to_string(m_glyphOffer[i]));
         bonk->SendAddon("glyphofferend");

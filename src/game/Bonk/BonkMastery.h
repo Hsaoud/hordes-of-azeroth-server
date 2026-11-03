@@ -185,6 +185,7 @@ enum BonkTalentSpecial : uint8
     BONK_SPECIAL_THAW_CHILL              = 116,
     BONK_SPECIAL_DEMON_CLEAVE            = 117,
     BONK_SPECIAL_ROOT_SPREAD             = 118,
+    BONK_SPECIAL_PENANCE_KILL_COOLDOWN   = 119,
     MAX_BONK_SPECIAL
 };
 

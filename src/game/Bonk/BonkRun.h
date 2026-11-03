@@ -164,7 +164,9 @@ class BonkRun
         bool StartMiniEventNow(BonkMiniEventType type, std::string& error);
         bool PlaceShrineNow(BonkShrineType type, std::string& error);
         bool PlacePowerupNow(uint32 entry, std::string& error);
+        bool TakePowerupNow(uint32 entry);
         bool PlaceDropLooksNow(std::string& error);
+        bool PlaceChestLooksNow(std::string& error);
         void ClearDropLooks();
         void UseShrine(GameObject* go);
         bool SummonBossAtStone(BonkSpot const& stone, Player* user);
@@ -292,6 +294,9 @@ class BonkRun
         };
         bool ChooseGear(GearChoice choice, uint8 slot, std::string& error);
         bool ChooseGlyph(uint32 choice, std::string& error);
+        bool RerollGlyphs(std::string& error);
+        void GiveGlyphPickNow() { QueueGlyphPick(); }
+        void PlaceTicketsAhead();
         void TakeGlyph(BonkGlyph const& glyph);
         bool UseHidden(GameObject* go);
         bool UseItem(Item* item);
@@ -334,6 +339,7 @@ class BonkRun
         void StaggerOnHit(Unit* victim);
         void ResetOnKill(uint32 spellId);
         void OnSpellKill(uint32 spellId);
+        void ShortenPenance(int32 ms);
         void OnSummonKill(Unit* summon, Unit* victim);
         float RollDotCrit(Unit const* victim, uint32 spellId) const;
         void OnTalentDamage(Unit* victim, SpellEntry const* spell);
@@ -394,6 +400,7 @@ class BonkRun
         void GoHome();
 
         void SendFullState() const;
+        void ShowSharedGlowsTo(Player* viewer) const;
 
         void OnDash();
         void LogPerfDip();
@@ -497,6 +504,10 @@ class BonkRun
             uint32 count = 0;
             uint32 marker = 0;
             uint32 sparkle = 0;
+            bool pulled = false;
+            float aimX = 0.0f;
+            float aimY = 0.0f;
+            float aimZ = 0.0f;
         };
 
         BonkMap const* ChooseNextMap();
@@ -766,6 +777,7 @@ class BonkRun
         void DropGlyph(Creature const* mob);
         void CollectAllGlyphs();
         void OfferGlyphs();
+        void FillGlyphOffer(std::vector<uint32> const& avoid);
         void SendGlyphOffer() const;
         void SendGlyphs() const;
         BonkRarity RollGlyphRarity() const;
@@ -815,6 +827,7 @@ class BonkRun
         std::vector<uint32> m_glyphOffer;
         uint32 m_pendingGlyphPicks = 0;
         uint32 m_glyphPicksGiven = 0;
+        uint32 m_glyphRerolls = 0;
         std::set<uint32> m_glyphCardIds;
         uint32 m_glyphKills = 0;
         uint32 m_glyphHasteUntilMs = 0;
@@ -916,6 +929,7 @@ class BonkRun
         bool IsPetFrenzied() const;
         bool IsHowlFrenzied() const;
         float GetBestialWrathFrenzy() const;
+        float GetBestialWrathHowl() const;
         float GetPackPowerShare() const;
         void UpdateDefensive(uint32 diff);
         void UpdatePets(OwnedWeapon& owned);
@@ -1030,6 +1044,10 @@ class BonkRun
         void UpdateHeals(uint32 diff);
         void GiveShards(uint32 count);
         uint32 PlaceMarker(GameObject const* go, uint32 spellId, float scale);
+        uint32 PlaceMarkerAt(float x, float y, float z, uint32 spellId, float scale);
+        void RemoveTicket(ShardDrop& drop, bool vanish);
+        void PlaceTicket(float x, float y, float z, uint32 count);
+        void PullTicket(ShardDrop& drop, Creature* ticket, float heroX, float heroY, float heroZ);
         void ShowFromFar(WorldObject* object);
         uint32 PlaceLootBeam(GameObject const* go, uint8 quality, uint32& core, uint32& swirl);
         void RemovePickup(ObjectGuid const& goGuid, uint32 beamKey, uint32 sparkleKey = 0, uint32 coreKey = 0);
@@ -1671,6 +1689,17 @@ class BonkRun
         void ForgetChestObjective(ObjectGuid const& chest);
         std::vector<ObjectGuid> m_powerups;
         std::map<ObjectGuid, uint32> m_powerupObjectives;
+        struct Glow
+        {
+            uint32 key = 0;
+            uint32 spellId = 0;
+            float scale = 1.0f;
+        };
+        std::map<ObjectGuid, Glow> m_chestGlows;
+        std::map<ObjectGuid, Glow> m_powerupGlows;
+        Glow PlaceSharedGlow(GameObject const* go, uint32 spellId, float scale) const;
+        void ShowGlowTo(Player* viewer, ObjectGuid const& guid, Glow const& glow) const;
+        void RemoveGlow(std::map<ObjectGuid, Glow>& glows, ObjectGuid const& guid);
         GameObject* PlacePowerup(BonkPowerup const& powerup, float x, float y, float z, uint32 lifetimeSeconds);
         void ForgetPowerupObjective(ObjectGuid const& powerup);
         std::vector<Orb> m_orbs;
@@ -2549,6 +2578,7 @@ class BonkRun
         void FirePenance(OwnedWeapon& owned);
         void LaunchPenanceBolt(OwnedWeapon& owned, SpellEntry const* bolt, PendingCast const& cast);
         void LandPenanceBolt(OwnedWeapon& owned, SpellEntry const* bolt, PendingCast const& cast);
+        void ApplyHeroBuff(uint32 spellId);
         void HoldMob(Creature* mob, SpellEntry const* spellInfo, AuraType type, int32 durationMs);
         void ScreamPsychic(OwnedWeapon& owned, SpellEntry const* spellInfo);
         void BindShackle(OwnedWeapon& owned, SpellEntry const* spellInfo);

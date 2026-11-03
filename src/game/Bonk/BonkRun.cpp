@@ -82,7 +82,7 @@ namespace
     float const BONK_LEECH_CAP_PER_CHANCE  = 0.03f;
     float const BONK_SHARD_PICKUP_RANGE    = 3.0f;
     float const BONK_SHARD_SCATTER         = 2.0f;
-    uint32 const BONK_SHARD_CHECK_MS       = 250;
+    uint32 const BONK_SHARD_CHECK_MS       = 100;
     uint32 const BONK_SPAWN_TICK_MS        = 1000;
     uint32 const BONK_SPAWN_PER_TICK       = 12;
     uint32 const BONK_OPENING_REFILL_MIN   = 6;
@@ -413,6 +413,7 @@ float const BONK_START_POLY_REACH   = 10.0f;
     int32 const BONK_STAMPEDE_FIRST_MS     = 2000;
     int32 const BONK_STAMPEDE_RETRY_MS     = 500;
     uint32 const BONK_STAMPEDE_BEASTS      = 3;
+    float const BONK_STAMPEDE_SHARE        = 0.7f;
     float const BONK_STAMPEDE_LANE         = 2.5f;
     float const BONK_STAMPEDE_LEAD         = 12.0f;
     float const BONK_STAMPEDE_PAST         = 14.0f;
@@ -595,9 +596,16 @@ float const BONK_START_POLY_REACH   = 10.0f;
     uint32 const BONK_SPELL_LOOT_SPARKLE = 33454;
     uint32 const BONK_HEAL_SPARKLE       = 900135;
     char const* const BONK_CHEST_PIN_ICON = "INV_Box_02";
+    char const* const BONK_FREE_CHEST_PIN_ICON = "INV_Box_04";
     char const* const BONK_MAGNET_PIN_ICON = "INV_Stone_15";
     uint32 const BONK_SPELL_FEET_SPARKLE = 33455;
     uint32 const BONK_SPELL_TICKET_POOL  = 33640;
+    uint32 const BONK_SPELL_VALOR_CHEST_GLOW = 33660;
+    uint32 const BONK_SPELL_FREE_CHEST_GLOW  = 33661;
+    uint32 const BONK_SPELL_VALOR_POUCH_GLOW = 33662;
+    float const BONK_CHEST_GLOW_SCALE        = 1.0f;
+    float const BONK_FREE_CHEST_GLOW_SCALE   = 2.0f;
+    float const BONK_POUCH_GLOW_SCALE        = 0.5f;
     uint32 const BONK_SPELL_GLYPH_POOL   = 33641;
     float const BONK_DROP_POOL_SCALE     = 0.3f;
     uint32 const BONK_DISPLAY_INVISIBLE  = 11686;
@@ -1128,6 +1136,7 @@ BonkRun::BonkRun(Player* player, BonkTier const& tier, BonkRunChoice const& choi
                 m_spellRoots.emplace(itr.second.spellId, BonkMastery::GetRootWeapon(itr.first));
 
     m_rerolls = m_bonuses.rerolls;
+    m_glyphRerolls = m_bonuses.glyphRerolls;
     m_banishes = m_bonuses.banishes;
     m_skips = m_bonuses.skips;
     m_revives = m_bonuses.revives;
@@ -1784,6 +1793,9 @@ void BonkRun::SendFullState() const
     if (!m_offer.empty())
         SendOffer();
     m_objectives.Resend(m_player);
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        if (BonkRun const* run = member->GetBonkPlayer()->GetRun())
+            run->ShowSharedGlowsTo(m_player);
     if (m_greedStacks)
         SendGreed();
     if (!m_leyOffer.empty())
@@ -5099,13 +5111,56 @@ bool BonkRun::SpawnChest(bool free, float x, float y, float z, uint32 choices)
         return false;
     m_chests.push_back(chest->GetObjectGuid());
     m_chestChoices[chest->GetObjectGuid()] = choices;
+    m_chestGlows[chest->GetObjectGuid()] = free ? PlaceSharedGlow(chest, BONK_SPELL_FREE_CHEST_GLOW, BONK_FREE_CHEST_GLOW_SCALE) : PlaceSharedGlow(chest, BONK_SPELL_VALOR_CHEST_GLOW, BONK_CHEST_GLOW_SCALE);
     m_chestObjectives[chest->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(chest), 0,
-        BONK_CHEST_PIN_ICON, GetString(free ? BONK_STRING_OBJECTIVE_CHEST_FREE : BONK_STRING_OBJECTIVE_CHEST_VALOR));
+        free ? BONK_FREE_CHEST_PIN_ICON : BONK_CHEST_PIN_ICON, GetString(free ? BONK_STRING_OBJECTIVE_CHEST_FREE : BONK_STRING_OBJECTIVE_CHEST_VALOR));
     return true;
+}
+
+BonkRun::Glow BonkRun::PlaceSharedGlow(GameObject const* go, uint32 spellId, float scale) const
+{
+    Glow glow;
+    glow.key = NextBonkAuraKey();
+    glow.spellId = spellId;
+    glow.scale = scale;
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        ShowGlowTo(member, go->GetObjectGuid(), glow);
+    return glow;
+}
+
+void BonkRun::ShowGlowTo(Player* viewer, ObjectGuid const& guid, Glow const& glow) const
+{
+    Map* map = m_player->FindMap();
+    GameObject const* go = map ? map->GetGameObject(guid) : nullptr;
+    if (go)
+        SendBonkAuraAt(viewer, glow.key, glow.spellId, go->GetPositionX(), go->GetPositionY(), go->GetPositionZ(), glow.scale);
+}
+
+void BonkRun::ShowSharedGlowsTo(Player* viewer) const
+{
+    for (auto const& chest : m_chestGlows)
+    {
+        auto opened = m_chestOpenedBy.find(chest.first);
+        if (opened == m_chestOpenedBy.end() || !opened->second.count(viewer->GetObjectGuid()))
+            ShowGlowTo(viewer, chest.first, chest.second);
+    }
+    for (auto const& powerup : m_powerupGlows)
+        ShowGlowTo(viewer, powerup.first, powerup.second);
+}
+
+void BonkRun::RemoveGlow(std::map<ObjectGuid, Glow>& glows, ObjectGuid const& guid)
+{
+    auto const itr = glows.find(guid);
+    if (itr == glows.end())
+        return;
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        SendBonkAuraGone(member, itr->second.key);
+    glows.erase(itr);
 }
 
 void BonkRun::ForgetChestObjective(ObjectGuid const& chest)
 {
+    RemoveGlow(m_chestGlows, chest);
     auto const itr = m_chestObjectives.find(chest);
     if (itr == m_chestObjectives.end())
         return;
@@ -5233,6 +5288,8 @@ GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, 
     if (!go)
         return nullptr;
     m_powerups.push_back(go->GetObjectGuid());
+    if (powerup.effect == BONK_POWERUP_VALOR)
+        m_powerupGlows[go->GetObjectGuid()] = PlaceSharedGlow(go, BONK_SPELL_VALOR_POUCH_GLOW, BONK_POUCH_GLOW_SCALE);
     if (lasting)
         m_powerupObjectives[go->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(go), 0,
             BONK_MAGNET_PIN_ICON, GetString(BONK_STRING_OBJECTIVE_MAGNET));
@@ -5241,11 +5298,22 @@ GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, 
 
 void BonkRun::ForgetPowerupObjective(ObjectGuid const& powerup)
 {
+    RemoveGlow(m_powerupGlows, powerup);
     auto const itr = m_powerupObjectives.find(powerup);
     if (itr == m_powerupObjectives.end())
         return;
     m_objectives.Remove(m_player, itr->second);
     m_powerupObjectives.erase(itr);
+}
+
+bool BonkRun::TakePowerupNow(uint32 entry)
+{
+    std::vector<BonkPowerup> const& powerups = sBonkMgr.GetPowerups();
+    auto const powerup = std::find_if(powerups.begin(), powerups.end(), [entry](BonkPowerup const& p) { return p.entry == entry; });
+    if (powerup == powerups.end())
+        return false;
+    UsePowerup(*powerup);
+    return true;
 }
 
 bool BonkRun::PlacePowerupNow(uint32 entry, std::string& error)
@@ -5369,9 +5437,31 @@ void BonkRun::UsePowerup(BonkPowerup const& powerup)
             SendState();
             break;
         default:
-            m_player->CastSpell(m_player, powerup.spellId, true);
+            ApplyHeroBuff(powerup.spellId);
             break;
     }
+}
+
+void BonkRun::ApplyHeroBuff(uint32 spellId)
+{
+    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellId);
+    if (!spellInfo || !m_player->IsAlive())
+        return;
+    m_player->RemoveAurasDueToSpell(spellId);
+    SpellAuraHolder* holder = CreateSpellAuraHolder(spellInfo, m_player, m_player, m_player);
+    for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+        if (spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AURA)
+        {
+            Aura* aura = CreateAura(spellInfo, SpellEffectIndex(i), nullptr, holder, m_player, m_player);
+            aura->SetPositive(true);
+            holder->AddAura(aura, SpellEffectIndex(i));
+        }
+    if (holder->IsEmptyHolder())
+    {
+        delete holder;
+        return;
+    }
+    m_player->AddSpellAuraHolder(holder);
 }
 
 void BonkRun::DespawnObjects()
@@ -5391,8 +5481,8 @@ void BonkRun::DespawnObjects()
             if (GameObject* powerup = map->GetGameObject(guid))
                 powerup->Delete();
         }
-        for (ShardDrop const& drop : m_shardDrops)
-            RemovePickup(drop.guid, drop.marker, drop.sparkle);
+        for (ShardDrop& drop : m_shardDrops)
+            RemoveTicket(drop, false);
         for (GlyphDrop const& drop : m_glyphDrops)
             RemovePickup(drop.guid, drop.marker, drop.sparkle);
         for (HealDrop const& drop : m_healDrops)
@@ -5408,8 +5498,10 @@ void BonkRun::DespawnObjects()
     m_chests.clear();
     m_chestOpenedBy.clear();
     m_chestObjectives.clear();
+    m_chestGlows.clear();
     m_powerups.clear();
     m_powerupObjectives.clear();
+    m_powerupGlows.clear();
     for (VoidZone const& zone : m_voidZones)
         EndVoidZone(zone);
     m_voidZones.clear();
@@ -5490,6 +5582,9 @@ uint32 BonkRun::OpenChestFor(GameObject* chest, Player* opener)
 
     std::set<ObjectGuid>& opened = m_chestOpenedBy[guid];
     opened.insert(opener->GetObjectGuid());
+    auto glow = m_chestGlows.find(guid);
+    if (glow != m_chestGlows.end())
+        SendBonkAuraGone(opener, glow->second.key);
     bool everyoneOpened = true;
     for (Player* member : BonkCoop::RunGroupOf(m_player))
     {
@@ -9702,13 +9797,13 @@ bool BonkRun::Howl(OwnedWeapon& owned)
 
 float BonkRun::GetFrenzyDamage() const
 {
-    if (!IsHowlFrenzied() && m_mastery.Has(BONK_CAPSTONE_BESTIAL_WRATH))
-        return GetBestialWrathFrenzy();
-    float damage = BONK_FRENZY_DAMAGE;
+    float upgrades = 0.0f;
     for (OwnedWeapon const& owned : m_weapons)
         if (owned.weapon.behavior == BONK_BEHAVIOR_WRATH)
-            damage += GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_FRENZY) / 100.0f;
-    return damage;
+            upgrades += GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_FRENZY) / 100.0f;
+    if (m_mastery.Has(BONK_CAPSTONE_BESTIAL_WRATH))
+        return GetBestialWrathFrenzy() * (IsHowlFrenzied() ? GetBestialWrathHowl() + upgrades : 1.0f);
+    return BONK_FRENZY_DAMAGE + upgrades;
 }
 
 bool BonkRun::IsHowlFrenzied() const
@@ -10598,7 +10693,7 @@ bool BonkRun::LaunchStampede(OwnedWeapon const& owned)
         map->GetWalkHitPosition(nullptr, cx, cy, cz, ex, ey, ez);
         if (!SummonBeast(owned, BEAST_SPECTRAL, sx, sy, sz, angle, uint32(BONK_STAMPEDE_LIFE_MS * GetWeaponDurationScale(owned))))
             continue;
-        QueueCharge(m_beasts.back(), ex, ey, ez, 1.0f, BONK_STAMPEDE_SPEED);
+        QueueCharge(m_beasts.back(), ex, ey, ez, BONK_STAMPEDE_SHARE, BONK_STAMPEDE_SPEED);
         launched = true;
     }
     return launched;
@@ -11734,20 +11829,38 @@ void BonkRun::DropShards(Creature const* mob, BonkSpawnKind kind)
         y = mob->GetPositionY();
         z = mob->GetPositionZ();
     }
+    PlaceTicket(x, y, z, count);
+}
 
-    GameObject* go = PlaceObject(BONK_GO_SHARD, x, y, z, BONK_OBJECT_LIFETIME_SEC);
-    if (!go)
+void BonkRun::PlaceTicketsAhead()
+{
+    float const facing = m_player->GetOrientation();
+    for (float distance : { 4.0f, 9.0f, 14.0f })
+    {
+        float const x = m_player->GetPositionX() + distance * std::cos(facing);
+        float const y = m_player->GetPositionY() + distance * std::sin(facing);
+        float const z = m_player->GetMap()->GetHeight(x, y, m_player->GetPositionZ() + 2.0f, true, 10.0f);
+        if (z > INVALID_HEIGHT)
+            PlaceTicket(x, y, z, 1);
+    }
+}
+
+void BonkRun::PlaceTicket(float x, float y, float z, uint32 count)
+{
+    Creature* ticket = m_player->SummonCreature(BONK_TICKET_PICKUP, x, y, z, frand(0.0f, 2.0f * M_PI_F), TEMPSUMMON_TIMED_DESPAWN,
+        BONK_OBJECT_LIFETIME_SEC * IN_MILLISECONDS, false, 0, &InstallOrbAI);
+    if (!ticket)
     {
         GiveShards(count);
         return;
     }
-    ShowFromFar(go);
+    ShowFromFar(ticket);
 
     ShardDrop drop;
-    drop.guid = go->GetObjectGuid();
+    drop.guid = ticket->GetObjectGuid();
     drop.count = count;
-    drop.marker = PlaceMarker(go, BONK_SPELL_TICKET_POOL, BONK_DROP_POOL_SCALE);
-    drop.sparkle = PlaceMarker(go, BONK_SPELL_FEET_SPARKLE, 1.0f);
+    drop.marker = PlaceMarkerAt(x, y, z, BONK_SPELL_TICKET_POOL, BONK_DROP_POOL_SCALE);
+    drop.sparkle = PlaceMarkerAt(x, y, z, BONK_SPELL_FEET_SPARKLE, 1.0f);
     m_shardDrops.push_back(drop);
     m_player->GetBonkPlayer()->Notify(count == 1 ? BONK_STRING_DARKMOON_TICKET_DROPPED : BONK_STRING_TICKETS_DROPPED, { FormatBonkShards(count, GetLocale()) });
 }
@@ -11775,19 +11888,30 @@ void BonkRun::UpdateShards(uint32 diff)
         QueueGlyphPick();
     }
 
+    float chestX, chestY, chestZ;
+    GetHeroChestPositionNow(m_player, chestX, chestY, chestZ);
+    float const magnet = GetMagnetRange();
     uint32 taken = 0;
     for (auto itr = m_shardDrops.begin(); itr != m_shardDrops.end();)
     {
-        GameObject* go = map->GetGameObject(itr->guid);
-        if (go && go->isSpawned() && GetHeroDistance(m_player, heroX, heroY, heroZ, go) > BONK_SHARD_PICKUP_RANGE)
+        Creature* ticket = map->GetCreature(itr->guid);
+        if (!ticket)
         {
-            ++itr;
+            RemoveTicket(*itr, false);
+            itr = m_shardDrops.erase(itr);
             continue;
         }
-
-        taken += itr->count;
-        RemovePickup(itr->guid, itr->marker, itr->sparkle);
-        itr = m_shardDrops.erase(itr);
+        float const distance = GetHeroDistance(m_player, chestX, chestY, chestZ, ticket);
+        if (distance <= BONK_ORB_PICKUP_RANGE || (!itr->pulled && distance <= BONK_SHARD_PICKUP_RANGE))
+        {
+            taken += itr->count;
+            RemoveTicket(*itr, true);
+            itr = m_shardDrops.erase(itr);
+            continue;
+        }
+        if (itr->pulled || distance <= magnet)
+            PullTicket(*itr, ticket, chestX, chestY, chestZ);
+        ++itr;
     }
 
     if (taken)
@@ -11839,10 +11963,10 @@ void BonkRun::CollectAllGlyphs()
 void BonkRun::CollectAllShards()
 {
     uint32 taken = 0;
-    for (ShardDrop const& drop : m_shardDrops)
+    for (ShardDrop& drop : m_shardDrops)
     {
         taken += drop.count;
-        RemovePickup(drop.guid, drop.marker, drop.sparkle);
+        RemoveTicket(drop, true);
     }
     m_shardDrops.clear();
 
@@ -12004,6 +12128,52 @@ void BonkRun::GiveShards(uint32 count)
     bonk->SendAddon("shard~" + std::to_string(count) + "~" + std::to_string(bonk->GetShards()));
     bonk->Notify(BONK_STRING_YOU_COLLECTED, { FormatBonkShards(count, GetLocale()) });
     SendState();
+}
+
+uint32 BonkRun::PlaceMarkerAt(float x, float y, float z, uint32 spellId, float scale)
+{
+    uint32 const key = NextBonkAuraKey();
+    SendBonkAuraAt(m_player, key, spellId, x, y, z, scale);
+    return key;
+}
+
+void BonkRun::RemoveTicket(ShardDrop& drop, bool vanish)
+{
+    for (uint32* key : { &drop.marker, &drop.sparkle })
+        if (*key)
+        {
+            SendBonkAuraGone(m_player, *key);
+            *key = 0;
+        }
+    Map* map = m_player->FindMap();
+    Creature* ticket = map ? map->GetCreature(drop.guid) : nullptr;
+    if (!ticket)
+        return;
+    if (vanish)
+        VanishOrb(ticket);
+    else
+        ticket->DespawnOrUnsummon();
+}
+
+void BonkRun::PullTicket(ShardDrop& drop, Creature* ticket, float heroX, float heroY, float heroZ)
+{
+    if (!drop.pulled)
+    {
+        for (uint32* key : { &drop.marker, &drop.sparkle })
+            if (*key)
+            {
+                SendBonkAuraGone(m_player, *key);
+                *key = 0;
+            }
+        drop.pulled = true;
+    }
+    else if ((heroX - drop.aimX) * (heroX - drop.aimX) + (heroY - drop.aimY) * (heroY - drop.aimY) + (heroZ - drop.aimZ) * (heroZ - drop.aimZ) <=
+        BONK_ORB_REAIM_DISTANCE * BONK_ORB_REAIM_DISTANCE)
+        return;
+    drop.aimX = heroX;
+    drop.aimY = heroY;
+    drop.aimZ = heroZ;
+    ticket->MonsterMoveWithSpeed(heroX, heroY, heroZ, -10.0f, BONK_ORB_FLY_SPEED, MOVE_FLY_MODE);
 }
 
 uint32 BonkRun::PlaceMarker(GameObject const* go, uint32 spellId, float scale)

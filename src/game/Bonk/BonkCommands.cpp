@@ -522,6 +522,15 @@ bool ChatHandler::HandleBonkPoolCommand(char* args)
 bool ChatHandler::HandleBonkGlyphCommand(char* args)
 {
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+    if (run && args && !strcmp(args, "reroll"))
+    {
+        std::string error;
+        if (run->RerollGlyphs(error))
+            return true;
+        SendSysMessage(error.c_str());
+        SetSentErrorMessage(true);
+        return false;
+    }
     uint32 choice = 0;
     if (!run || !ExtractUInt32(&args, choice))
     {
@@ -596,6 +605,32 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
             player->GetBonkPlayer()->OpenShop(BONK_SHOP_UPGRADES, quartermaster);
         else
             SendSysMessage("No Quartermaster within 10 yards.");
+        return true;
+    }
+    if (tab == "testticket" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        if (BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun())
+            run->PlaceTicketsAhead();
+        else
+            SendSysMessage("Tickets need a run.");
+        return true;
+    }
+    if (tab == "testglyph" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        if (BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun())
+            run->GiveGlyphPickNow();
+        else
+            SendSysMessage("Glyph picks need a run.");
+        return true;
+    }
+    if (tab == "testsayge" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        Player* player = m_session->GetPlayer();
+        uint32 const saygeEntry = 900003;
+        if (Creature* sayge = player->FindNearestCreature(saygeEntry, 10.0f))
+            player->GetBonkPlayer()->OpenShop(BONK_SHOP_TALENTS, sayge);
+        else
+            SendSysMessage("No Sayge within 10 yards.");
         return true;
     }
     if (tab == "testhearth" && GetAccessLevel() >= SEC_GAMEMASTER)
@@ -1173,15 +1208,21 @@ bool ChatHandler::HandleBonkPowerupCommand(char* args)
             entry = powerup.second;
     if (!entry)
     {
-        SendSysMessage("Usage: .bonk powerup magnet|holynova|frostnova|valor|restoration|berserking|speed");
+        SendSysMessage("Usage: .bonk powerup magnet|holynova|frostnova|valor|restoration|berserking|speed [take]");
         SetSentErrorMessage(true);
         return false;
     }
 
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+    char* takeArg = ExtractArg(&args);
     std::string error;
     if (!run)
         error = "Power-ups need a run or the sandbox.";
+    else if (takeArg && !strcmp(takeArg, "take") && run->TakePowerupNow(entry))
+    {
+        PSendSysMessage("Power-up %s taken.", nameArg);
+        return true;
+    }
     else if (run->PlacePowerupNow(entry, error))
     {
         PSendSysMessage("Power-up %s placed 10 yards in front of you.", nameArg);
@@ -1192,11 +1233,12 @@ bool ChatHandler::HandleBonkPowerupCommand(char* args)
     return false;
 }
 
-bool ChatHandler::HandleBonkDropLooksCommand(char* )
+bool ChatHandler::HandleBonkDropLooksCommand(char* args)
 {
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
     std::string error = "Drop looks need a run or the sandbox.";
-    if (run && run->PlaceDropLooksNow(error))
+    bool const chests = args && std::string(args).find("chests") != std::string::npos;
+    if (run && (chests ? run->PlaceChestLooksNow(error) : run->PlaceDropLooksNow(error)))
     {
         SendSysMessage("Every drop look is laid out 10 yards in front of you.");
         return true;
