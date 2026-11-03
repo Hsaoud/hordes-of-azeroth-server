@@ -1562,6 +1562,8 @@ void BonkRun::Update(uint32 diff)
     if (m_paused)
         HoldAuraTimers(diff);
     RefreshWatchedStats(diff);
+    if (m_state == STATE_RUNNING || m_state == STATE_PORTAL)
+        UpdateDryGround(diff);
 
     switch (m_state)
     {
@@ -2396,7 +2398,6 @@ void BonkRun::UpdateSpawns(uint32 diff)
     UpdateLanes(diff);
     UpdateRingSample(diff);
     UpdatePerch(diff);
-    UpdateDryGround(diff);
 
     bool const bossDue = !IsFinale() && !m_bossSpawned && elapsedSeconds >= m_map.durationSeconds;
     if (bossDue && IsCoopGuest())
