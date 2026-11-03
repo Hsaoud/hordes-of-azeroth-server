@@ -164,6 +164,7 @@ class BonkRun
         bool StartMiniEventNow(BonkMiniEventType type, std::string& error);
         bool PlaceShrineNow(BonkShrineType type, std::string& error);
         bool PlacePowerupNow(uint32 entry, std::string& error);
+        bool TakePowerupNow(uint32 entry);
         bool PlaceDropLooksNow(std::string& error);
         bool PlaceChestLooksNow(std::string& error);
         void ClearDropLooks();
@@ -2576,6 +2577,7 @@ class BonkRun
         void FirePenance(OwnedWeapon& owned);
         void LaunchPenanceBolt(OwnedWeapon& owned, SpellEntry const* bolt, PendingCast const& cast);
         void LandPenanceBolt(OwnedWeapon& owned, SpellEntry const* bolt, PendingCast const& cast);
+        void ApplyHeroBuff(uint32 spellId);
         void HoldMob(Creature* mob, SpellEntry const* spellInfo, AuraType type, int32 durationMs);
         void ScreamPsychic(OwnedWeapon& owned, SpellEntry const* spellInfo);
         void BindShackle(OwnedWeapon& owned, SpellEntry const* spellInfo);

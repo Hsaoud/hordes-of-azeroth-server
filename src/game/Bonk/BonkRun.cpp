@@ -5301,6 +5301,16 @@ void BonkRun::ForgetPowerupObjective(ObjectGuid const& powerup)
     m_powerupObjectives.erase(itr);
 }
 
+bool BonkRun::TakePowerupNow(uint32 entry)
+{
+    std::vector<BonkPowerup> const& powerups = sBonkMgr.GetPowerups();
+    auto const powerup = std::find_if(powerups.begin(), powerups.end(), [entry](BonkPowerup const& p) { return p.entry == entry; });
+    if (powerup == powerups.end())
+        return false;
+    UsePowerup(*powerup);
+    return true;
+}
+
 bool BonkRun::PlacePowerupNow(uint32 entry, std::string& error)
 {
     std::vector<BonkPowerup> const& powerups = sBonkMgr.GetPowerups();
@@ -5422,9 +5432,31 @@ void BonkRun::UsePowerup(BonkPowerup const& powerup)
             SendState();
             break;
         default:
-            m_player->CastSpell(m_player, powerup.spellId, true);
+            ApplyHeroBuff(powerup.spellId);
             break;
     }
+}
+
+void BonkRun::ApplyHeroBuff(uint32 spellId)
+{
+    SpellEntry const* spellInfo = sSpellMgr.GetSpellEntry(spellId);
+    if (!spellInfo || !m_player->IsAlive())
+        return;
+    m_player->RemoveAurasDueToSpell(spellId);
+    SpellAuraHolder* holder = CreateSpellAuraHolder(spellInfo, m_player, m_player, m_player);
+    for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+        if (spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AURA)
+        {
+            Aura* aura = CreateAura(spellInfo, SpellEffectIndex(i), nullptr, holder, m_player, m_player);
+            aura->SetPositive(true);
+            holder->AddAura(aura, SpellEffectIndex(i));
+        }
+    if (holder->IsEmptyHolder())
+    {
+        delete holder;
+        return;
+    }
+    m_player->AddSpellAuraHolder(holder);
 }
 
 void BonkRun::DespawnObjects()

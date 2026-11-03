@@ -1208,15 +1208,21 @@ bool ChatHandler::HandleBonkPowerupCommand(char* args)
             entry = powerup.second;
     if (!entry)
     {
-        SendSysMessage("Usage: .bonk powerup magnet|holynova|frostnova|valor|restoration|berserking|speed");
+        SendSysMessage("Usage: .bonk powerup magnet|holynova|frostnova|valor|restoration|berserking|speed [take]");
         SetSentErrorMessage(true);
         return false;
     }
 
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+    char* takeArg = ExtractArg(&args);
     std::string error;
     if (!run)
         error = "Power-ups need a run or the sandbox.";
+    else if (takeArg && !strcmp(takeArg, "take") && run->TakePowerupNow(entry))
+    {
+        PSendSysMessage("Power-up %s taken.", nameArg);
+        return true;
+    }
     else if (run->PlacePowerupNow(entry, error))
     {
         PSendSysMessage("Power-up %s placed 10 yards in front of you.", nameArg);
