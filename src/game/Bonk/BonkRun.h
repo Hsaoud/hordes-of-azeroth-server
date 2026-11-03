@@ -683,6 +683,8 @@ class BonkRun
         bool FindMobPosition(float& x, float& y, float& z, float minDistance, float maxDistance) const;
         void UpdateLanes(uint32 diff);
         void UpdatePerch(uint32 diff);
+        void UpdateDryGround(uint32 diff);
+        void MoveToSafeGround(float& x, float& y, float& z) const;
         bool IsHeroReachable() const;
         bool IsReachableFrom(float x, float y, float z, Creature const* prober) const;
         bool HasStrandedMobs() const;
@@ -1684,6 +1686,10 @@ class BonkRun
         float m_groundX = 0.0f;
         float m_groundY = 0.0f;
         float m_groundZ = 0.0f;
+        bool m_hasDryGround = false;
+        float m_dryX = 0.0f, m_dryY = 0.0f, m_dryZ = 0.0f;
+        uint32 m_dryGroundTimer = 0;
+        uint32 m_hazardMs = 0;
         std::vector<ObjectGuid> m_chests;
         std::map<ObjectGuid, uint32> m_chestObjectives;
         void ForgetChestObjective(ObjectGuid const& chest);

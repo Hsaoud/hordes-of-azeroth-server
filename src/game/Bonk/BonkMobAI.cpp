@@ -2766,7 +2766,7 @@ bool BonkMobAI::FindFleePoint(Player* owner, float distance, float& x, float& y,
         z = map->GetHeight(x, y, m_creature->GetPositionZ() + BONK_FLEE_CLIMB, true, BONK_FLEE_CLIMB * 2.0f);
         if (z <= INVALID_HEIGHT || std::fabs(z - m_creature->GetPositionZ()) > BONK_FLEE_CLIMB)
             continue;
-        if (map->GetTerrain()->GetZoneId(x, y, z) != owner->GetZoneId() || map->GetTerrain()->IsInWater(x, y, z + 1.0f))
+        if (map->GetTerrain()->GetZoneId(x, y, z) != owner->GetZoneId() || !IsBonkDryGround(map, x, y, z))
             continue;
         return true;
     }

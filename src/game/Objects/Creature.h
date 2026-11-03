@@ -326,6 +326,8 @@ class Creature : public Unit
         uint32 GetPlateId() const { return m_plateId; }
         void SetBonkEnemy(bool enabled) { m_bonkEnemy = enabled; }
         bool IsBonkEnemy() const { return m_bonkEnemy; }
+        void SetAvoidsBonkHazards(bool enabled) { m_avoidsBonkHazards = enabled; }
+        bool AvoidsBonkHazards() const { return m_avoidsBonkHazards; }
         ZoneScript* GetEncounterScript() const { return m_bonkEnemy ? nullptr : m_zoneScript; }
         void SetBonkFlyer(bool enabled) { m_bonkFlyer = enabled; }
         bool IsBonkFlyer() const { return m_bonkFlyer; }
@@ -701,6 +703,7 @@ class Creature : public Unit
         float m_baseRunSpeedRate;
         uint32 m_plateId = 0;
         bool m_bonkEnemy = false;
+        bool m_avoidsBonkHazards = false;
         bool m_bonkFlyer = false;
         bool m_bonkNormal = false;
         uint32 m_bonkCrowdDrivenUntil = 0;

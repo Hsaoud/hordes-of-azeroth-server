@@ -6,7 +6,12 @@
 #include <functional>
 #include <vector>
 
+class Map;
 class Player;
+
+bool IsInBonkHazard(Map const* map, float x, float y, float z);
+bool IsBonkDryGround(Map const* map, float x, float y, float z);
+bool SnapBonkToSafeGround(Player* hero, float maxShift, float& x, float& y, float& z);
 
 struct BonkSpot
 {

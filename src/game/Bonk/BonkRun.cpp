@@ -183,6 +183,9 @@ namespace
     uint32 const BONK_SPAWN_LOOK_HOLD_MS   = 1600;
     float const BONK_SPAWN_LOOK_PREVIEW_DISTANCE = 8.0f;
     uint32 const BONK_PERCH_CHECK_MS       = 1000;
+    uint32 const BONK_DRY_GROUND_CHECK_MS = 250;
+    uint32 const BONK_HAZARD_RESCUE_MS     = 3000;
+    float const BONK_DROP_SAFE_SHIFT       = 20.0f;
     uint32 const BONK_PERCH_CONFIRM_CHECKS = 2;
     uint32 const BONK_PERCH_CLEAR_CHECKS   = 3;
     float const BONK_PERCH_SENSE_RANGE     = 40.0f;
@@ -1671,6 +1674,12 @@ void BonkRun::StartStage()
     m_groundX = m_player->GetPositionX();
     m_groundY = m_player->GetPositionY();
     m_groundZ = m_player->GetPositionZ();
+    m_hasDryGround = true;
+    m_dryX = m_groundX;
+    m_dryY = m_groundY;
+    m_dryZ = m_groundZ;
+    m_dryGroundTimer = 0;
+    m_hazardMs = 0;
 
     m_player->SetCreatureSummonLimit(BONK_SUMMON_LIMIT);
 
@@ -2350,6 +2359,7 @@ void BonkRun::UpdateSpawns(uint32 diff)
     UpdateLanes(diff);
     UpdateRingSample(diff);
     UpdatePerch(diff);
+    UpdateDryGround(diff);
 
     bool const bossDue = !IsFinale() && !m_bossSpawned && elapsedSeconds >= m_map.durationSeconds;
     if (bossDue && IsCoopGuest())
@@ -3135,11 +3145,13 @@ bool BonkRun::FindSpawnPositionAt(float angle, float distance, float& x, float& 
     if (m_map.zoneId && map->GetTerrain()->GetZoneId(x, y, z) != m_map.zoneId)
         return false;
 
+    bool found = false;
     if (fromGround)
-        return FindSpawnPathFrom(m_groundX, m_groundY, m_groundZ, distance, x, y, z);
-    if (FindSpawnPathFrom(m_player->GetPositionX(), m_player->GetPositionY(), m_player->GetPositionZ(), distance, x, y, z))
-        return true;
-    return m_hasGround && FindSpawnPathFrom(m_groundX, m_groundY, m_groundZ, distance, x, y, z);
+        found = FindSpawnPathFrom(m_groundX, m_groundY, m_groundZ, distance, x, y, z);
+    else
+        found = FindSpawnPathFrom(m_player->GetPositionX(), m_player->GetPositionY(), m_player->GetPositionZ(), distance, x, y, z) ||
+            (m_hasGround && FindSpawnPathFrom(m_groundX, m_groundY, m_groundZ, distance, x, y, z));
+    return found && IsBonkDryGround(map, x, y, z);
 }
 
 bool BonkRun::FindSpawnPathFrom(float fromX, float fromY, float fromZ, float distance, float& x, float& y, float& z) const
@@ -3278,6 +3290,50 @@ void BonkRun::UpdatePerch(uint32 diff)
     m_perched = true;
     m_perchedMs = 0;
     m_flyerTimer = BONK_FLYER_FIRST_MS;
+}
+
+void BonkRun::UpdateDryGround(uint32 diff)
+{
+    m_dryGroundTimer += diff;
+    if (m_dryGroundTimer < BONK_DRY_GROUND_CHECK_MS)
+        return;
+    uint32 const elapsed = m_dryGroundTimer;
+    m_dryGroundTimer = 0;
+    if (!m_player->IsAlive() || m_player->IsBeingTeleported())
+    {
+        m_hazardMs = 0;
+        return;
+    }
+
+    Map const* map = m_player->GetMap();
+    float const x = m_player->GetPositionX(), y = m_player->GetPositionY(), z = m_player->GetPositionZ();
+    if (!IsInBonkHazard(map, x, y, z))
+    {
+        m_hazardMs = 0;
+        if (!m_player->IsFalling() && IsBonkDryGround(map, x, y, z))
+        {
+            m_hasDryGround = true;
+            m_dryX = x;
+            m_dryY = y;
+            m_dryZ = z;
+        }
+        return;
+    }
+
+    m_hazardMs += elapsed;
+    if (m_hazardMs < BONK_HAZARD_RESCUE_MS || !m_hasDryGround)
+        return;
+    m_hazardMs = 0;
+    m_player->NearTeleportTo(m_dryX, m_dryY, m_dryZ, m_player->GetOrientation());
+}
+
+void BonkRun::MoveToSafeGround(float& x, float& y, float& z) const
+{
+    if (SnapBonkToSafeGround(m_player, BONK_DROP_SAFE_SHIFT, x, y, z) || !m_hasDryGround)
+        return;
+    x = m_dryX;
+    y = m_dryY;
+    z = m_dryZ;
 }
 
 bool BonkRun::IsHeroReachable() const
@@ -5101,6 +5157,7 @@ GameObject* BonkRun::PlaceObject(uint32 entry, float x, float y, float z, uint32
 
 bool BonkRun::SpawnChest(bool free, float x, float y, float z, uint32 choices)
 {
+    MoveToSafeGround(x, y, z);
     GameObject* chest = PlaceObject(free ? BONK_GO_CHEST_FREE : BONK_GO_CHEST, x, y, z, BONK_OBJECT_LIFETIME_SEC);
     if (!chest)
         return false;
@@ -5278,6 +5335,7 @@ void BonkRun::SpawnPowerup(WorldObject const* at)
 
 GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, float z, uint32 lifetimeSeconds)
 {
+    MoveToSafeGround(x, y, z);
     bool const lasting = powerup.effect == BONK_POWERUP_MAGNET;
     GameObject* go = PlaceObject(powerup.entry, x, y, z, lasting ? BONK_OBJECT_LIFETIME_SEC : lifetimeSeconds);
     if (!go)
