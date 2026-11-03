@@ -128,6 +128,8 @@ bool ChatHandler::HandleBonkStartCommand(char* args)
             continue;
         if (option == "invade")
             choice.invade = true;
+        else if (option == "nopause")
+            choice.noPause = true;
         else if (isdigit(static_cast<unsigned char>(option[0])))
             choice.level = tier->firstLevel + std::max(1u, uint32(atoi(option.c_str()))) - 1;
         else if (BonkMap const* dungeon = sBonkMgr.FindDungeon(option))

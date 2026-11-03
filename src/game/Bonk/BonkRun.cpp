@@ -1153,6 +1153,7 @@ BonkRun::BonkRun(Player* player, BonkTier const& tier, BonkRunChoice const& choi
     m_invaderId = dungeon && choice.invade ? dungeon->id : 0;
     m_startMapId = choice.startMap && !m_dungeonId ? choice.startMap->id : 0;
     m_difficultyLevel = tier.HasLevel(choice.level) ? choice.level : tier.firstLevel;
+    m_coopNoPause = choice.noPause;
     m_levelRow = sBonkMgr.GetLevel(tier, GetBandLevel());
     uint32 const classMask = player->GetClassMask();
     for (bool const ownClass : { true, false })
@@ -1824,6 +1825,8 @@ void BonkRun::SendFullState() const
         bonk->SendAddon("start~" + Localize(BONK_FIELD_MAP_NAME, m_map.id, m_map.name) + "~" + Localize(BONK_FIELD_TIER_NAME, m_tier.id, m_tier.name) + "~" +
             std::to_string(m_map.durationSeconds) + "~" + std::to_string(m_stage) + "~" + std::to_string(GetFirstMinibossSecond()) + "~" + DescribeTimelineMarks() + "~" + (IsMythic() ? "1" : "0") + "~" +
             std::to_string(m_tier.stages) + "~" + bonk->GetLevelName(m_difficultyLevel) + "~" + (IsFinale() ? "1" : "0"));
+    if (m_coopNoPause)
+        bonk->SendAddon("coopnopause~1");
     SendLoadout();
     SendState();
     SendRunXp();

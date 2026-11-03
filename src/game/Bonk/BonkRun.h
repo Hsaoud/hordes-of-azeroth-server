@@ -1517,7 +1517,7 @@ class BonkRun
         bool m_followPending = false;
         BonkMap m_followMap;
         uint32 m_followStage = 0;
-        bool WantsPause() const { return (m_ownPaused && !m_coopNoPause) || m_groupHeld || m_away; }
+        bool WantsPause() const { return (m_ownPaused && (!m_coopNoPause || (m_menuOpen && m_coopPlayers <= 1))) || m_groupHeld || m_away; }
         void ApplyPause(bool paused);
         bool m_wentHome = false;
 

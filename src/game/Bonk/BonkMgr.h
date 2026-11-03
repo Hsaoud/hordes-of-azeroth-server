@@ -241,6 +241,7 @@ struct BonkRunChoice
     uint32 level = 0;
     bool groupReady = false;
     bool loadWaited = false;
+    bool noPause = false;
 };
 
 struct BonkMapStart
