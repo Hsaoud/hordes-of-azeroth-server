@@ -71,7 +71,8 @@ namespace
         return float(std::count_if(stacks.begin(), stacks.end(), [now](uint32 until) { return until > now; }));
     }
     float const BONK_BESTIAL_WRATH_FRENZY       = 1.5f;
-    float const BONK_BESTIAL_WRATH_OWN_DAMAGE   = 0.85f;
+    float const BONK_BESTIAL_WRATH_OWN_DAMAGE   = 0.75f;
+    float const BONK_BESTIAL_WRATH_HOWL         = 1.25f;
     float const BONK_TRUESHOT_MARKED            = 1.3f;
     float const BONK_CAPSTONE_EMPOWERED         = 1.2f;
     uint32 const BONK_SHATTERLORD_FREEZE_STACKS = 4;
@@ -951,4 +952,9 @@ bool BonkRun::IsPetFrenzied() const
 float BonkRun::GetBestialWrathFrenzy() const
 {
     return BONK_BESTIAL_WRATH_FRENZY;
+}
+
+float BonkRun::GetBestialWrathHowl() const
+{
+    return BONK_BESTIAL_WRATH_HOWL;
 }

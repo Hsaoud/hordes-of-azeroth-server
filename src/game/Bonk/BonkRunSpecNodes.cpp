@@ -74,11 +74,22 @@ float BonkRun::RollDotCrit(Unit const* victim, uint32 spellId) const
 
 void BonkRun::OnSpellKill(uint32 spellId)
 {
-    if (m_state != STATE_RUNNING || m_mastery.Special(BONK_SPECIAL_EXECUTE_ENRAGE) <= 0.0f)
-        return;
     auto root = m_spellRoots.find(spellId);
-    if (root != m_spellRoots.end() && root->second == BONK_WEAPON_EXECUTE)
+    if (m_state != STATE_RUNNING || root == m_spellRoots.end())
+        return;
+    if (root->second == BONK_WEAPON_EXECUTE && m_mastery.Special(BONK_SPECIAL_EXECUTE_ENRAGE) > 0.0f)
         Enrage();
+    if (root->second == BONK_WEAPON_PENANCE)
+        ShortenPenance(int32(m_mastery.Special(BONK_SPECIAL_PENANCE_KILL_COOLDOWN)));
+}
+
+void BonkRun::ShortenPenance(int32 ms)
+{
+    if (ms <= 0)
+        return;
+    for (OwnedWeapon& owned : m_weapons)
+        if (owned.weapon.behavior == BONK_BEHAVIOR_PENANCE)
+            owned.timer = std::max<int32>(0, owned.timer - ms);
 }
 
 void BonkRun::OnSummonKill(Unit* summon, Unit* victim)

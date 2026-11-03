@@ -338,6 +338,7 @@ class BonkRun
         void StaggerOnHit(Unit* victim);
         void ResetOnKill(uint32 spellId);
         void OnSpellKill(uint32 spellId);
+        void ShortenPenance(int32 ms);
         void OnSummonKill(Unit* summon, Unit* victim);
         float RollDotCrit(Unit const* victim, uint32 spellId) const;
         void OnTalentDamage(Unit* victim, SpellEntry const* spell);
@@ -926,6 +927,7 @@ class BonkRun
         bool IsPetFrenzied() const;
         bool IsHowlFrenzied() const;
         float GetBestialWrathFrenzy() const;
+        float GetBestialWrathHowl() const;
         float GetPackPowerShare() const;
         void UpdateDefensive(uint32 diff);
         void UpdatePets(OwnedWeapon& owned);

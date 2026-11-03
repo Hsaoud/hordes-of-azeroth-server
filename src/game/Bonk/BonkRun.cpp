@@ -413,6 +413,7 @@ float const BONK_START_POLY_REACH   = 10.0f;
     int32 const BONK_STAMPEDE_FIRST_MS     = 2000;
     int32 const BONK_STAMPEDE_RETRY_MS     = 500;
     uint32 const BONK_STAMPEDE_BEASTS      = 3;
+    float const BONK_STAMPEDE_SHARE        = 0.7f;
     float const BONK_STAMPEDE_LANE         = 2.5f;
     float const BONK_STAMPEDE_LEAD         = 12.0f;
     float const BONK_STAMPEDE_PAST         = 14.0f;
@@ -9759,13 +9760,13 @@ bool BonkRun::Howl(OwnedWeapon& owned)
 
 float BonkRun::GetFrenzyDamage() const
 {
-    if (!IsHowlFrenzied() && m_mastery.Has(BONK_CAPSTONE_BESTIAL_WRATH))
-        return GetBestialWrathFrenzy();
-    float damage = BONK_FRENZY_DAMAGE;
+    float upgrades = 0.0f;
     for (OwnedWeapon const& owned : m_weapons)
         if (owned.weapon.behavior == BONK_BEHAVIOR_WRATH)
-            damage += GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_FRENZY) / 100.0f;
-    return damage;
+            upgrades += GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_FRENZY) / 100.0f;
+    if (m_mastery.Has(BONK_CAPSTONE_BESTIAL_WRATH))
+        return GetBestialWrathFrenzy() * (IsHowlFrenzied() ? GetBestialWrathHowl() + upgrades : 1.0f);
+    return BONK_FRENZY_DAMAGE + upgrades;
 }
 
 bool BonkRun::IsHowlFrenzied() const
@@ -10655,7 +10656,7 @@ bool BonkRun::LaunchStampede(OwnedWeapon const& owned)
         map->GetWalkHitPosition(nullptr, cx, cy, cz, ex, ey, ez);
         if (!SummonBeast(owned, BEAST_SPECTRAL, sx, sy, sz, angle, uint32(BONK_STAMPEDE_LIFE_MS * GetWeaponDurationScale(owned))))
             continue;
-        QueueCharge(m_beasts.back(), ex, ey, ez, 1.0f, BONK_STAMPEDE_SPEED);
+        QueueCharge(m_beasts.back(), ex, ey, ez, BONK_STAMPEDE_SHARE, BONK_STAMPEDE_SPEED);
         launched = true;
     }
     return launched;
