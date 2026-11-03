@@ -1757,6 +1757,7 @@ void BonkRun::StartStage()
     m_pendingCasts.clear();
     m_heldShotSources.clear();
     m_telegraphs.Dismiss(m_player);
+    m_player->GetBonkPlayer()->ForgetShownReachRing();
     m_objectives.Clear(m_player);
     m_spawnPoints.Reset(m_player->GetPositionX(), m_player->GetPositionY(), m_player->GetPositionZ());
     ResetShrines();
@@ -6054,6 +6055,7 @@ void BonkRun::ClearStageObjects()
     DespawnProjectiles();
     ClearHunterEvolutions();
     m_telegraphs.Dismiss(m_player);
+    m_player->GetBonkPlayer()->ForgetShownReachRing();
     m_objectives.Clear(m_player);
     DespawnShrines();
     DespawnVendor();
@@ -12538,6 +12540,39 @@ BonkRun::OwnedWeapon const* BonkRun::FindOwned(uint32 weaponId) const
     return itr != m_weapons.end() ? &*itr : nullptr;
 }
 
+uint32 BonkRun::GetReachRingRoot(uint32 slot) const
+{
+    return slot >= 1 && slot <= m_weapons.size() ? GetRootWeapon(m_weapons[slot - 1].weapon) : 0;
+}
+
+uint32 BonkRun::GetReachRingSlot(uint32 rootId) const
+{
+    for (uint32 index = 0; rootId && index < m_weapons.size(); ++index)
+        if (GetRootWeapon(m_weapons[index].weapon) == rootId)
+            return index + 1;
+    return 0;
+}
+
+float BonkRun::GetReachRingSize(uint32 rootId) const
+{
+    uint32 const slot = GetReachRingSlot(rootId);
+    if (!slot)
+        return 0.0f;
+    OwnedWeapon const& owned = m_weapons[slot - 1];
+    BonkWeapon const& weapon = owned.weapon;
+    if (weapon.range <= weapon.radius)
+        return GetWeaponRadius(owned);
+    return weapon.range * (weapon.IsMeleeStrike() ? GetWeaponArea(owned) : 1.0f);
+}
+
+std::string BonkRun::GetReachRingName(uint32 slot) const
+{
+    if (slot < 1 || slot > m_weapons.size())
+        return "";
+    BonkWeapon const& weapon = m_weapons[slot - 1].weapon;
+    return Localize(BONK_FIELD_WEAPON_NAME, weapon.id, weapon.name);
+}
+
 bool BonkRun::IsEvolutionBanished(uint32 evolvedId) const
 {
     Offer probe;
@@ -14460,6 +14495,7 @@ void BonkRun::CleanUp()
     m_pendingCasts.clear();
     m_heldShotSources.clear();
     m_telegraphs.Dismiss(m_player);
+    m_player->GetBonkPlayer()->ForgetShownReachRing();
     DespawnTraps();
     DespawnLandMines();
     DespawnPets();

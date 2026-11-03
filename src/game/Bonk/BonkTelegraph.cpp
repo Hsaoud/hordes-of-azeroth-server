@@ -134,13 +134,15 @@ void SendBonkMissile(Player* player, uint32 spellId, float fromX, float fromY, f
 }
 
 void SendBonkMark(Player* player, std::string const& key, BonkTelegraphShape shape, float x, float y, float z, float orientation, float size,
-    uint32 durationMs, bool outlineOnly, uint8 style, ObjectGuid const& follow, std::string const& texture, uint32 doneMs, bool groundEffect)
+    uint32 durationMs, bool outlineOnly, uint8 style, ObjectGuid const& follow, std::string const& texture, uint32 doneMs, bool groundEffect,
+    uint32 opacityPercent)
 {
     if (Map* map = player ? player->FindMap() : nullptr)
         z = GetTelegraphGround(map, shape, x, y, z, orientation, size);
     SendBonkDraw(player, "mark~" + key + "~" + std::to_string(uint32(shape)) + "~" + FormatPoint(x, y, z) + "~" + FormatFloat(orientation) + "~" +
         FormatFloat(size) + "~" + std::to_string(durationMs) + "~" + std::to_string((outlineOnly ? BONK_TELEGRAPH_OUTLINE_ONLY : 0) | (groundEffect ? BONK_TELEGRAPH_GROUND_EFFECT : 0)) + "~" +
-        std::to_string(uint32(style)) + "~" + std::to_string(follow.GetRawValue()) + "~" + texture + "~" + std::to_string(doneMs));
+        std::to_string(uint32(style)) + "~" + std::to_string(follow.GetRawValue()) + "~" + texture + "~" + std::to_string(doneMs) + "~" +
+        std::to_string(std::min(opacityPercent, 100u)));
 }
 
 void SendBonkUnmark(Player* player, std::string const& key)

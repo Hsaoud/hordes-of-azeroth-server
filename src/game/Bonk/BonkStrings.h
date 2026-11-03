@@ -940,6 +940,8 @@ enum BonkString : uint32
     BONK_STRING_ENEMY_METEOR_SHOWER                     = 1058,
     BONK_STRING_ENEMY_BURNS_OUTER_RING                  = 1059,
     BONK_STRING_COOP_HOST_FORTUNES                      = 1060,
+    BONK_STRING_REACH_RING_SHOWN                        = 1062,
+    BONK_STRING_REACH_RING_HIDDEN                       = 1063,
 };
 
 struct BonkStringText

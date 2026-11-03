@@ -376,6 +376,10 @@ class BonkRun
         void ShowAreaImpact(uint32 kit, float x, float y, float z, float radius);
         void ShowRingImpact(uint32 kit, float x, float y, float z, float inner, float outer);
         void HoldBigMoves(ObjectGuid const& mover, uint32 durationMs);
+        uint32 GetReachRingRoot(uint32 slot) const;
+        uint32 GetReachRingSlot(uint32 rootId) const;
+        float GetReachRingSize(uint32 rootId) const;
+        std::string GetReachRingName(uint32 slot) const;
         bool AreBigMovesHeld(ObjectGuid const& asker = ObjectGuid()) const { return m_bigMovesUntilMs > m_totalMs && m_bigMover != asker; }
         void ShowLineImpacts(uint32 kit, float x, float y, float z, float orientation, float length);
         ObjectGuid PlaceBoltTarget(float x, float y, float z, uint32 lifetimeMs);

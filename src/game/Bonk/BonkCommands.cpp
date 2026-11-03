@@ -878,6 +878,33 @@ bool ChatHandler::HandleBonkEffectsCommand(char* args)
     return true;
 }
 
+bool ChatHandler::HandleBonkRingCommand(char* args)
+{
+    BonkPlayer* bonk = m_session->GetPlayer()->GetBonkPlayer();
+    char* action = ExtractArg(&args);
+    if (!action)
+        return false;
+    uint32 first = 0;
+    if (!strcmp(action, "slot") && ExtractUInt32(&args, first))
+    {
+        bonk->ChooseReachRingSlot(first);
+        return true;
+    }
+    if (!strcmp(action, "preview") && ExtractUInt32(&args, first))
+    {
+        bonk->SetReachRingPreview(first != 0);
+        return true;
+    }
+    uint32 style = 0, filled = 0, opacity = 0;
+    if (!strcmp(action, "set") && ExtractUInt32(&args, first) && ExtractUInt32(&args, style) && ExtractUInt32(&args, filled) &&
+        ExtractUInt32(&args, opacity))
+    {
+        bonk->SetReachRing(first, style, filled != 0, opacity);
+        return true;
+    }
+    return false;
+}
+
 bool ChatHandler::HandleBonkNoticeCommand(char* args)
 {
     char* which = ExtractArg(&args);

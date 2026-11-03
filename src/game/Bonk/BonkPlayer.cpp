@@ -2169,6 +2169,7 @@ void BonkPlayer::Update(uint32 diff)
         else
             BonkStats::UpdateBossBar(m_player, diff);
     }
+    UpdateReachRing(diff);
 
     if (m_player->GetPowerType() == POWER_MANA)
     {
@@ -2176,6 +2177,98 @@ void BonkPlayer::Update(uint32 diff)
         if (m_player->GetPower(POWER_MANA) < maxMana)
             m_player->SetPower(POWER_MANA, maxMana);
     }
+}
+
+namespace
+{
+    float const BONK_REACH_RING_PREVIEW_SIZE = 10.0f;
+    float const BONK_REACH_RING_STEPS_PER_YARD = 10.0f;
+    int32 const BONK_REACH_RING_REFRESH_MS = 250;
+    uint32 const BONK_REACH_RING_MIN_OPACITY = 10;
+    uint32 const BONK_REACH_RING_LAST_STYLE = BONK_TELEGRAPH_STYLE_BLOOD;
+    char const* const BONK_REACH_RING_KEY = "reach";
+}
+
+void BonkPlayer::SetReachRing(uint32 rootId, uint32 style, bool filled, uint32 opacity)
+{
+    m_reachRingRoot = rootId;
+    m_reachRingChosen.style = std::min(style, BONK_REACH_RING_LAST_STYLE);
+    m_reachRingChosen.filled = filled;
+    m_reachRingChosen.opacity = std::max(BONK_REACH_RING_MIN_OPACITY, std::min(opacity, 100u));
+    RefreshReachRing();
+    SendReachRingSlot();
+}
+
+void BonkPlayer::ChooseReachRingSlot(uint32 slot)
+{
+    uint32 const root = m_run ? m_run->GetReachRingRoot(slot) : 0;
+    if (!root)
+        return;
+    if (root == m_reachRingRoot)
+    {
+        m_reachRingRoot = 0;
+        Notify(BONK_STRING_REACH_RING_HIDDEN);
+    }
+    else
+    {
+        m_reachRingRoot = root;
+        Notify(BONK_STRING_REACH_RING_SHOWN, { m_run->GetReachRingName(slot) });
+    }
+    RefreshReachRing();
+    SendReachRingSlot();
+}
+
+void BonkPlayer::SetReachRingPreview(bool previewing)
+{
+    m_reachRingPreview = previewing;
+    RefreshReachRing();
+}
+
+void BonkPlayer::ForgetShownReachRing()
+{
+    m_reachRingShown = ReachRingLook();
+}
+
+void BonkPlayer::UpdateReachRing(uint32 diff)
+{
+    m_reachRingRefreshMs -= int32(diff);
+    if (m_reachRingRefreshMs > 0)
+        return;
+    m_reachRingRefreshMs = BONK_REACH_RING_REFRESH_MS;
+    RefreshReachRing();
+    if ((m_run ? m_run->GetReachRingSlot(m_reachRingRoot) : 0) != m_reachRingSlotSent)
+        SendReachRingSlot();
+}
+
+void BonkPlayer::RefreshReachRing()
+{
+    float size = m_run ? m_run->GetReachRingSize(m_reachRingRoot) : 0.0f;
+    if (size <= 0.0f && m_reachRingPreview)
+        size = BONK_REACH_RING_PREVIEW_SIZE;
+    if (!m_player->IsInWorld() || !m_player->IsAlive() || m_player->IsBeingTeleported())
+        size = 0.0f;
+    ReachRingLook wanted;
+    if (size > 0.0f)
+    {
+        wanted = m_reachRingChosen;
+        wanted.steps = std::max(1u, uint32(size * BONK_REACH_RING_STEPS_PER_YARD + 0.5f));
+    }
+    if (wanted == m_reachRingShown)
+        return;
+    m_reachRingShown = wanted;
+    if (!wanted.steps)
+    {
+        SendBonkUnmark(m_player, BONK_REACH_RING_KEY);
+        return;
+    }
+    SendBonkMark(m_player, BONK_REACH_RING_KEY, BONK_TELEGRAPH_CIRCLE, m_player->GetPositionX(), m_player->GetPositionY(), m_player->GetPositionZ(),
+        0.0f, size, 0, !wanted.filled, uint8(wanted.style), m_player->GetObjectGuid(), "", 0, false, wanted.opacity);
+}
+
+void BonkPlayer::SendReachRingSlot()
+{
+    m_reachRingSlotSent = m_run ? m_run->GetReachRingSlot(m_reachRingRoot) : 0;
+    SendAddon("reachring~" + std::to_string(m_reachRingRoot) + "~" + std::to_string(m_reachRingSlotSent));
 }
 
 bool BonkPlayer::IsTierCleared(BonkTier const& tier) const

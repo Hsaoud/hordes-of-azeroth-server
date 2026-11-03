@@ -56,6 +56,10 @@ class BonkPlayer
         void SetLeashFactor(float factor) { m_leashFactor = factor; }
         uint32 GetOtherEffects() const { return m_otherEffects; }
         void SetOtherEffects(uint32 percent) { m_otherEffects = std::min(percent, 100u); }
+        void SetReachRing(uint32 rootId, uint32 style, bool filled, uint32 opacity);
+        void ChooseReachRingSlot(uint32 slot);
+        void SetReachRingPreview(bool previewing);
+        void ForgetShownReachRing();
         float GetLeashDistance() const { return m_leashDistance; }
         void SetLeashDistance(float distance) { m_leashDistance = distance; }
         float GetRunDodge() const;
@@ -434,6 +438,26 @@ class BonkPlayer
         bool m_watchingStats = false;
         float m_leashFactor = 1.0f;
         uint32 m_otherEffects = 100;
+        struct ReachRingLook
+        {
+            uint32 steps = 0;
+            uint32 style = 0;
+            bool filled = false;
+            uint32 opacity = 0;
+            bool operator==(ReachRingLook const& other) const
+            {
+                return steps == other.steps && style == other.style && filled == other.filled && opacity == other.opacity;
+            }
+        };
+        uint32 m_reachRingRoot = 0;
+        ReachRingLook m_reachRingChosen;
+        ReachRingLook m_reachRingShown;
+        uint32 m_reachRingSlotSent = 0;
+        bool m_reachRingPreview = false;
+        int32 m_reachRingRefreshMs = 0;
+        void UpdateReachRing(uint32 diff);
+        void RefreshReachRing();
+        void SendReachRingSlot();
         float m_leashDistance = 0.0f;
         bool m_gearNoticePending = false;
         LocaleConstant m_locale = LOCALE_enUS;
