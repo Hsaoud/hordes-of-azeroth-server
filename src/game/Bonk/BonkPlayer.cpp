@@ -1114,6 +1114,7 @@ void BonkPlayer::WriteHeroScreenStats() const
             << ", itemLevel = " << (hero.items ? hero.itemLevels / hero.items : 0)
             << ", gearValue = " << hero.gearValue
             << ", played = " << hero.played
+            << ", class = " << uint32(hero.classId)
             << ", mastery = " << BonkMastery::GetLevel(hero.ironman ? hero.ironmanMasteryXp : masteryXp[hero.classId]);
         if (hero.ironman)
             lua << ", ironman = true, gold = " << hero.gold;
