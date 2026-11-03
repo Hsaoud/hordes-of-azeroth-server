@@ -12697,6 +12697,14 @@ bool BonkRun::OfferGainsAnything(OwnedWeapon const& owned, Offer const& offer) c
     return owned.rank < BONK_DAMAGELESS_MAX_RANK || offer.upgrades[0] != BONK_SPELL_UPGRADE_NONE;
 }
 
+bool BonkRun::IsEmptyRankUp(Offer const& offer) const
+{
+    if (!offer.isWeapon || offer.isCard || offer.step != BONK_STEP_RANK)
+        return false;
+    OwnedWeapon const* owned = FindOwned(offer.id);
+    return owned && (IsMaxAtPickup(owned->weapon) || !OfferGainsAnything(*owned, offer));
+}
+
 bool BonkRun::IsRankMaxed(OwnedWeapon const& owned) const
 {
     if (IsMaxAtPickup(owned.weapon))
@@ -13193,7 +13201,7 @@ bool BonkRun::OfferUpgrades(OfferSource source, std::vector<Offer> const* avoid,
                     RollUpgrades(*owned, card);
                 }
 
-    cards.erase(std::remove_if(cards.begin(), cards.end(), [this](Offer const& card) { return DescribeStep(card).empty(); }), cards.end());
+    cards.erase(std::remove_if(cards.begin(), cards.end(), [this](Offer const& card) { return DescribeStep(card).empty() || IsEmptyRankUp(card); }), cards.end());
 
     if (drawn)
     {
