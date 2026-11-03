@@ -129,8 +129,8 @@ namespace
         MAX_ENEMY_TYPE
     };
 
-    char const* const ENEMY_TYPE_LABELS[MAX_ENEMY_TYPE] = { "One caster", "One ranged enemy", "One charger", "One elite",
-        "One mini-boss", "One boss" };
+    BonkString const ENEMY_TYPE_LABELS[MAX_ENEMY_TYPE] = { BONK_STRING_SANDBOX_ENEMY_CASTER, BONK_STRING_SANDBOX_ENEMY_RANGED,
+        BONK_STRING_SANDBOX_ENEMY_CHARGER, BONK_STRING_SANDBOX_ENEMY_ELITE, BONK_STRING_SANDBOX_ENEMY_MINIBOSS, BONK_STRING_SANDBOX_ENEMY_BOSS };
 
     struct SandboxEnemy
     {
@@ -155,14 +155,19 @@ namespace
         player->PlayerTalkClass->GetGossipMenu().AddMenuItem(icon, text.c_str(), sender, action);
     }
 
-    void AddBack(Player* player, SandboxMenu menu, uint32 page = 0, uint32 context = 0)
+    std::string Text(Player* player, BonkString id, std::vector<std::string> const& args = {})
     {
-        AddItem(player, GOSSIP_ICON_CHAT, "Back", SENDER_OPEN, MenuAction(menu, page, context));
+        return player->GetBonkPlayer()->GetString(id, args);
     }
 
-    std::string Toggled(bool on, std::string const& label)
+    void AddBack(Player* player, SandboxMenu menu, uint32 page = 0, uint32 context = 0)
     {
-        return std::string(on ? "[On] " : "[Off] ") + label;
+        AddItem(player, GOSSIP_ICON_CHAT, Text(player, BONK_STRING_SANDBOX_BACK), SENDER_OPEN, MenuAction(menu, page, context));
+    }
+
+    std::string Toggled(Player* player, bool on, std::string const& label)
+    {
+        return Text(player, on ? BONK_STRING_SANDBOX_TOGGLE_ON : BONK_STRING_SANDBOX_TOGGLE_OFF, { label });
     }
 
     uint32 ClampPage(uint32 page, size_t total, uint32 pageSize = BONK_SANDBOX_PAGE)
@@ -174,9 +179,9 @@ namespace
     void AddPaging(Player* player, SandboxMenu menu, uint32 page, uint32 context, size_t total)
     {
         if (page > 0)
-            AddItem(player, GOSSIP_ICON_CHAT, "Previous page", SENDER_OPEN, MenuAction(menu, page - 1, context));
+            AddItem(player, GOSSIP_ICON_CHAT, Text(player, BONK_STRING_SANDBOX_PREVIOUS_PAGE), SENDER_OPEN, MenuAction(menu, page - 1, context));
         if ((page + 1) * BONK_SANDBOX_PAGE < total)
-            AddItem(player, GOSSIP_ICON_CHAT, "Next page", SENDER_OPEN, MenuAction(menu, page + 1, context));
+            AddItem(player, GOSSIP_ICON_CHAT, Text(player, BONK_STRING_SANDBOX_NEXT_PAGE), SENDER_OPEN, MenuAction(menu, page + 1, context));
     }
 
     bool IsEnemyType(BonkMapCreature const& creature, SandboxEnemyType type)
@@ -202,7 +207,7 @@ namespace
         }
     }
 
-    std::vector<SandboxEnemy> ListEnemies(SandboxEnemyType type)
+    std::vector<SandboxEnemy> ListEnemies(SandboxEnemyType type, BonkPlayer const* viewer = nullptr)
     {
         std::vector<SandboxEnemy> list;
         std::set<uint32> seen;
@@ -212,7 +217,11 @@ namespace
                 if (!IsEnemyType(creature, type) || !seen.insert(creature.entry).second)
                     continue;
                 if (CreatureInfo const* info = sObjectMgr.GetCreatureTemplate(creature.entry))
-                    list.push_back({ creature.entry, info->name + " (" + itr.second.name + ")" });
+                {
+                    std::string const name = viewer ? viewer->GetCreatureName(creature.entry, info->name) : info->name;
+                    std::string const place = viewer ? viewer->Localize(BONK_FIELD_MAP_NAME, itr.second.id, itr.second.name) : itr.second.name;
+                    list.push_back({ creature.entry, viewer ? viewer->GetString(BONK_STRING_SANDBOX_NAME_IN_PARENS, { name, place }) : name + " (" + place + ")" });
+                }
             }
         return list;
     }
@@ -255,49 +264,49 @@ namespace
 
     void AddMainItems(Player* player)
     {
-        AddItem(player, GOSSIP_ICON_BATTLE, "Dummies", SENDER_OPEN, MenuAction(MENU_DUMMIES));
-        AddItem(player, GOSSIP_ICON_BATTLE, "Enemies", SENDER_OPEN, MenuAction(MENU_ENEMIES));
-        AddItem(player, GOSSIP_ICON_TRAINER, "Levels", SENDER_OPEN, MenuAction(MENU_LEVELS));
-        AddItem(player, GOSSIP_ICON_TRAINER, "Spells", SENDER_OPEN, MenuAction(MENU_SPELLS));
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Reset", SENDER_OPEN, MenuAction(MENU_RESET));
-        AddItem(player, GOSSIP_ICON_TAXI, "Leave the sandbox", SENDER_LEAVE, 0);
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_MENU_DUMMIES), SENDER_OPEN, MenuAction(MENU_DUMMIES));
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_MENU_ENEMIES), SENDER_OPEN, MenuAction(MENU_ENEMIES));
+        AddItem(player, GOSSIP_ICON_TRAINER, Text(player, BONK_STRING_SANDBOX_MENU_LEVELS), SENDER_OPEN, MenuAction(MENU_LEVELS));
+        AddItem(player, GOSSIP_ICON_TRAINER, Text(player, BONK_STRING_SANDBOX_MENU_SPELLS), SENDER_OPEN, MenuAction(MENU_SPELLS));
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_MENU_RESET), SENDER_OPEN, MenuAction(MENU_RESET));
+        AddItem(player, GOSSIP_ICON_TAXI, Text(player, BONK_STRING_SANDBOX_MENU_LEAVE), SENDER_LEAVE, 0);
     }
 
     void AddDummyItems(Player* player, bool deep)
     {
-        AddItem(player, GOSSIP_ICON_BATTLE, "1 dummy", SENDER_DUMMY, DummyAction(1, BONK_SPAWN_NORMAL));
-        AddItem(player, GOSSIP_ICON_BATTLE, "Row of 5 dummies", SENDER_DUMMY, DummyAction(5, BONK_SPAWN_NORMAL));
-        AddItem(player, GOSSIP_ICON_BATTLE, "Grid of 20 dummies", SENDER_DUMMY, DummyAction(20, BONK_SPAWN_NORMAL));
-        AddItem(player, GOSSIP_ICON_BATTLE, "Circle of 20 dummies around you", SENDER_CROWD_DUMMY, 20);
-        AddItem(player, GOSSIP_ICON_BATTLE, "1 elite dummy", SENDER_DUMMY, DummyAction(1, BONK_SPAWN_ELITE));
-        AddItem(player, GOSSIP_ICON_BATTLE, "1 boss dummy", SENDER_DUMMY, DummyAction(1, BONK_SPAWN_BOSS));
-        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(deep, "Deep dummies: 100 times the health, refill below half"), SENDER_TOGGLE, TOGGLE_DEEP_DUMMIES);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Refill dummies", SENDER_RESET, RESET_DUMMIES);
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_DUMMY_ONE), SENDER_DUMMY, DummyAction(1, BONK_SPAWN_NORMAL));
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_DUMMY_ROW), SENDER_DUMMY, DummyAction(5, BONK_SPAWN_NORMAL));
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_DUMMY_GRID), SENDER_DUMMY, DummyAction(20, BONK_SPAWN_NORMAL));
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_DUMMY_CIRCLE), SENDER_CROWD_DUMMY, 20);
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_DUMMY_ELITE), SENDER_DUMMY, DummyAction(1, BONK_SPAWN_ELITE));
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_DUMMY_BOSS), SENDER_DUMMY, DummyAction(1, BONK_SPAWN_BOSS));
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player, deep, Text(player, BONK_STRING_SANDBOX_DUMMY_DEEP)), SENDER_TOGGLE, TOGGLE_DEEP_DUMMIES);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_REFILL_DUMMIES), SENDER_RESET, RESET_DUMMIES);
         AddBack(player, MENU_MAIN);
     }
 
     void AddEnemyItems(Player* player, bool passive, bool unkillable, bool movesOff, bool reachReport)
     {
         for (uint32 count : { 10u, 30u, 100u })
-            AddItem(player, GOSSIP_ICON_BATTLE, "Pack of " + std::to_string(count) + " enemies", SENDER_PACK, count);
+            AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_PACK, { std::to_string(count) }), SENDER_PACK, count);
         for (uint32 type = 0; type < MAX_ENEMY_TYPE; ++type)
         {
             size_t const choices = ListEnemies(SandboxEnemyType(type)).size();
-            AddItem(player, GOSSIP_ICON_CHAT, std::string(ENEMY_TYPE_LABELS[type]) + " (" + std::to_string(choices) + ")", SENDER_OPEN,
+            AddItem(player, GOSSIP_ICON_CHAT, Text(player, BONK_STRING_SANDBOX_NAME_IN_PARENS, { Text(player, ENEMY_TYPE_LABELS[type]), std::to_string(choices) }), SENDER_OPEN,
                 MenuAction(MENU_ENEMY_LIST, 0, type));
         }
-        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(passive, "Enemies passive"), SENDER_TOGGLE, TOGGLE_PASSIVE);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(unkillable, "Enemies stop at 1 health"), SENDER_TOGGLE, TOGGLE_UNKILLABLE);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(movesOff, "Enemy moves off (melee only)"), SENDER_TOGGLE, TOGGLE_MOVES_OFF);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(reachReport, "Report melee swing distance"), SENDER_TOGGLE, TOGGLE_REACH_REPORT);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player, passive, Text(player, BONK_STRING_SANDBOX_ENEMIES_PASSIVE)), SENDER_TOGGLE, TOGGLE_PASSIVE);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player, unkillable, Text(player, BONK_STRING_SANDBOX_ENEMIES_UNKILLABLE)), SENDER_TOGGLE, TOGGLE_UNKILLABLE);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player, movesOff, Text(player, BONK_STRING_SANDBOX_ENEMY_MOVES_OFF)), SENDER_TOGGLE, TOGGLE_MOVES_OFF);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player, reachReport, Text(player, BONK_STRING_SANDBOX_REPORT_REACH)), SENDER_TOGGLE, TOGGLE_REACH_REPORT);
         AddBack(player, MENU_MAIN);
     }
 
     void AddEnemyList(Player* player, SandboxEnemyType type, uint32 page)
     {
-        std::vector<SandboxEnemy> const list = ListEnemies(type);
+        std::vector<SandboxEnemy> const list = ListEnemies(type, player->GetBonkPlayer());
         if (list.empty())
-            AddItem(player, GOSSIP_ICON_CHAT, "None on any run map", SENDER_OPEN, MenuAction(MENU_ENEMIES));
+            AddItem(player, GOSSIP_ICON_CHAT, Text(player, BONK_STRING_SANDBOX_NO_ENEMIES), SENDER_OPEN, MenuAction(MENU_ENEMIES));
         page = ClampPage(page, list.size());
         size_t const end = std::min(list.size(), size_t(page + 1) * BONK_SANDBOX_PAGE);
         for (size_t i = size_t(page) * BONK_SANDBOX_PAGE; i < end; ++i)
@@ -308,22 +317,22 @@ namespace
 
     void AddLevelItems(Player* player)
     {
-        AddItem(player, GOSSIP_ICON_TRAINER, "+1 level", SENDER_LEVELS, 1);
-        AddItem(player, GOSSIP_ICON_TRAINER, "+5 levels", SENDER_LEVELS, 5);
-        AddItem(player, GOSSIP_ICON_TRAINER, "+10 levels", SENDER_LEVELS, 10);
+        AddItem(player, GOSSIP_ICON_TRAINER, Text(player, BONK_STRING_SANDBOX_LEVEL_PLUS_ONE), SENDER_LEVELS, 1);
+        AddItem(player, GOSSIP_ICON_TRAINER, Text(player, BONK_STRING_SANDBOX_LEVEL_PLUS_FIVE), SENDER_LEVELS, 5);
+        AddItem(player, GOSSIP_ICON_TRAINER, Text(player, BONK_STRING_SANDBOX_LEVEL_PLUS_TEN), SENDER_LEVELS, 10);
         for (uint32 level : { 10u, 20u, 30u, 40u, 50u, 60u })
-            AddItem(player, GOSSIP_ICON_TRAINER, "Set level " + std::to_string(level) + " (no level-up choices)", SENDER_SET_LEVEL, level);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Spawn experience crystals", SENDER_LEVELS, 0);
+            AddItem(player, GOSSIP_ICON_TRAINER, Text(player, BONK_STRING_SANDBOX_SET_LEVEL, { std::to_string(level) }), SENDER_SET_LEVEL, level);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_SPAWN_CRYSTALS), SENDER_LEVELS, 0);
         AddBack(player, MENU_MAIN);
     }
 
     void AddResetItems(Player* player)
     {
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Clear all enemies and dummies", SENDER_RESET, RESET_CLEAR);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Full heal", SENDER_RESET, RESET_HEAL);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Reset all cooldowns", SENDER_RESET, RESET_COOLDOWNS);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, "Refill dummies", SENDER_RESET, RESET_DUMMIES);
-        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player->GetBonkPlayer()->IsTestGod(), "God mode"), SENDER_TOGGLE, TOGGLE_GOD);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_CLEAR_ALL), SENDER_RESET, RESET_CLEAR);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_FULL_HEAL), SENDER_RESET, RESET_HEAL);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_RESET_COOLDOWNS), SENDER_RESET, RESET_COOLDOWNS);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Text(player, BONK_STRING_SANDBOX_REFILL_DUMMIES), SENDER_RESET, RESET_DUMMIES);
+        AddItem(player, GOSSIP_ICON_INTERACT_1, Toggled(player, player->GetBonkPlayer()->IsTestGod(), Text(player, BONK_STRING_SANDBOX_GOD_MODE)), SENDER_TOGGLE, TOGGLE_GOD);
         AddBack(player, MENU_MAIN);
     }
 }
@@ -547,7 +556,7 @@ void BonkRun::LeaveSandbox()
             bonk->SendAddon("end~1~" + std::to_string(m_totalMs / IN_MILLISECONDS) + "~" + std::to_string(m_kills) + "~0~" +
                 std::to_string(m_player->GetLevel()) + "~" + std::to_string(m_stage) + "~0~0");
         else
-            ChatHandler(m_player).SendSysMessage("You left the sandbox.");
+            ChatHandler(m_player).SendSysMessage(GetString(BONK_STRING_SANDBOX_YOU_LEFT).c_str());
     }
     Exit();
 }
@@ -1291,16 +1300,16 @@ void BonkRun::AddSandboxSpellItems(uint32 page)
     {
         BonkWeapon const& base = *spells[i];
         OwnedWeapon const* owned = FindSandboxSpell(base.id);
-        std::string const text = owned ? owned->weapon.name + " (rank " + std::to_string(owned->rank) + ")" : base.name;
+        std::string const text = owned ? GetString(BONK_STRING_SANDBOX_SPELL_RANKED, { Localize(BONK_FIELD_WEAPON_NAME, owned->weapon.id, owned->weapon.name), std::to_string(owned->rank) }) : Localize(BONK_FIELD_WEAPON_NAME, base.id, base.name);
         AddItem(m_player, owned ? GOSSIP_ICON_TRAINER : GOSSIP_ICON_CHAT, text, SENDER_OPEN, MenuAction(MENU_SPELL, 0, base.id));
     }
     if (page > 0)
-        AddItem(m_player, GOSSIP_ICON_CHAT, "Previous page", SENDER_OPEN, MenuAction(MENU_SPELLS, page - 1));
+        AddItem(m_player, GOSSIP_ICON_CHAT, Text(m_player, BONK_STRING_SANDBOX_PREVIOUS_PAGE), SENDER_OPEN, MenuAction(MENU_SPELLS, page - 1));
     if (end < spells.size())
-        AddItem(m_player, GOSSIP_ICON_CHAT, "Next page", SENDER_OPEN, MenuAction(MENU_SPELLS, page + 1));
-    AddItem(m_player, GOSSIP_ICON_TRAINER, "Give a passive", SENDER_OPEN, MenuAction(MENU_PASSIVES));
-    AddItem(m_player, GOSSIP_ICON_TRAINER, "Give a Darkmoon Card", SENDER_OPEN, MenuAction(MENU_CARDS));
-    AddItem(m_player, GOSSIP_ICON_INTERACT_1, "Remove all spells", SENDER_RESET, RESET_SPELLS);
+        AddItem(m_player, GOSSIP_ICON_CHAT, Text(m_player, BONK_STRING_SANDBOX_NEXT_PAGE), SENDER_OPEN, MenuAction(MENU_SPELLS, page + 1));
+    AddItem(m_player, GOSSIP_ICON_TRAINER, Text(m_player, BONK_STRING_SANDBOX_GIVE_PASSIVE), SENDER_OPEN, MenuAction(MENU_PASSIVES));
+    AddItem(m_player, GOSSIP_ICON_TRAINER, Text(m_player, BONK_STRING_SANDBOX_GIVE_CARD), SENDER_OPEN, MenuAction(MENU_CARDS));
+    AddItem(m_player, GOSSIP_ICON_INTERACT_1, Text(m_player, BONK_STRING_SANDBOX_REMOVE_ALL_SPELLS), SENDER_RESET, RESET_SPELLS);
     AddBack(m_player, MENU_MAIN);
 }
 
@@ -1314,33 +1323,35 @@ void BonkRun::AddSandboxSpellPage(uint32 baseId)
     }
 
     OwnedWeapon const* owned = FindSandboxSpell(baseId);
-    std::string const status = (owned ? owned->weapon.name + ", rank " + std::to_string(owned->rank) : base->name + ", not learned") +
-        ". Spell slots: " + std::to_string(m_weapons.size()) + " of " + std::to_string(GetSpellSlots()) + ".";
+    std::string const status = owned ?
+        GetString(BONK_STRING_SANDBOX_SPELL_STATUS_OWNED, { Localize(BONK_FIELD_WEAPON_NAME, owned->weapon.id, owned->weapon.name), std::to_string(owned->rank),
+            std::to_string(m_weapons.size()), std::to_string(GetSpellSlots()) }) :
+        GetString(BONK_STRING_SANDBOX_SPELL_STATUS_NOT_LEARNED, { Localize(BONK_FIELD_WEAPON_NAME, base->id, base->name), std::to_string(m_weapons.size()), std::to_string(GetSpellSlots()) });
     AddItem(m_player, GOSSIP_ICON_CHAT, status, SENDER_OPEN, MenuAction(MENU_SPELL, 0, baseId));
 
     std::vector<BonkWeapon const*> const evolutions = sBonkMgr.GetEvolutions(baseId);
     if (owned)
     {
         for (uint32 rank : BONK_SANDBOX_RANKS)
-            AddItem(m_player, GOSSIP_ICON_TRAINER, "Set rank " + std::to_string(rank), SENDER_SPELL_RANK, PairAction(rank, baseId));
+            AddItem(m_player, GOSSIP_ICON_TRAINER, GetString(BONK_STRING_SANDBOX_SET_RANK, { std::to_string(rank) }), SENDER_SPELL_RANK, PairAction(rank, baseId));
         for (BonkWeapon const* evolved : evolutions)
         {
             bool const held = owned->weapon.id == evolved->id;
-            AddItem(m_player, held ? GOSSIP_ICON_CHAT : GOSSIP_ICON_BATTLE, held ? evolved->name + " (held)" : "Evolve into " + evolved->name,
+            AddItem(m_player, held ? GOSSIP_ICON_CHAT : GOSSIP_ICON_BATTLE, held ? GetString(BONK_STRING_SANDBOX_EVOLVED_HELD, { Localize(BONK_FIELD_WEAPON_NAME, evolved->id, evolved->name) }) : GetString(BONK_STRING_SANDBOX_EVOLVE_INTO, { Localize(BONK_FIELD_WEAPON_NAME, evolved->id, evolved->name) }),
                 SENDER_EVOLVE, evolved->id);
         }
-        AddItem(m_player, GOSSIP_ICON_INTERACT_1, "Remove " + owned->weapon.name, SENDER_SPELL_REMOVE, baseId);
+        AddItem(m_player, GOSSIP_ICON_INTERACT_1, GetString(BONK_STRING_SANDBOX_REMOVE_SPELL, { Localize(BONK_FIELD_WEAPON_NAME, owned->weapon.id, owned->weapon.name) }), SENDER_SPELL_REMOVE, baseId);
     }
     else
     {
         if (m_weapons.size() < GetSpellSlots())
-            AddItem(m_player, GOSSIP_ICON_BATTLE, "Add " + base->name, SENDER_SPELL_ADD, baseId);
+            AddItem(m_player, GOSSIP_ICON_BATTLE, GetString(BONK_STRING_SANDBOX_ADD_SPELL, { Localize(BONK_FIELD_WEAPON_NAME, base->id, base->name) }), SENDER_SPELL_ADD, baseId);
         else
             for (OwnedWeapon const& other : m_weapons)
-                AddItem(m_player, GOSSIP_ICON_INTERACT_1, "Replace " + other.weapon.name, SENDER_SPELL_REPLACE,
+                AddItem(m_player, GOSSIP_ICON_INTERACT_1, GetString(BONK_STRING_SANDBOX_REPLACE_SPELL, { Localize(BONK_FIELD_WEAPON_NAME, other.weapon.id, other.weapon.name) }), SENDER_SPELL_REPLACE,
                     PairAction(baseId, other.weapon.evolvesFrom ? other.weapon.evolvesFrom : other.weapon.id));
         for (BonkWeapon const* evolved : evolutions)
-            AddItem(m_player, GOSSIP_ICON_BATTLE, "Add as " + evolved->name, SENDER_EVOLVE, evolved->id);
+            AddItem(m_player, GOSSIP_ICON_BATTLE, GetString(BONK_STRING_SANDBOX_ADD_AS, { Localize(BONK_FIELD_WEAPON_NAME, evolved->id, evolved->name) }), SENDER_EVOLVE, evolved->id);
     }
     AddBack(m_player, MENU_SPELLS);
 }
@@ -1359,7 +1370,7 @@ void BonkRun::AddSandboxPassiveItems(uint32 page)
         auto const rank = m_passiveRanks.find(passive.id);
         uint32 const current = rank != m_passiveRanks.end() ? rank->second : 0;
         AddItem(m_player, !passive.IsMaxed(current) ? GOSSIP_ICON_TRAINER : GOSSIP_ICON_CHAT,
-            passive.name + " " + std::to_string(current) + (passive.maxRank ? "/" + std::to_string(passive.maxRank) : ""), SENDER_PASSIVE, passive.id);
+            Localize(BONK_FIELD_PASSIVE_NAME, passive.id, passive.name) + " " + std::to_string(current) + (passive.maxRank ? "/" + std::to_string(passive.maxRank) : ""), SENDER_PASSIVE, passive.id);
     }
     AddPaging(m_player, MENU_PASSIVES, page, 0, passives.size());
     AddBack(m_player, MENU_SPELLS);
@@ -1377,7 +1388,7 @@ void BonkRun::AddSandboxCardItems(uint32 page)
     {
         BonkCard const& card = *cards[i];
         uint32 const copies = GetCardCopies(card.id);
-        AddItem(m_player, GOSSIP_ICON_VENDOR, copies ? card.name + " (" + std::to_string(copies) + " held)" : card.name, SENDER_CARD, card.id);
+        AddItem(m_player, GOSSIP_ICON_VENDOR, copies ? GetString(BONK_STRING_SANDBOX_CARD_HELD, { Localize(BONK_FIELD_CARD_NAME, card.id, card.name), std::to_string(copies) }) : Localize(BONK_FIELD_CARD_NAME, card.id, card.name), SENDER_CARD, card.id);
     }
     AddPaging(m_player, MENU_CARDS, page, 0, cards.size());
     AddBack(m_player, MENU_SPELLS);
@@ -1489,7 +1500,7 @@ bool GossipHello_npc_bonk_sandbox(Player* player, Creature* creature)
     }
 
     if (!run)
-        AddItem(player, GOSSIP_ICON_BATTLE, "Enter the sandbox", SENDER_ENTER, 0);
+        AddItem(player, GOSSIP_ICON_BATTLE, Text(player, BONK_STRING_SANDBOX_ENTER), SENDER_ENTER, 0);
     player->PlayerTalkClass->SendGossipMenu(BONK_TEXT_SANDBOX_CAMP, creature->GetObjectGuid());
     return true;
 }
