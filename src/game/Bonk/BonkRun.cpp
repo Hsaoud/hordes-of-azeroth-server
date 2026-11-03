@@ -595,6 +595,7 @@ float const BONK_START_POLY_REACH   = 10.0f;
     uint32 const BONK_SPELL_LOOT_SPARKLE = 33454;
     uint32 const BONK_HEAL_SPARKLE       = 900135;
     char const* const BONK_CHEST_PIN_ICON = "INV_Box_02";
+    char const* const BONK_FREE_CHEST_PIN_ICON = "INV_Box_04";
     char const* const BONK_MAGNET_PIN_ICON = "INV_Stone_15";
     uint32 const BONK_SPELL_FEET_SPARKLE = 33455;
     uint32 const BONK_SPELL_TICKET_POOL  = 33640;
@@ -5095,7 +5096,7 @@ bool BonkRun::SpawnChest(bool free, float x, float y, float z, uint32 choices)
     m_chests.push_back(chest->GetObjectGuid());
     m_chestChoices[chest->GetObjectGuid()] = choices;
     m_chestObjectives[chest->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(chest), 0,
-        BONK_CHEST_PIN_ICON, GetString(free ? BONK_STRING_OBJECTIVE_CHEST_FREE : BONK_STRING_OBJECTIVE_CHEST_VALOR));
+        free ? BONK_FREE_CHEST_PIN_ICON : BONK_CHEST_PIN_ICON, GetString(free ? BONK_STRING_OBJECTIVE_CHEST_FREE : BONK_STRING_OBJECTIVE_CHEST_VALOR));
     return true;
 }
 
