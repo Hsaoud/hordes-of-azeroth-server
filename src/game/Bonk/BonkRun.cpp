@@ -1,4 +1,4 @@
-#include "BonkRun.h"
+﻿#include "BonkRun.h"
 #include "BonkCoop.h"
 #include "Group.h"
 #include "BonkCodex.h"
@@ -599,6 +599,12 @@ float const BONK_START_POLY_REACH   = 10.0f;
     char const* const BONK_MAGNET_PIN_ICON = "INV_Stone_15";
     uint32 const BONK_SPELL_FEET_SPARKLE = 33455;
     uint32 const BONK_SPELL_TICKET_POOL  = 33640;
+    uint32 const BONK_SPELL_VALOR_CHEST_GLOW = 33660;
+    uint32 const BONK_SPELL_FREE_CHEST_GLOW  = 33661;
+    uint32 const BONK_SPELL_VALOR_POUCH_GLOW = 33662;
+    float const BONK_CHEST_GLOW_SCALE        = 1.0f;
+    float const BONK_FREE_CHEST_GLOW_SCALE   = 2.0f;
+    float const BONK_POUCH_GLOW_SCALE        = 0.5f;
     uint32 const BONK_SPELL_GLYPH_POOL   = 33641;
     float const BONK_DROP_POOL_SCALE     = 0.3f;
     uint32 const BONK_DISPLAY_INVISIBLE  = 11686;
@@ -5095,13 +5101,24 @@ bool BonkRun::SpawnChest(bool free, float x, float y, float z, uint32 choices)
         return false;
     m_chests.push_back(chest->GetObjectGuid());
     m_chestChoices[chest->GetObjectGuid()] = choices;
+    m_chestGlows[chest->GetObjectGuid()] = free ? PlaceMarker(chest, BONK_SPELL_FREE_CHEST_GLOW, BONK_FREE_CHEST_GLOW_SCALE) : PlaceMarker(chest, BONK_SPELL_VALOR_CHEST_GLOW, BONK_CHEST_GLOW_SCALE);
     m_chestObjectives[chest->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(chest), 0,
         free ? BONK_FREE_CHEST_PIN_ICON : BONK_CHEST_PIN_ICON, GetString(free ? BONK_STRING_OBJECTIVE_CHEST_FREE : BONK_STRING_OBJECTIVE_CHEST_VALOR));
     return true;
 }
 
+void BonkRun::RemoveGlow(std::map<ObjectGuid, uint32>& glows, ObjectGuid const& guid)
+{
+    auto const itr = glows.find(guid);
+    if (itr == glows.end())
+        return;
+    SendBonkAuraGone(m_player, itr->second);
+    glows.erase(itr);
+}
+
 void BonkRun::ForgetChestObjective(ObjectGuid const& chest)
 {
+    RemoveGlow(m_chestGlows, chest);
     auto const itr = m_chestObjectives.find(chest);
     if (itr == m_chestObjectives.end())
         return;
@@ -5229,6 +5246,8 @@ GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, 
     if (!go)
         return nullptr;
     m_powerups.push_back(go->GetObjectGuid());
+    if (powerup.effect == BONK_POWERUP_VALOR)
+        m_powerupGlows[go->GetObjectGuid()] = PlaceMarker(go, BONK_SPELL_VALOR_POUCH_GLOW, BONK_POUCH_GLOW_SCALE);
     if (lasting)
         m_powerupObjectives[go->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(go), 0,
             BONK_MAGNET_PIN_ICON, GetString(BONK_STRING_OBJECTIVE_MAGNET));
@@ -5237,6 +5256,7 @@ GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, 
 
 void BonkRun::ForgetPowerupObjective(ObjectGuid const& powerup)
 {
+    RemoveGlow(m_powerupGlows, powerup);
     auto const itr = m_powerupObjectives.find(powerup);
     if (itr == m_powerupObjectives.end())
         return;
@@ -5404,8 +5424,10 @@ void BonkRun::DespawnObjects()
     m_chests.clear();
     m_chestOpenedBy.clear();
     m_chestObjectives.clear();
+    m_chestGlows.clear();
     m_powerups.clear();
     m_powerupObjectives.clear();
+    m_powerupGlows.clear();
     for (VoidZone const& zone : m_voidZones)
         EndVoidZone(zone);
     m_voidZones.clear();
@@ -5486,6 +5508,8 @@ uint32 BonkRun::OpenChestFor(GameObject* chest, Player* opener)
 
     std::set<ObjectGuid>& opened = m_chestOpenedBy[guid];
     opened.insert(opener->GetObjectGuid());
+    if (opener == m_player)
+        RemoveGlow(m_chestGlows, guid);
     bool everyoneOpened = true;
     for (Player* member : BonkCoop::RunGroupOf(m_player))
     {

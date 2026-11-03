@@ -43,6 +43,7 @@ namespace
     float const BONK_DROP_LOOKS_DISTANCE = 7.0f;
     float const BONK_DROP_LOOKS_SPACING  = 3.0f;
     uint32 const BONK_DROP_LOOKS_LIFETIME_SEC = 180;
+    float const BONK_CHEST_LOOKS_SPACING     = 3.0f;
     uint32 const BONK_GEAR_CHECK_MS      = 250;
     uint32 const BONK_BANKER_ENTRY       = 900009;
     size_t const BONK_MAX_GEAR_DROPS     = 10;
@@ -551,6 +552,31 @@ bool BonkRun::PlaceDropLooksNow(std::string& error)
             m_dropLookKeys.push_back(core);
             m_dropLookKeys.push_back(swirl);
         }
+    }
+    return true;
+}
+
+bool BonkRun::PlaceChestLooksNow(std::string& error)
+{
+    if (!IsActive())
+        return false;
+
+    auto pouch = std::find_if(sBonkMgr.GetPowerups().begin(), sBonkMgr.GetPowerups().end(),
+        [](BonkPowerup const& powerup) { return powerup.effect == BONK_POWERUP_VALOR; });
+    float const facing = m_player->GetOrientation();
+    float const centerX = m_player->GetPositionX() + BONK_DROP_LOOKS_DISTANCE * std::cos(facing);
+    float const centerY = m_player->GetPositionY() + BONK_DROP_LOOKS_DISTANCE * std::sin(facing);
+    for (int slot = -1; slot <= 1; ++slot)
+    {
+        float const offset = float(slot) * BONK_CHEST_LOOKS_SPACING;
+        float const x = centerX - offset * std::sin(facing), y = centerY + offset * std::cos(facing);
+        float const z = m_player->GetMap()->GetHeight(x, y, m_player->GetPositionZ() + 5.0f, true, 15.0f);
+        if (z <= INVALID_HEIGHT)
+            continue;
+        if (slot < 1)
+            SpawnChest(slot == 0, x, y, z);
+        else if (pouch != sBonkMgr.GetPowerups().end())
+            PlacePowerup(*pouch, x, y, z, BONK_DROP_LOOKS_LIFETIME_SEC);
     }
     return true;
 }

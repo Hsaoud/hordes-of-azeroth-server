@@ -165,6 +165,7 @@ class BonkRun
         bool PlaceShrineNow(BonkShrineType type, std::string& error);
         bool PlacePowerupNow(uint32 entry, std::string& error);
         bool PlaceDropLooksNow(std::string& error);
+        bool PlaceChestLooksNow(std::string& error);
         void ClearDropLooks();
         void UseShrine(GameObject* go);
         bool SummonBossAtStone(BonkSpot const& stone, Player* user);
@@ -1670,6 +1671,9 @@ class BonkRun
         void ForgetChestObjective(ObjectGuid const& chest);
         std::vector<ObjectGuid> m_powerups;
         std::map<ObjectGuid, uint32> m_powerupObjectives;
+        std::map<ObjectGuid, uint32> m_chestGlows;
+        std::map<ObjectGuid, uint32> m_powerupGlows;
+        void RemoveGlow(std::map<ObjectGuid, uint32>& glows, ObjectGuid const& guid);
         GameObject* PlacePowerup(BonkPowerup const& powerup, float x, float y, float z, uint32 lifetimeSeconds);
         void ForgetPowerupObjective(ObjectGuid const& powerup);
         std::vector<Orb> m_orbs;

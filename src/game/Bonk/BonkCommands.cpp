@@ -1192,11 +1192,12 @@ bool ChatHandler::HandleBonkPowerupCommand(char* args)
     return false;
 }
 
-bool ChatHandler::HandleBonkDropLooksCommand(char* )
+bool ChatHandler::HandleBonkDropLooksCommand(char* args)
 {
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
     std::string error = "Drop looks need a run or the sandbox.";
-    if (run && run->PlaceDropLooksNow(error))
+    bool const chests = args && std::string(args).find("chests") != std::string::npos;
+    if (run && (chests ? run->PlaceChestLooksNow(error) : run->PlaceDropLooksNow(error)))
     {
         SendSysMessage("Every drop look is laid out 10 yards in front of you.");
         return true;
