@@ -12971,7 +12971,7 @@ bool BonkRun::RefreshKeptOffer(Offer& offer) const
                 return false;
         }
         RollUpgrades(*owned, offer);
-        return true;
+        return OfferGainsAnything(*owned, offer);
     }
 
     BonkPassive const* passive = sBonkMgr.GetPassive(offer.id);
