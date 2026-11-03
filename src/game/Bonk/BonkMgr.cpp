@@ -332,7 +332,7 @@ void BonkMgr::LoadTiers()
         "`shard_chance_normal`, `shard_chance_elite`, `shards_miniboss`, `shards_boss`, `description`, `art`, "
         "`mastery_xp_minute`, `mastery_xp_miniboss`, `mastery_xp_boss`, `elite_affixes`, "
         "`stage_damage_accel`, `min_alive_multiplier`, `max_alive`, `max_bruisers`, `first_elite_sec`, `charge_interval_ms`, `stages`, `finale`, `veteran_chance`, `chest_cost_minute_growth`, `details`, `opening_crowd`, `opening_sec`, "
-        "`levels`, `level_health_growth`, `level_damage_growth`, `boss_health_multiplier`, `miniboss_health_multiplier`, `miniboss_damage_multiplier` FROM `bonk_tier`"));
+        "`levels`, `level_health_growth`, `level_damage_growth`, `boss_health_multiplier`, `miniboss_health_multiplier`, `miniboss_damage_multiplier`, `all_zones` FROM `bonk_tier`"));
 
     if (!result)
     {
@@ -385,6 +385,7 @@ void BonkMgr::LoadTiers()
         tier.bossHealthMultiplier = std::max(1.0f, fields[37].GetFloat());
         tier.minibossHealthMultiplier = std::max(1.0f, fields[38].GetFloat());
         tier.minibossDamageMultiplier = std::max(0.1f, fields[39].GetFloat());
+        tier.allZones = fields[40].GetUInt8() != 0;
 
         m_tiers[tier.id] = std::move(tier);
     } while (result->NextRow());
@@ -571,7 +572,23 @@ void BonkMgr::LoadMaps()
         m_maps[map.id] = std::move(map);
     } while (result->NextRow());
 
+    for (auto& itr : m_tiers)
+        if (itr.second.allZones)
+            AddOtherTierZones(itr.second);
+
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u Bonk maps", uint32(m_maps.size()));
+}
+
+void BonkMgr::AddOtherTierZones(BonkTier& tier)
+{
+    for (BonkTier const* other : m_tiersInOrder)
+    {
+        if (other->id == tier.id)
+            continue;
+        for (auto const& itr : m_maps)
+            if (itr.second.tierId == other->id)
+                tier.mapIds.push_back(itr.first);
+    }
 }
 
 void BonkMgr::LoadArchetypes()

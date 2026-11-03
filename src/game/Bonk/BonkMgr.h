@@ -323,6 +323,7 @@ struct BonkTier
     uint32 masteryXpBoss = 40;
     uint32 stages = 3;
     bool finale = false;
+    bool allZones = false;
     uint32 levels = 0;
     float levelHealthGrowth = 1.0f;
     float levelDamageGrowth = 1.0f;
@@ -1439,6 +1440,7 @@ class BonkMgr
         void LoadLevels();
         void OrderTiers();
         void LoadMaps();
+        void AddOtherTierZones(BonkTier& tier);
         void LoadMapCreatures();
         void LoadMapEvents();
         void LoadKeywords();

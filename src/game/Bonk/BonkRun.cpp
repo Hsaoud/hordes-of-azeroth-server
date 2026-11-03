@@ -1284,10 +1284,12 @@ BonkMap const* BonkRun::ChooseNextMap()
 
 void BonkRun::ApplyDifficultyGold()
 {
-    if (!IsDungeon())
+    bool const visiting = !IsDungeon() && m_map.tierId != m_tier.id;
+    if (!IsDungeon() && !visiting)
         return;
     uint32 goldPerKill = 0;
     uint32 stageGold = 0;
+    int32 levelOffset = 0;
     uint32 zones = 0;
     for (auto const& itr : sBonkMgr.GetMaps())
     {
@@ -1296,12 +1298,15 @@ void BonkRun::ApplyDifficultyGold()
             continue;
         goldPerKill += zone.goldPerKill;
         stageGold += zone.stageGold;
+        levelOffset += zone.levelOffset;
         ++zones;
     }
     if (!zones)
         return;
     m_map.goldPerKill = (goldPerKill + zones / 2) / zones;
     m_map.stageGold = (stageGold + zones / 2) / zones;
+    if (visiting && !m_invaderId && !m_sandbox)
+        m_map.levelOffset = levelOffset / int32(zones);
 }
 
 void BonkRun::ApplyInvader()
