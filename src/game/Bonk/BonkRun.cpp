@@ -92,6 +92,11 @@ namespace
     float const BONK_KILL_SHOT_PERCENT     = 100000.0f;
     uint32 const BONK_STAGE_CROWD_GROWTH_STAGES = 2;
     float const BONK_VETERAN_HEALTH        = 2.5f;
+    float const BONK_HIT_CAP_GRUNT         = 0.12f;
+    float const BONK_HIT_CAP_HEAVY         = 0.18f;
+    float const BONK_HIT_CAP_ELITE         = 0.22f;
+    float const BONK_HIT_CAP_MINIBOSS      = 0.30f;
+    float const BONK_HIT_CAP_BOSS          = 0.45f;
     float const BONK_MAX_MOB_HEALTH        = 2000000000.0f;
     uint32 const BONK_MOB_HEALTH_TABLE_LEVELS = 10;
     float const BONK_MOB_HEALTH_LEVEL_GROWTH  = 0.1f;
@@ -651,6 +656,18 @@ float const BONK_START_POLY_REACH   = 10.0f;
             case BONK_SPAWN_MINIBOSS: return 3.0f;
             case BONK_SPAWN_BOSS:     return 4.0f;
             default:                  return 1.0f;
+        }
+    }
+
+    float GetHitCapShare(BonkSpawnKind kind, BonkArchetype archetype)
+    {
+        switch (kind)
+        {
+            case BONK_SPAWN_BOSS:     return BONK_HIT_CAP_BOSS;
+            case BONK_SPAWN_MINIBOSS: return BONK_HIT_CAP_MINIBOSS;
+            case BONK_SPAWN_ELITE:    return BONK_HIT_CAP_ELITE;
+            default:
+                return archetype == BONK_ARCHETYPE_BRUISER || archetype == BONK_ARCHETYPE_CHARGER ? BONK_HIT_CAP_HEAVY : BONK_HIT_CAP_GRUNT;
         }
     }
 
@@ -4225,6 +4242,12 @@ void BonkRun::UpdateGear()
     UpdateWornTrinkets();
 
     SyncGearCards();
+}
+
+uint32 BonkRun::CapEnemyHit(uint32 damage, BonkSpawnKind kind, BonkArchetype archetype) const
+{
+    uint32 const cap = std::max(1u, uint32(m_player->GetMaxHealth() * GetHitCapShare(kind, archetype)));
+    return std::min(damage, cap);
 }
 
 uint32 BonkRun::MitigateDamage(uint32 damage)
@@ -9252,7 +9275,7 @@ void BonkRun::StrikeHero(BonkEnemyHit const& hit, uint32 spellId, Unit* source)
         m_player->GetBonkPlayer()->IsDashInvulnerable())
         return;
 
-    uint32 const raw = std::max(1u, uint32(hit.damage * hit.scale));
+    uint32 const raw = CapEnemyHit(std::max(1u, uint32(hit.damage * hit.scale)), hit.kind, hit.archetype);
     NoteStruck(hit.striker, hit.caster);
     SpellNonMeleeDamage strike(source, m_player, spellInfo->Id, SpellSchools(spellInfo->School));
     strike.damage = MitigateDamage(raw);

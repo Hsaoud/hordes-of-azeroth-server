@@ -775,6 +775,8 @@ BonkEnemyHit BonkMobAI::MakeHit(BonkRun const* run, uint32 spellId, uint32 damag
     hit.spellId = spellId;
     hit.damage = damage;
     hit.scale = GetHitScale(run);
+    hit.kind = m_kind;
+    hit.archetype = m_archetype;
     hit.looker = m_creature->GetObjectGuid();
     return hit;
 }
@@ -2207,7 +2209,7 @@ void BonkMobAI::DamageDeal(Unit* victim, uint32& damage)
             }
             float const multiplier = GetHitScale(run);
             run->OnHeroStruck(m_creature);
-            damage = std::max(1u, uint32(damage * multiplier * run->GetChampionDamageTaken(m_kind)));
+            damage = run->CapEnemyHit(std::max(1u, uint32(damage * multiplier * run->GetChampionDamageTaken(m_kind))), m_kind, m_archetype);
             if (HasAffix(AFFIX_NECROTIC))
                 run->AddNecroticStack();
             damage = run->MitigateDamage(damage);

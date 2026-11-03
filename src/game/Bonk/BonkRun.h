@@ -65,6 +65,8 @@ struct BonkEnemyHit
     uint32 spellId = 0;
     uint32 damage = 0;
     float scale = 1.0f;
+    BonkSpawnKind kind = BONK_SPAWN_NORMAL;
+    BonkArchetype archetype = BONK_ARCHETYPE_GRUNT;
     uint32 castKit = 0;
     uint32 impactKit = 0;
     bool facesShape = false;
@@ -228,6 +230,7 @@ class BonkRun
         void OnWeaponDamage(uint32 damage);
         void OnHeroHealed(uint32 amount) { m_healedUnreported += amount; m_minuteHealed += amount; CreditHealing(amount); }
         uint32 MitigateDamage(uint32 damage);
+        uint32 CapEnemyHit(uint32 damage, BonkSpawnKind kind, BonkArchetype archetype) const;
         void HitAgain(SpellEntry const* spellInfo, Unit* target, float damage, SpellEffectIndex effectIndex, WeaponAttackType attackType);
         void AddNecroticStack();
         float GetDamageMultiplier(SpellEntry const* spell, Unit const* victim, float minionScale = 1.0f, float extraPower = 0.0f) const;
