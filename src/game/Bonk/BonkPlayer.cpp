@@ -2494,13 +2494,8 @@ void BonkPlayer::SendFoundItems() const
             return;
         BonkFoundGear found;
         uint32 const tier = BonkFound::GetItemTier(item);
-        if (!sBonkFound.Get(item->GetGUIDLow(), found))
-        {
-            if (!tier)
-                return;
-            found = BonkFoundGear();
-            found.season = 0;
-        }
+        if (!sBonkFound.Get(item->GetGUIDLow(), found) && !tier)
+            return;
         SendAddon("founditem~" + place + "~" + std::to_string(item->GetEntry()) + "~" + std::to_string(tier) + "~" +
             BonkFound::DescribeLines(found, tier) + "~" + BonkFound::DescribeExtra(item, tier) + "~" + (found.season != BONK_LEADERBOARD_SEASON ? "1" : "0"));
     };
