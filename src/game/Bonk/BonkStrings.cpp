@@ -936,6 +936,7 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_SANDBOX_YOU_LEFT,                          "You left the sandbox." },
         { BONK_STRING_ENEMY_METEOR_SHOWER,                       "{1} calls down a meteor shower. Find a path between the falling circles." },
         { BONK_STRING_ENEMY_BURNS_OUTER_RING,                    "{1} sets the ground around it ablaze. Only the space next to it is safe." },
+        { BONK_STRING_COOP_HOST_FORTUNES,                        "In co-op, the host's Dark Fortunes count for everyone." },
     };
     return texts;
 }

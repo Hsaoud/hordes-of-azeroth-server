@@ -1462,7 +1462,7 @@ bool BonkPlayer::BuyUpgrade(uint32 upgradeId, std::string& message)
 bool BonkPlayer::BuyTalent(uint32 talentId, std::string& message)
 {
     BonkTalent const* talent = sBonkMgr.GetTalent(talentId);
-    if (!talent)
+    if (!talent || RefusesGuestFortune(*talent, message))
         return false;
 
     std::string const name = Localize(BONK_FIELD_TALENT_NAME, talent->id, talent->name);
@@ -1661,7 +1661,7 @@ uint32 BonkPlayer::GetFortuneSpent(uint32 tree) const
 bool BonkPlayer::RefundTalent(uint32 talentId, std::string& message)
 {
     BonkTalent const* talent = sBonkMgr.GetTalent(talentId);
-    if (!talent)
+    if (!talent || RefusesGuestFortune(*talent, message))
         return false;
 
     std::string const name = Localize(BONK_FIELD_TALENT_NAME, talent->id, talent->name);
@@ -1718,7 +1718,7 @@ bool BonkPlayer::RefundTalent(uint32 talentId, std::string& message)
 bool BonkPlayer::ToggleTalent(uint32 talentId, std::string& message)
 {
     BonkTalent const* talent = sBonkMgr.GetTalent(talentId);
-    if (!talent || !talent->IsToggle() || !GetTalentRank(talentId))
+    if (!talent || !talent->IsToggle() || !GetTalentRank(talentId) || RefusesGuestFortune(*talent, message))
         return false;
 
     if (m_run)
@@ -1976,7 +1976,7 @@ void BonkPlayer::SendShop(bool open) const
             gates += (row > 1 ? "," : "") + std::to_string(GetFortuneRowGate(row)) + ":" + std::to_string(GetFortuneSpentAbove(row));
     }
     SendAddon("shop~" + std::to_string(uint32(m_shop)) + "~" + (open ? "1" : "0") + "~" + m_shopNpcName + "~" +
-        (shards ? "shards~" + std::to_string(m_shards) + "~" + gates : "gold~" + std::to_string(m_player->GetMoney())));
+        (shards ? "shards~" + std::to_string(m_shards) + "~" + gates + "~" + (BonkCoop::IsGuestAccount(m_player) ? "1" : "0") : "gold~" + std::to_string(m_player->GetMoney())));
 
     for (auto const& itr : sBonkMgr.GetShopTrees())
         if (itr.second.shop == m_shop)
@@ -2065,10 +2065,32 @@ BonkRunBonuses BonkPlayer::GetRunBonuses() const
         if (title->value > 0.0f && title->stat < MAX_BONK_PASSIVE_EFFECT)
             bonuses.passives[title->stat] += title->value;
 
+    AddTalentBonuses(bonuses, false);
+    GetFortuneOwner()->AddTalentBonuses(bonuses, true);
+
+    return bonuses;
+}
+
+bool BonkPlayer::RefusesGuestFortune(BonkTalent const& talent, std::string& message) const
+{
+    if (!talent.IsToggle() || !BonkCoop::IsGuestAccount(m_player))
+        return false;
+    message = GetString(BONK_STRING_COOP_HOST_FORTUNES);
+    return true;
+}
+
+BonkPlayer const* BonkPlayer::GetFortuneOwner() const
+{
+    Player* host = BonkCoop::FortuneHostOf(m_player);
+    return host && host->GetBonkPlayer() ? host->GetBonkPlayer() : this;
+}
+
+void BonkPlayer::AddTalentBonuses(BonkRunBonuses& bonuses, bool fortunes) const
+{
     for (auto const& itr : m_talentRanks)
     {
         BonkTalent const* talent = sBonkMgr.GetTalent(itr.first);
-        if (!talent || !itr.second)
+        if (!talent || !itr.second || talent->IsToggle() != fortunes)
             continue;
 
         float const value = talent->valuePerRank * std::min(itr.second, talent->maxRank);
@@ -2110,8 +2132,6 @@ BonkRunBonuses BonkPlayer::GetRunBonuses() const
             default: break;
         }
     }
-
-    return bonuses;
 }
 
 void BonkPlayer::PreviewTelegraph(BonkTelegraphShape shape, float x, float y, float z, float orientation, float size, uint32 durationMs)

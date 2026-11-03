@@ -33,6 +33,7 @@ namespace BonkCoop
     bool SkipsEffectPacket(Player const* viewer, WorldObject const* source, uint16 opcode);
     bool HidesEffectObject(Player const* viewer, WorldObject const* object);
     bool IsGroupHost(Player const* player);
+    Player* FortuneHostOf(Player const* player);
     bool SharesPause(Player const* player);
     bool SharesXp(Player const* player);
     void SetSharedPause(Player* host, bool shared);

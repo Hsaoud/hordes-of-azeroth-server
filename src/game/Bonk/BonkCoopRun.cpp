@@ -1025,6 +1025,15 @@ bool BonkCoop::IsGroupHost(Player const* player)
     return !IsGuestAccount(player) && SettingsHostOf(player) == player->GetObjectGuid();
 }
 
+Player* BonkCoop::FortuneHostOf(Player const* player)
+{
+    if (!IsGuestAccount(player))
+        return nullptr;
+    Group const* group = player->GetGroup();
+    Player* host = group ? ObjectAccessor::FindPlayerNotInWorld(group->GetLeaderGuid()) : nullptr;
+    return host && !IsGuestAccount(host) ? host : nullptr;
+}
+
 bool BonkCoop::SharesPause(Player const* player)
 {
     auto running = s_groups.find(HostOf(player));

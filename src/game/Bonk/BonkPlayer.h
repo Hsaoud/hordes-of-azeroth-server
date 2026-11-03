@@ -34,6 +34,7 @@ struct BonkMasteryBonuses;
 struct BonkMasteryNode;
 struct BonkRunBonuses;
 struct BonkRunChoice;
+struct BonkTalent;
 struct BonkTier;
 struct BonkWeapon;
 
@@ -195,6 +196,9 @@ class BonkPlayer
         bool RefundTalent(uint32 talentId, std::string& message);
         bool ToggleTalent(uint32 talentId, std::string& message);
         BonkRunBonuses GetRunBonuses() const;
+        BonkPlayer const* GetFortuneOwner() const;
+        bool RefusesGuestFortune(BonkTalent const& talent, std::string& message) const;
+        void AddTalentBonuses(BonkRunBonuses& bonuses, bool fortunes) const;
 
         uint32 GetMasteryXp() const { return m_masteryXp; }
         uint32 GetMasteryLevel() const;
