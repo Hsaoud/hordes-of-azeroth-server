@@ -79,7 +79,7 @@ namespace
     uint32 const BONK_MIN_SHOWN_COOLDOWN_GAIN_MS = 50;
     uint32 const BONK_DOT_RETARGET_MS      = 4000;
     float const BONK_LEECH_HEAL            = 1.0f;
-    float const BONK_LEECH_CAP_PER_CHANCE  = 0.03f;
+    float const BONK_LEECH_CAP_PER_CHANCE  = 0.06f;
     float const BONK_SHARD_PICKUP_RANGE    = 3.0f;
     float const BONK_SHARD_SCATTER         = 2.0f;
     uint32 const BONK_SHARD_CHECK_MS       = 100;
@@ -12872,6 +12872,14 @@ bool BonkRun::OfferGainsAnything(OwnedWeapon const& owned, Offer const& offer) c
     return owned.rank < BONK_DAMAGELESS_MAX_RANK || offer.upgrades[0] != BONK_SPELL_UPGRADE_NONE;
 }
 
+bool BonkRun::IsEmptyRankUp(Offer const& offer) const
+{
+    if (!offer.isWeapon || offer.isCard || offer.step != BONK_STEP_RANK)
+        return false;
+    OwnedWeapon const* owned = FindOwned(offer.id);
+    return owned && (IsMaxAtPickup(owned->weapon) || !OfferGainsAnything(*owned, offer));
+}
+
 bool BonkRun::IsRankMaxed(OwnedWeapon const& owned) const
 {
     if (IsMaxAtPickup(owned.weapon))
@@ -13146,7 +13154,7 @@ bool BonkRun::RefreshKeptOffer(Offer& offer) const
                 return false;
         }
         RollUpgrades(*owned, offer);
-        return true;
+        return OfferGainsAnything(*owned, offer);
     }
 
     BonkPassive const* passive = sBonkMgr.GetPassive(offer.id);
@@ -13368,7 +13376,7 @@ bool BonkRun::OfferUpgrades(OfferSource source, std::vector<Offer> const* avoid,
                     RollUpgrades(*owned, card);
                 }
 
-    cards.erase(std::remove_if(cards.begin(), cards.end(), [this](Offer const& card) { return DescribeStep(card).empty(); }), cards.end());
+    cards.erase(std::remove_if(cards.begin(), cards.end(), [this](Offer const& card) { return DescribeStep(card).empty() || IsEmptyRankUp(card); }), cards.end());
 
     if (drawn)
     {

@@ -1127,6 +1127,7 @@ class BonkRun
         bool HasteShortensCooldown(OwnedWeapon const& owned, float alreadyRolled, float step) const;
         bool OfferGainsAnything(OwnedWeapon const& owned, Offer const& offer) const;
         bool IsRankMaxed(OwnedWeapon const& owned) const;
+        bool IsEmptyRankUp(Offer const& offer) const;
         float GetRawWeaponHaste(OwnedWeapon const& owned) const;
         Offer MakeRankOffer(OwnedWeapon const& owned, BonkRarity minimum) const;
         Offer MakeEvolveOffer(OwnedWeapon const& owned, uint32 evolveTo) const;
