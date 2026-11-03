@@ -22,6 +22,7 @@ namespace
     float const BONK_SPOT_GROUND_ABOVE   = 40.0f;
     float const BONK_SPOT_GROUND_DEPTH   = 120.0f;
     float const BONK_SPOT_WATER_DEPTH    = 1.0f;
+    float const BONK_SPOT_HAZARD_PROBE   = 0.1f;
     float const BONK_SPOT_MAX_DETOUR     = 1.6f;
     float const BONK_SPOT_SNAP           = 3.0f;
     float const BONK_SPOT_FLAT_RADIUS    = 6.0f;
@@ -53,6 +54,38 @@ namespace
         }
         return lowerSides < BONK_SPOT_HILL_SIDES;
     }
+}
+
+bool IsInBonkHazard(Map const* map, float x, float y, float z)
+{
+    GridMapLiquidStatus const status = map->GetTerrain()->getLiquidStatus(x, y, z + BONK_SPOT_HAZARD_PROBE, MAP_LIQUID_TYPE_MAGMA | MAP_LIQUID_TYPE_SLIME);
+    return (status & (LIQUID_MAP_WATER_WALK | LIQUID_MAP_IN_WATER | LIQUID_MAP_UNDER_WATER)) != 0;
+}
+
+bool IsBonkDryGround(Map const* map, float x, float y, float z)
+{
+    return !IsInBonkHazard(map, x, y, z) && !map->GetTerrain()->IsInWater(x, y, z + BONK_SPOT_WATER_DEPTH);
+}
+
+bool SnapBonkToSafeGround(Player* hero, float maxShift, float& x, float& y, float& z)
+{
+    Map const* map = hero->GetMap();
+    PathFinder path(hero);
+    path.ExcludeSteepSlopes();
+    path.calculate(x, y, z);
+    uint32 const type = path.getPathType();
+    if (type & PATHFIND_NOT_USING_PATH)
+        return IsBonkDryGround(map, x, y, z);
+    if (!(type & (PATHFIND_NORMAL | PATHFIND_INCOMPLETE)))
+        return false;
+
+    Vector3 const end = path.getActualEndPosition();
+    if (DistanceSq(end.x, end.y, x, y) > maxShift * maxShift || !IsBonkDryGround(map, end.x, end.y, end.z))
+        return false;
+    x = end.x;
+    y = end.y;
+    z = end.z;
+    return true;
 }
 
 void BonkSpawnPoints::Reset(float startX, float startY, float startZ)
@@ -111,7 +144,7 @@ bool BonkSpawnPoints::TryCandidate(Player* hero, uint32 zoneId)
         return false;
     if (zoneId && map->GetTerrain()->GetZoneId(x, y, z) != zoneId)
         return false;
-    if (map->GetTerrain()->IsInWater(x, y, z + BONK_SPOT_WATER_DEPTH))
+    if (!IsBonkDryGround(map, x, y, z))
         return false;
 
     PathFinder path(hero);
@@ -133,7 +166,7 @@ bool BonkSpawnPoints::TryCandidate(Player* hero, uint32 zoneId)
         if (!IsClear(x, y))
             return false;
     }
-    if (!IsOpenGround(map, x, y, z))
+    if (!IsOpenGround(map, x, y, z) || !IsBonkDryGround(map, x, y, z))
         return false;
 
     BonkSpot spot;

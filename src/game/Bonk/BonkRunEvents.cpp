@@ -228,6 +228,7 @@ bool BonkRun::SpawnTreasureGoblin()
     Creature* mob = SpawnMobAt(goblin, x, y, z);
     if (!mob)
         return false;
+    mob->SetAvoidsBonkHazards(true);
     float const extra = GetUtility(BONK_UTILITY_EVENT_TIME);
     uint32 const seconds = BONK_GOBLIN_SECONDS + uint32(extra);
     if (BonkMobAI* ai = dynamic_cast<BonkMobAI*>(mob->AI()))
@@ -441,7 +442,7 @@ bool BonkRun::SpawnKoboldThieves()
             float const angle = frand(0.0f, 2.0f * M_PI_F);
             float const kx = x + 2.0f * std::cos(angle), ky = y + 2.0f * std::sin(angle);
             float const kz = m_player->GetMap()->GetHeight(kx, ky, z + 5.0f, true, 10.0f);
-            if (kz > INVALID_HEIGHT)
+            if (kz > INVALID_HEIGHT && IsBonkDryGround(m_player->GetMap(), kx, ky, kz))
             {
                 x = kx;
                 y = ky;
@@ -461,6 +462,7 @@ bool BonkRun::SpawnKoboldThieves()
         Creature* mob = SpawnMobAt(kobold, x, y, z);
         if (!mob)
             continue;
+        mob->SetAvoidsBonkHazards(true);
         if (BonkMobAI* ai = dynamic_cast<BonkMobAI*>(mob->AI()))
         {
             ai->SetFleeing(false, headStart);
@@ -840,7 +842,7 @@ bool BonkRun::SpawnCaravan()
             break;
         float const nx = px + BONK_CARAVAN_LEG * std::cos(heading), ny = py + BONK_CARAVAN_LEG * std::sin(heading);
         float const nz = map->GetHeight(nx, ny, pz + 5.0f, true, 15.0f);
-        if (nz <= INVALID_HEIGHT)
+        if (nz <= INVALID_HEIGHT || !IsBonkDryGround(map, nx, ny, nz))
             break;
         BonkSpot spot;
         spot.x = nx;
@@ -857,6 +859,7 @@ bool BonkRun::SpawnCaravan()
     Creature* caravan = SummonCaravan(BONK_CARAVAN_ENTRY, x, y, z, heading);
     if (!caravan)
         return false;
+    caravan->SetAvoidsBonkHazards(true);
 
     m_miniEvent.targets.assign(1, caravan->GetObjectGuid());
     m_miniEvent.path = path;
