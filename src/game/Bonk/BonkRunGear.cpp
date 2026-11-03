@@ -159,6 +159,21 @@ namespace
         snprintf(color, sizeof(color), "%08x", ItemQualityColors[proto->Quality]);
         return "|c" + std::string(color) + "|Hitem:" + std::to_string(proto->ItemId) + ":0:0:0|h[" + name + "]|h|r";
     }
+
+    std::string GetFoundPlace(Item const* item)
+    {
+        uint8 const bag = item->GetBagSlot();
+        uint8 const slot = item->GetSlot();
+        if (bag == INVENTORY_SLOT_BAG_0)
+        {
+            if (slot >= INVENTORY_SLOT_ITEM_START && slot < INVENTORY_SLOT_ITEM_END)
+                return "0:" + std::to_string(slot - INVENTORY_SLOT_ITEM_START + 1);
+            return "inv:" + std::to_string(slot + 1);
+        }
+        if (bag >= INVENTORY_SLOT_BAG_START && bag < INVENTORY_SLOT_BAG_END)
+            return std::to_string(bag - INVENTORY_SLOT_BAG_START + 1) + ":" + std::to_string(slot + 1);
+        return std::to_string(bag - BANK_SLOT_BAG_START + 5) + ":" + std::to_string(slot + 1);
+    }
 }
 
 uint32 BonkRun::GetDropTier() const
@@ -1219,7 +1234,7 @@ std::string BonkRun::DescribeBroughtGearFor(uint32 entry) const
     {
         auto itr = m_broughtGear.find(slot);
         if (Item const* brought = itr != m_broughtGear.end() ? m_player->GetItemByGuid(itr->second) : nullptr)
-            entries += (entries.empty() ? "" : ",") + std::to_string(brought->GetEntry());
+            entries += (entries.empty() ? "" : ",") + std::to_string(brought->GetEntry()) + "@" + GetFoundPlace(brought);
     }
     return entries;
 }
