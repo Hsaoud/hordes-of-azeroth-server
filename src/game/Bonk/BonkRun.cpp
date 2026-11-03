@@ -79,7 +79,7 @@ namespace
     uint32 const BONK_MIN_SHOWN_COOLDOWN_GAIN_MS = 50;
     uint32 const BONK_DOT_RETARGET_MS      = 4000;
     float const BONK_LEECH_HEAL            = 1.0f;
-    float const BONK_LEECH_CAP_PER_CHANCE  = 0.03f;
+    float const BONK_LEECH_CAP_PER_CHANCE  = 0.06f;
     float const BONK_SHARD_PICKUP_RANGE    = 3.0f;
     float const BONK_SHARD_SCATTER         = 2.0f;
     uint32 const BONK_SHARD_CHECK_MS       = 100;

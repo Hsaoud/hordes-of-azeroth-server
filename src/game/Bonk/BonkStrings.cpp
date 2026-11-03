@@ -437,7 +437,7 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_RULE_DODGE,                              "chance to dodge enemy melee attacks, up to {1}%. Evasion and Deterrence go past the cap." },
         { BONK_STRING_RULE_ARMOR,                              "20 Armor reduces damage taken by 16%, 100 Armor by 43%, and 300 Armor by 60%, the most it can. Each point above 300 gives +0.5% maximum health." },
         { BONK_STRING_RULE_SHIELD,                             "absorbs damage up to a share of maximum health. Refills after {1} without taking damage. All shields together hold at most 50% of maximum health, 100% with Juggernaut." },
-        { BONK_STRING_RULE_LEECH,                              "your hits have a 1% chance per point to heal 1% of maximum health, up to 0.03% of maximum health per second per point. Summon hits don't count." },
+        { BONK_STRING_RULE_LEECH,                              "your hits have a 1% chance per point to heal 1% of maximum health, up to 0.06% of maximum health per second per point. Summon hits don't count." },
         { BONK_STRING_RULE_HEALTH_REGENERATION,                "heals 1% of maximum health per second per point. Healing cuts reduce it." },
         { BONK_STRING_RULE_LUCK,                               "rarer level-up, card, glyph and Ley Line choices. +0.1% elite chest chance and +0.1% evolution chance per point." },
         { BONK_STRING_RULE_PICKUP_RANGE,                       "6 yards base, +1% per point, up to 30 yards. Darkmoon Tickets and glyphs always need 3 yards." },
