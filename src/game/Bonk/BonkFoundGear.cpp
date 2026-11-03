@@ -133,7 +133,7 @@ void BonkFoundStore::LoadCharacter(uint32 characterGuid)
     std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
         "SELECT `f`.`item_guid`, `f`.`tier`, `f`.`line1_effect`, `f`.`line1_roll`, `f`.`line2_effect`, `f`.`line2_roll`, `f`.`rerolls`, `f`.`reroll_line`, "
         "`f`.`upgrades`, `f`.`season` FROM `bonk_item_found` `f` WHERE `f`.`item_guid` IN "
-        "(SELECT `item_guid` FROM `character_inventory` WHERE `guid` = %u UNION SELECT `item_guid` FROM `mail_items` WHERE `receiver` = %u)",
+        "(SELECT `item_guid` FROM `character_inventory` WHERE `guid` = %u UNION SELECT `item_guid` FROM `mail_items` WHERE `receiver_guid` = %u)",
         characterGuid, characterGuid));
     ReadRows(result.get());
 }
