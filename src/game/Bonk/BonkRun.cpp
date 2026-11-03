@@ -1791,6 +1791,9 @@ void BonkRun::SendFullState() const
     if (!m_offer.empty())
         SendOffer();
     m_objectives.Resend(m_player);
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        if (BonkRun const* run = member->GetBonkPlayer()->GetRun())
+            run->ShowSharedGlowsTo(m_player);
     if (m_greedStacks)
         SendGreed();
     if (!m_leyOffer.empty())
@@ -5101,18 +5104,50 @@ bool BonkRun::SpawnChest(bool free, float x, float y, float z, uint32 choices)
         return false;
     m_chests.push_back(chest->GetObjectGuid());
     m_chestChoices[chest->GetObjectGuid()] = choices;
-    m_chestGlows[chest->GetObjectGuid()] = free ? PlaceMarker(chest, BONK_SPELL_FREE_CHEST_GLOW, BONK_FREE_CHEST_GLOW_SCALE) : PlaceMarker(chest, BONK_SPELL_VALOR_CHEST_GLOW, BONK_CHEST_GLOW_SCALE);
+    m_chestGlows[chest->GetObjectGuid()] = free ? PlaceSharedGlow(chest, BONK_SPELL_FREE_CHEST_GLOW, BONK_FREE_CHEST_GLOW_SCALE) : PlaceSharedGlow(chest, BONK_SPELL_VALOR_CHEST_GLOW, BONK_CHEST_GLOW_SCALE);
     m_chestObjectives[chest->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(chest), 0,
         free ? BONK_FREE_CHEST_PIN_ICON : BONK_CHEST_PIN_ICON, GetString(free ? BONK_STRING_OBJECTIVE_CHEST_FREE : BONK_STRING_OBJECTIVE_CHEST_VALOR));
     return true;
 }
 
-void BonkRun::RemoveGlow(std::map<ObjectGuid, uint32>& glows, ObjectGuid const& guid)
+BonkRun::Glow BonkRun::PlaceSharedGlow(GameObject const* go, uint32 spellId, float scale) const
+{
+    Glow glow;
+    glow.key = NextBonkAuraKey();
+    glow.spellId = spellId;
+    glow.scale = scale;
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        ShowGlowTo(member, go->GetObjectGuid(), glow);
+    return glow;
+}
+
+void BonkRun::ShowGlowTo(Player* viewer, ObjectGuid const& guid, Glow const& glow) const
+{
+    Map* map = m_player->FindMap();
+    GameObject const* go = map ? map->GetGameObject(guid) : nullptr;
+    if (go)
+        SendBonkAuraAt(viewer, glow.key, glow.spellId, go->GetPositionX(), go->GetPositionY(), go->GetPositionZ(), glow.scale);
+}
+
+void BonkRun::ShowSharedGlowsTo(Player* viewer) const
+{
+    for (auto const& chest : m_chestGlows)
+    {
+        auto opened = m_chestOpenedBy.find(chest.first);
+        if (opened == m_chestOpenedBy.end() || !opened->second.count(viewer->GetObjectGuid()))
+            ShowGlowTo(viewer, chest.first, chest.second);
+    }
+    for (auto const& powerup : m_powerupGlows)
+        ShowGlowTo(viewer, powerup.first, powerup.second);
+}
+
+void BonkRun::RemoveGlow(std::map<ObjectGuid, Glow>& glows, ObjectGuid const& guid)
 {
     auto const itr = glows.find(guid);
     if (itr == glows.end())
         return;
-    SendBonkAuraGone(m_player, itr->second);
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        SendBonkAuraGone(member, itr->second.key);
     glows.erase(itr);
 }
 
@@ -5247,7 +5282,7 @@ GameObject* BonkRun::PlacePowerup(BonkPowerup const& powerup, float x, float y, 
         return nullptr;
     m_powerups.push_back(go->GetObjectGuid());
     if (powerup.effect == BONK_POWERUP_VALOR)
-        m_powerupGlows[go->GetObjectGuid()] = PlaceMarker(go, BONK_SPELL_VALOR_POUCH_GLOW, BONK_POUCH_GLOW_SCALE);
+        m_powerupGlows[go->GetObjectGuid()] = PlaceSharedGlow(go, BONK_SPELL_VALOR_POUCH_GLOW, BONK_POUCH_GLOW_SCALE);
     if (lasting)
         m_powerupObjectives[go->GetObjectGuid()] = m_objectives.Add(m_player, BONK_OBJECTIVE_CHEST, x, y, z, m_player->GetBonkPlayer()->GetLocalName(go), 0,
             BONK_MAGNET_PIN_ICON, GetString(BONK_STRING_OBJECTIVE_MAGNET));
@@ -5508,8 +5543,9 @@ uint32 BonkRun::OpenChestFor(GameObject* chest, Player* opener)
 
     std::set<ObjectGuid>& opened = m_chestOpenedBy[guid];
     opened.insert(opener->GetObjectGuid());
-    if (opener == m_player)
-        RemoveGlow(m_chestGlows, guid);
+    auto glow = m_chestGlows.find(guid);
+    if (glow != m_chestGlows.end())
+        SendBonkAuraGone(opener, glow->second.key);
     bool everyoneOpened = true;
     for (Player* member : BonkCoop::RunGroupOf(m_player))
     {

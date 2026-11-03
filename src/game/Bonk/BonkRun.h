@@ -395,6 +395,7 @@ class BonkRun
         void GoHome();
 
         void SendFullState() const;
+        void ShowSharedGlowsTo(Player* viewer) const;
 
         void OnDash();
         void LogPerfDip();
@@ -1671,9 +1672,17 @@ class BonkRun
         void ForgetChestObjective(ObjectGuid const& chest);
         std::vector<ObjectGuid> m_powerups;
         std::map<ObjectGuid, uint32> m_powerupObjectives;
-        std::map<ObjectGuid, uint32> m_chestGlows;
-        std::map<ObjectGuid, uint32> m_powerupGlows;
-        void RemoveGlow(std::map<ObjectGuid, uint32>& glows, ObjectGuid const& guid);
+        struct Glow
+        {
+            uint32 key = 0;
+            uint32 spellId = 0;
+            float scale = 1.0f;
+        };
+        std::map<ObjectGuid, Glow> m_chestGlows;
+        std::map<ObjectGuid, Glow> m_powerupGlows;
+        Glow PlaceSharedGlow(GameObject const* go, uint32 spellId, float scale) const;
+        void ShowGlowTo(Player* viewer, ObjectGuid const& guid, Glow const& glow) const;
+        void RemoveGlow(std::map<ObjectGuid, Glow>& glows, ObjectGuid const& guid);
         GameObject* PlacePowerup(BonkPowerup const& powerup, float x, float y, float z, uint32 lifetimeSeconds);
         void ForgetPowerupObjective(ObjectGuid const& powerup);
         std::vector<Orb> m_orbs;
