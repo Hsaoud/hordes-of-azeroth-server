@@ -110,6 +110,7 @@ class BonkCrowd
             float stopDistance = 0.0f;
             float wanted = 0.0f;
             bool melee = true;
+            bool passThrough = false;
             bool overlapping = false;
             bool pressed = false;
             std::vector<uint32> neighbours;
