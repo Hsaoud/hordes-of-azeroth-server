@@ -1201,8 +1201,8 @@ struct BonkRunBonuses
     uint32 earlierBossSeconds = 0;
     uint32 eliteAffixes = 0;
     float damageTakenCut = 0.0f;
-};
     uint32 darkFortunes = 0;
+};
 
 struct BonkItemStat
 {
