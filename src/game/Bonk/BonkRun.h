@@ -374,6 +374,9 @@ class BonkRun
         void ShowKitAt(uint32 kit, float x, float y, float z, float stretch = 1.0f);
         bool ShowKitOnStandIn(uint32 kit, float x, float y, float z, uint32 holdMs);
         void ShowAreaImpact(uint32 kit, float x, float y, float z, float radius);
+        void ShowRingImpact(uint32 kit, float x, float y, float z, float inner, float outer);
+        void HoldBigMoves(ObjectGuid const& mover, uint32 durationMs);
+        bool AreBigMovesHeld(ObjectGuid const& asker = ObjectGuid()) const { return m_bigMovesUntilMs > m_totalMs && m_bigMover != asker; }
         void ShowLineImpacts(uint32 kit, float x, float y, float z, float orientation, float length);
         ObjectGuid PlaceBoltTarget(float x, float y, float z, uint32 lifetimeMs);
         void LaunchEnemyMissile(ObjectGuid caster, ObjectGuid target, uint32 spellId, uint32 delayMs, uint32 flightMs, float x, float y, float z);
@@ -1220,6 +1223,8 @@ class BonkRun
         bool m_regenerating = false;
         uint32 m_cardHasteUntilMs = 0;
         uint32 m_cardImmuneUntilMs = 0;
+        uint32 m_bigMovesUntilMs = 0;
+        ObjectGuid m_bigMover;
         uint32 m_cardSwiftUntilMs = 0;
         uint32 m_cardSurgeUntilMs = 0;
         uint32 m_cardKills = 0;

@@ -941,6 +941,9 @@ enum BonkAbilityShape : uint8
     BONK_SHAPE_BREATHS   = 11,
     BONK_SHAPE_WALLS     = 12,
     BONK_SHAPE_WREATH    = 13,
+    BONK_SHAPE_METEORS   = 14,
+    BONK_SHAPE_DONUT     = 15,
+    BONK_SHAPE_SWEEP     = 16,
     MAX_BONK_ABILITY_SHAPE
 };
 

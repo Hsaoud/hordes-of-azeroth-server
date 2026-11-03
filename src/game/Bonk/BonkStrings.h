@@ -937,6 +937,8 @@ enum BonkString : uint32
     BONK_STRING_SANDBOX_CARD_HELD                       = 1055,
     BONK_STRING_SANDBOX_ENTER                           = 1056,
     BONK_STRING_SANDBOX_YOU_LEFT                        = 1057,
+    BONK_STRING_ENEMY_METEOR_SHOWER                     = 1058,
+    BONK_STRING_ENEMY_BURNS_OUTER_RING                  = 1059,
 };
 
 struct BonkStringText

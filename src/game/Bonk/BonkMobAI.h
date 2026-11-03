@@ -169,6 +169,15 @@ class BonkMobAI : public CreatureAI
         void StartFrontAndBack(int32 abilityIndex, Player* owner, BonkRun* run, uint32 damage);
         void StartWalls(int32 abilityIndex, Player* owner, BonkRun* run, uint32 damage);
         void StartWreath(int32 abilityIndex, Player* owner, BonkRun* run, uint32 damage);
+        void StartMeteors(int32 abilityIndex, Player* owner, BonkRun* run, uint32 damage);
+        void StartDonut(int32 abilityIndex, Player* owner, BonkRun* run, uint32 damage, float size);
+        void StartSweep(int32 abilityIndex, Player* owner, BonkRun* run, uint32 damage);
+        bool IsMoveTurnOpen(BonkMobAbility const& ability) const;
+        float GetMovePace(BonkRun const* run) const;
+        void StartMoveTurn(BonkMobAbility const& ability, BonkRun* run);
+        float GetKindSize(BonkAbilityShape shape, float size) const;
+        uint32 GetConeWarnMs(BonkRun const* run, Player const* hero, float size) const;
+        uint32 GetHeldWarnMs(BonkAbilityShape shape, BonkRun const* run, Player const* hero, float size) const;
         std::vector<float> GetLineAngles() const;
         bool IsInLines(float x, float y) const;
         void LaunchLeap();
@@ -257,6 +266,11 @@ class BonkMobAI : public CreatureAI
         bool m_leapLaunched = false;
         int32 m_landingTimer = 0;
         int32 m_abilityGapTimer = 0;
+        int32 m_signatureTimer = 0;
+        int32 m_fillerTimer = 0;
+        bool m_meteorsAnnounced = false;
+        bool m_donutAnnounced = false;
+        float m_leapRadius = 0.0f;
         int32 m_forcedAbility = -1;
         bool m_areaSelfTimed = false;
         uint32 m_lastLandedWindId = 0;

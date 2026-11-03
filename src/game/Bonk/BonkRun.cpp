@@ -566,6 +566,8 @@ float const BONK_START_POLY_REACH   = 10.0f;
     float const BONK_IMPACT_RING_SPACING   = 4.5f;
     uint32 const BONK_IMPACT_RING_MIN      = 4;
     uint32 const BONK_IMPACT_RING_MAX      = 8;
+    float const BONK_IMPACT_DONUT_SPACING  = 7.0f;
+    uint32 const BONK_IMPACT_DONUT_MAX     = 12;
     uint32 const BONK_HAZARD_MS            = 1000;
     uint32 const BONK_BOLT_TARGET_FREE_MS  = 500;
     size_t const BONK_MARKER_POOL_MAX      = 32;
@@ -2892,10 +2894,16 @@ uint32 BonkRun::GetFirstMinibossSecond() const
     return 0;
 }
 
+void BonkRun::HoldBigMoves(ObjectGuid const& mover, uint32 durationMs)
+{
+    m_bigMover = mover;
+    m_bigMovesUntilMs = std::max(m_bigMovesUntilMs, m_totalMs + durationMs);
+}
+
 void BonkRun::UpdateOvertime(uint32 diff)
 {
     uint32 const startSecond = IsFinale() ? m_map.durationSeconds : m_map.durationSeconds + BONK_OVERTIME_AFTER_SEC;
-    if ((!m_bossSpawned && !IsFinale()) || m_stress.on || m_elapsedMs < startSecond * IN_MILLISECONDS)
+    if ((!m_bossSpawned && !IsFinale()) || m_stress.on || m_elapsedMs < startSecond * IN_MILLISECONDS || AreBigMovesHeld())
         return;
     m_overtimeTimer -= int32(diff);
     if (m_overtimeTimer > 0)
@@ -9171,6 +9179,26 @@ void BonkRun::ShowAreaImpact(uint32 kit, float x, float y, float z, float radius
         if (pz <= INVALID_HEIGHT)
             pz = z;
         ShowKitAt(kit, px, py, pz);
+    }
+}
+
+void BonkRun::ShowRingImpact(uint32 kit, float x, float y, float z, float inner, float outer)
+{
+    if (!kit)
+        return;
+    Map* map = m_player->GetMap();
+    float const ring = (inner + outer) / 2.0f;
+    uint32 const count = std::max(BONK_IMPACT_RING_MIN, std::min(BONK_IMPACT_DONUT_MAX, uint32(2.0f * M_PI_F * ring / BONK_IMPACT_DONUT_SPACING)));
+    float const stretch = std::min(BONK_IMPACT_MAX_STRETCH, std::max(1.0f, (outer - inner) / 2.0f / BONK_IMPACT_KIT_RADIUS));
+    float const turn = frand(0.0f, 2.0f * M_PI_F);
+    for (uint32 i = 0; i < count; ++i)
+    {
+        float const angle = turn + 2.0f * M_PI_F * float(i) / float(count);
+        float const px = x + ring * std::cos(angle), py = y + ring * std::sin(angle);
+        float pz = map->GetHeight(px, py, z + 5.0f, true, 15.0f);
+        if (pz <= INVALID_HEIGHT)
+            pz = z;
+        ShowKitAt(kit, px, py, pz, stretch);
     }
 }
 

@@ -28,6 +28,7 @@ namespace
     float const BONK_TELEGRAPH_LIFT     = 0.05f;
 
     float const BONK_CONE_HALF_ANGLE = M_PI_F / 4.0f;
+    float const BONK_RING_INNER_SHARE = 0.3f;
     float const BONK_TELEGRAPH_GROUND_ABOVE = 8.0f;
     float const BONK_TELEGRAPH_GROUND_SEARCH = 20.0f;
 
@@ -35,7 +36,7 @@ namespace
     uint32 const BONK_TELEGRAPH_GROUND_EFFECT = 4;
     uint32 const BONK_KIT_RAISED = 1;
 
-    char const* const BONK_TELEGRAPH_SHAPE_NAMES[MAX_BONK_TELEGRAPH_SHAPE] = { "circle", "cone", "line" };
+    char const* const BONK_TELEGRAPH_SHAPE_NAMES[MAX_BONK_TELEGRAPH_SHAPE] = { "circle", "cone", "line", "ring" };
 
     uint32 s_nextFlightId = 0;
     uint32 s_nextAuraKey = 0;
@@ -204,6 +205,11 @@ uint32 GetBonkTelegraphLeadMs(BonkTelegraphShape)
     return 0;
 }
 
+float GetBonkRingInnerRadius(float size)
+{
+    return size * BONK_RING_INNER_SHARE;
+}
+
 uint32 GetBonkStandInSizeCount()
 {
     return BONK_STANDIN_SIZE_COUNT;
@@ -242,6 +248,8 @@ bool IsInBonkTelegraph(BonkTelegraphShape shape, float originX, float originY, f
             float const across = -dx * std::sin(orientation) + dy * std::cos(orientation);
             return along >= 0.0f && along <= length && std::fabs(across) <= BONK_LINE_HALF_WIDTH;
         }
+        case BONK_TELEGRAPH_RING:
+            return distance <= size && distance >= GetBonkRingInnerRadius(size);
         default:
             return distance <= size;
     }

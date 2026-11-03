@@ -16,6 +16,7 @@ enum BonkTelegraphShape : uint8
     BONK_TELEGRAPH_CIRCLE = 0,
     BONK_TELEGRAPH_CONE   = 1,
     BONK_TELEGRAPH_LINE   = 2,
+    BONK_TELEGRAPH_RING   = 3,
     MAX_BONK_TELEGRAPH_SHAPE
 };
 
@@ -34,6 +35,8 @@ bool ParseBonkTelegraphShape(std::string const& name, BonkTelegraphShape& shape)
 bool IsInBonkTelegraph(BonkTelegraphShape shape, float originX, float originY, float orientation, float size, float x, float y);
 
 uint32 GetBonkTelegraphLeadMs(BonkTelegraphShape shape);
+
+float GetBonkRingInnerRadius(float size);
 
 float GetBonkTelegraphGround(Map* map, float x, float y, float z, float reach);
 
