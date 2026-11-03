@@ -1985,7 +1985,7 @@ void BonkPlayer::SendShop(bool open) const
 
     BonkQuestReward const lockType = m_shop == BONK_SHOP_UPGRADES ? BONK_REWARD_UPGRADE : BONK_REWARD_TALENT;
     auto sendNode = [this, lockType](uint32 id, BonkShopNode const& layout, uint8 rank, uint8 maxRank, uint32 nextCost, uint32 refund, bool toggle,
-        bool enabled, std::string const& name, std::string const& description, float valuePerRank)
+        bool enabled, std::string const& name, std::string const& description, float valuePerRank, std::string const& rankLock)
     {
         if (!layout.tree)
             return;
@@ -1998,7 +1998,8 @@ void BonkPlayer::SendShop(bool open) const
              << '~' << uint32(rank) << '~' << uint32(maxRank) << '~' << (rank < maxRank ? nextCost : 0)
              << '~' << layout.requiredId << '~' << uint32(layout.requiredRank) << '~' << (toggle ? 1 : 0) << '~' << (enabled ? 1 : 0)
              << '~' << name << '~' << description << '~' << (lock ? 1 : 0) << '~' << (lock ? Localize(BONK_FIELD_QUEST_NAME, lock->id, lock->name) : "") << '~' << FormatStat(valuePerRank)
-             << '~' << (rank ? refund : 0) << '~' << (lock ? Localize(BONK_FIELD_QUEST_DESCRIPTION, lock->id, lock->description) : "");
+             << '~' << (rank ? refund : 0) << '~' << (lock ? Localize(BONK_FIELD_QUEST_DESCRIPTION, lock->id, lock->description) : "")
+             << '~' << (rank < maxRank ? rankLock : std::string());
         SendAddon(line.str());
     };
 
@@ -2008,13 +2009,14 @@ void BonkPlayer::SendShop(bool open) const
         {
             BonkUpgrade const& upgrade = itr.second;
             uint8 const rank = GetUpgradeRank(upgrade.id);
-            std::string description = Localize(BONK_FIELD_UPGRADE_DESCRIPTION, upgrade.id, upgrade.description);
-            if (upgrade.layout.tree == BONK_TRAINING_TREE && rank < upgrade.maxRank && rank >= GetTrainingRankCap())
-                description += " " + GetTrainingCapHint();
-            else if (rank < upgrade.maxRank && GetAccountBestLevel() < upgrade.requiredLevel)
-                description += " " + GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(upgrade.requiredLevel), std::to_string(rank + 1) });
+            std::string const description = Localize(BONK_FIELD_UPGRADE_DESCRIPTION, upgrade.id, upgrade.description);
+            std::string rankLock;
+            if (upgrade.layout.tree == BONK_TRAINING_TREE && rank >= GetTrainingRankCap())
+                rankLock = GetTrainingCapHint();
+            else if (GetAccountBestLevel() < upgrade.requiredLevel)
+                rankLock = GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(upgrade.requiredLevel), std::to_string(rank + 1) });
             sendNode(upgrade.id, upgrade.layout, rank, upgrade.maxRank, upgrade.GetCost(rank), rank ? upgrade.GetCost(rank - 1) : 0, false, false,
-                Localize(BONK_FIELD_UPGRADE_NAME, upgrade.id, upgrade.name), description, upgrade.valuePerRank);
+                Localize(BONK_FIELD_UPGRADE_NAME, upgrade.id, upgrade.name), description, upgrade.valuePerRank, rankLock);
         }
     }
     else if (m_shop == BONK_SHOP_TALENTS)
@@ -2023,14 +2025,14 @@ void BonkPlayer::SendShop(bool open) const
         {
             BonkTalent const& talent = itr.second;
             uint8 const rank = GetTalentRank(talent.id);
-            std::string description = Localize(BONK_FIELD_TALENT_DESCRIPTION, talent.id, talent.description);
-            if (rank < talent.maxRank && rank < talent.rankQuests.size() &&
-                sBonkQuests.GetCompletedCount(GetProgressAccount()) < talent.rankQuests[rank])
-                description += " " + GetString(BONK_STRING_SHOP_NEXT_RANK_QUESTS, { std::to_string(talent.rankQuests[rank]) });
-            else if (rank < talent.maxRank && rank < talent.rankLevels.size() && GetAccountBestLevel() < talent.rankLevels[rank])
-                description += " " + GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(talent.rankLevels[rank]), std::to_string(rank + 1) });
+            std::string const description = Localize(BONK_FIELD_TALENT_DESCRIPTION, talent.id, talent.description);
+            std::string rankLock;
+            if (rank < talent.rankQuests.size() && sBonkQuests.GetCompletedCount(GetProgressAccount()) < talent.rankQuests[rank])
+                rankLock = GetString(BONK_STRING_SHOP_NEXT_RANK_QUESTS, { std::to_string(talent.rankQuests[rank]) });
+            else if (rank < talent.rankLevels.size() && GetAccountBestLevel() < talent.rankLevels[rank])
+                rankLock = GetString(BONK_STRING_CLEAR_LEVEL_TO_UNLOCK_RANK, { GetLevelName(talent.rankLevels[rank]), std::to_string(rank + 1) });
             sendNode(talent.id, talent.layout, rank, talent.maxRank, talent.GetCost(rank), rank ? talent.GetCost(rank - 1) : 0, talent.IsToggle(),
-                IsTalentEnabled(talent.id), Localize(BONK_FIELD_TALENT_NAME, talent.id, talent.name), description, talent.valuePerRank);
+                IsTalentEnabled(talent.id), Localize(BONK_FIELD_TALENT_NAME, talent.id, talent.name), description, talent.valuePerRank, rankLock);
         }
     }
 
@@ -2084,6 +2086,7 @@ BonkRunBonuses BonkPlayer::GetRunBonuses() const
             case BONK_TALENT_SPAWN_RATE:   bonuses.spawnRate += value; break;
             case BONK_TALENT_ELITE_RATE:   bonuses.eliteRate += value; break;
             case BONK_TALENT_REROLL:       bonuses.rerolls += uint32(value); break;
+            case BONK_TALENT_GLYPH_REROLL: bonuses.glyphRerolls += uint32(value); break;
             case BONK_TALENT_BANISH:       bonuses.banishes += uint32(value); break;
             case BONK_TALENT_SKIP:         bonuses.skips += uint32(value); break;
             case BONK_TALENT_REVIVE:       bonuses.revives += uint32(value); break;
@@ -3100,6 +3103,8 @@ void BonkPlayer::SendArena(std::string const& npc) const
         std::vector<std::string> perks;
         if (bonuses.rerolls)
             perks.push_back(GetString(bonuses.rerolls == 1 ? BONK_STRING_PERK_REROLLS_ONE : BONK_STRING_PERK_REROLLS, { std::to_string(bonuses.rerolls) }));
+        if (bonuses.glyphRerolls)
+            perks.push_back(GetString(bonuses.glyphRerolls == 1 ? BONK_STRING_PERK_GLYPH_REROLLS_ONE : BONK_STRING_PERK_GLYPH_REROLLS, { std::to_string(bonuses.glyphRerolls) }));
         if (bonuses.banishes)
             perks.push_back(GetString(bonuses.banishes == 1 ? BONK_STRING_PERK_BANISHES_ONE : BONK_STRING_PERK_BANISHES, { std::to_string(bonuses.banishes) }));
         if (bonuses.revives)

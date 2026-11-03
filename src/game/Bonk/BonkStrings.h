@@ -877,6 +877,9 @@ enum BonkString : uint32
     BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE              = 965,
     BONK_STRING_PORTAL_FINISH_RUN                       = 966,
     BONK_STRING_PORTAL_CONTINUE_ENDLESS                 = 967,
+    BONK_STRING_PERK_GLYPH_REROLLS                      = 968,
+    BONK_STRING_PERK_GLYPH_REROLLS_ONE                  = 969,
+    BONK_STRING_NO_GLYPH_REROLLS_LEFT                   = 970,
 };
 
 struct BonkStringText

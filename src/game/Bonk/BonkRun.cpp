@@ -1135,6 +1135,7 @@ BonkRun::BonkRun(Player* player, BonkTier const& tier, BonkRunChoice const& choi
                 m_spellRoots.emplace(itr.second.spellId, BonkMastery::GetRootWeapon(itr.first));
 
     m_rerolls = m_bonuses.rerolls;
+    m_glyphRerolls = m_bonuses.glyphRerolls;
     m_banishes = m_bonuses.banishes;
     m_skips = m_bonuses.skips;
     m_revives = m_bonuses.revives;

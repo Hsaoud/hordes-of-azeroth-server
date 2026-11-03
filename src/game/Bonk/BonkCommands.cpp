@@ -522,6 +522,15 @@ bool ChatHandler::HandleBonkPoolCommand(char* args)
 bool ChatHandler::HandleBonkGlyphCommand(char* args)
 {
     BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+    if (run && args && !strcmp(args, "reroll"))
+    {
+        std::string error;
+        if (run->RerollGlyphs(error))
+            return true;
+        SendSysMessage(error.c_str());
+        SetSentErrorMessage(true);
+        return false;
+    }
     uint32 choice = 0;
     if (!run || !ExtractUInt32(&args, choice))
     {
@@ -596,6 +605,24 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
             player->GetBonkPlayer()->OpenShop(BONK_SHOP_UPGRADES, quartermaster);
         else
             SendSysMessage("No Quartermaster within 10 yards.");
+        return true;
+    }
+    if (tab == "testglyph" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        if (BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun())
+            run->GiveGlyphPickNow();
+        else
+            SendSysMessage("Glyph picks need a run.");
+        return true;
+    }
+    if (tab == "testsayge" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        Player* player = m_session->GetPlayer();
+        uint32 const saygeEntry = 900003;
+        if (Creature* sayge = player->FindNearestCreature(saygeEntry, 10.0f))
+            player->GetBonkPlayer()->OpenShop(BONK_SHOP_TALENTS, sayge);
+        else
+            SendSysMessage("No Sayge within 10 yards.");
         return true;
     }
     if (tab == "testhearth" && GetAccessLevel() >= SEC_GAMEMASTER)

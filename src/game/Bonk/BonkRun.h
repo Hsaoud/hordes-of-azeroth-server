@@ -293,6 +293,8 @@ class BonkRun
         };
         bool ChooseGear(GearChoice choice, uint8 slot, std::string& error);
         bool ChooseGlyph(uint32 choice, std::string& error);
+        bool RerollGlyphs(std::string& error);
+        void GiveGlyphPickNow() { QueueGlyphPick(); }
         void TakeGlyph(BonkGlyph const& glyph);
         bool UseHidden(GameObject* go);
         bool UseItem(Item* item);
@@ -768,6 +770,7 @@ class BonkRun
         void DropGlyph(Creature const* mob);
         void CollectAllGlyphs();
         void OfferGlyphs();
+        void FillGlyphOffer(std::vector<uint32> const& avoid);
         void SendGlyphOffer() const;
         void SendGlyphs() const;
         BonkRarity RollGlyphRarity() const;
@@ -817,6 +820,7 @@ class BonkRun
         std::vector<uint32> m_glyphOffer;
         uint32 m_pendingGlyphPicks = 0;
         uint32 m_glyphPicksGiven = 0;
+        uint32 m_glyphRerolls = 0;
         std::set<uint32> m_glyphCardIds;
         uint32 m_glyphKills = 0;
         uint32 m_glyphHasteUntilMs = 0;

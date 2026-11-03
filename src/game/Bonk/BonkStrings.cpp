@@ -874,6 +874,9 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_PASSIVE_LABEL_BLEED_DAMAGE,              "Bleed damage" },
         { BONK_STRING_PORTAL_FINISH_RUN,                       "Finish the run" },
         { BONK_STRING_PORTAL_CONTINUE_ENDLESS,                 "Continue in endless mode" },
+        { BONK_STRING_PERK_GLYPH_REROLLS,                      "{1} Glyph rerolls" },
+        { BONK_STRING_PERK_GLYPH_REROLLS_ONE,                  "{1} Glyph reroll" },
+        { BONK_STRING_NO_GLYPH_REROLLS_LEFT,                   "No Glyph rerolls left." },
     };
     return texts;
 }

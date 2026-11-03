@@ -1125,6 +1125,7 @@ enum BonkTalentEffect : uint8
     BONK_TALENT_GLYPH_BANS   = 18,
     BONK_TALENT_MIGHT        = 19,
     BONK_TALENT_FORTUNE      = 20,
+    BONK_TALENT_GLYPH_REROLL = 21,
     MAX_BONK_TALENT_EFFECT
 };
 
@@ -1172,6 +1173,7 @@ struct BonkRunBonuses
     float goldBonus = 0.0f;
     float scrapBonus = 0.0f;
     uint32 rerolls = 0;
+    uint32 glyphRerolls = 0;
     uint32 banishes = 0;
     uint32 skips = 0;
     uint32 revives = 0;
