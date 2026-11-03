@@ -2661,10 +2661,14 @@ uint32 BonkPlayer::GetOpenLevel(BonkTier const& tier) const
 
 uint32 BonkPlayer::GetTierBest(BonkTier const& tier) const
 {
-    uint32 const best = GetBestLevel();
-    if (best < tier.firstLevel)
+    return GetTierBand(tier, GetBestLevel());
+}
+
+uint32 BonkPlayer::GetTierBand(BonkTier const& tier, uint32 level)
+{
+    if (level < tier.firstLevel)
         return 0;
-    return std::min(best, tier.GetLastLevel()) - tier.firstLevel + 1;
+    return std::min(level, tier.GetLastLevel()) - tier.firstLevel + 1;
 }
 
 bool BonkPlayer::IsLevelOpen(uint32 level) const
@@ -3249,10 +3253,12 @@ void BonkPlayer::SendLevelPreview(BonkTier const& tier, BonkRunBonuses const& bo
     static BonkString const CASTER_AIM[] = { BONK_STRING_CASTER_AIM_POOR, BONK_STRING_CASTER_AIM_GOOD, BONK_STRING_CASTER_AIM_PRECISE };
     static BonkString const BOSS_ATTACKS[] = { BONK_STRING_BOSS_ATTACKS_NORMAL, BONK_STRING_BOSS_ATTACKS_MORE, BONK_STRING_BOSS_ATTACKS_RELENTLESS };
     uint32 const step = std::min(2u, tier.eliteAffixes ? tier.eliteAffixes - 1u : 0u);
+    uint32 const carried = GetTierBand(tier, GetCarriedLevel());
     SendAddon("tierinfo~" + std::to_string(tier.id) + "~" + GetString(CASTER_AIM[step]) + "~" + GetString(BOSS_ATTACKS[step]) + "~" +
-        std::to_string((tier.chargeIntervalMs + 500) / 1000) + "~" + std::to_string(tier.maxAlive));
+        std::to_string((tier.chargeIntervalMs + 500) / 1000) + "~" + std::to_string(tier.maxAlive) + "~" +
+        (carried ? GetLevelName(GetAccountBestLevel()) : ""));
     uint32 const best = GetTierBest(tier);
-    uint32 const shown = tier.IsEndlessLevels() ? best + 1 : tier.levels;
+    uint32 const shown = tier.IsEndlessLevels() ? std::max(best, carried) + 1 : tier.levels;
     for (uint32 band = 1; band <= shown; ++band)
     {
         BonkLevel const level = sBonkMgr.GetLevel(tier, band);
@@ -3268,7 +3274,8 @@ void BonkPlayer::SendLevelPreview(BonkTier const& tier, BonkRunBonuses const& bo
         SendAddon("level~" + std::to_string(tier.id) + "~" + std::to_string(band) + "~" + Percent((health - 1.0f) * 100.0f) + "~" +
             Percent((damage - 1.0f) * 100.0f) + "~" + Percent(veterans) + "~" + std::to_string(affixes) + "~" + Percent((level.reward - 1.0f) * 100.0f) + "~" +
             Chance(legendary) + "~" + Chance(epic) + "~" + Chance(blue) + "~" + Chance(green) + "~" + Chance(std::max(0.0f, 100.0f - legendary - epic - blue - green)) +
-            "~" + (band <= best ? "1" : "0") + "~" + std::to_string(BonkRun::GetLevelDropTier(tier, band)));
+            "~" + (band <= best ? "1" : band <= carried ? "2" : "0") + "~" + std::to_string(BonkRun::GetLevelDropTier(tier, band)) +
+            "~" + (band <= carried ? "1" : "0"));
         auto const record = m_levelBests.find({ uint8(m_player->GetClass()), tier.firstLevel + band - 1 });
         if (record == m_levelBests.end())
             continue;
