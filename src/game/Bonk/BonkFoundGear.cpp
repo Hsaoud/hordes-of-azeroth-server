@@ -117,11 +117,31 @@ namespace
 
 void BonkFoundStore::Load()
 {
-    std::lock_guard<std::mutex> guard(m_lock);
-    m_items.clear();
+    {
+        std::lock_guard<std::mutex> guard(m_lock);
+        m_items.clear();
+    }
     CharacterDatabase.DirectExecute("DELETE `f` FROM `bonk_item_found` `f` LEFT JOIN `item_instance` `i` ON `i`.`guid` = `f`.`item_guid` WHERE `i`.`guid` IS NULL");
     std::unique_ptr<QueryResult> result(CharacterDatabase.Query(
         "SELECT `item_guid`, `tier`, `line1_effect`, `line1_roll`, `line2_effect`, `line2_roll`, `rerolls`, `reroll_line`, `upgrades`, `season` FROM `bonk_item_found`"));
+    uint32 const loaded = ReadRows(result.get());
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u Bonk found gear pieces", loaded);
+}
+
+void BonkFoundStore::LoadCharacter(uint32 characterGuid)
+{
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
+        "SELECT `f`.`item_guid`, `f`.`tier`, `f`.`line1_effect`, `f`.`line1_roll`, `f`.`line2_effect`, `f`.`line2_roll`, `f`.`rerolls`, `f`.`reroll_line`, "
+        "`f`.`upgrades`, `f`.`season` FROM `bonk_item_found` `f` WHERE `f`.`item_guid` IN "
+        "(SELECT `item_guid` FROM `character_inventory` WHERE `guid` = %u UNION SELECT `item_guid` FROM `mail_items` WHERE `receiver` = %u)",
+        characterGuid, characterGuid));
+    ReadRows(result.get());
+}
+
+uint32 BonkFoundStore::ReadRows(QueryResult* result)
+{
+    std::lock_guard<std::mutex> guard(m_lock);
+    uint32 count = 0;
     if (result)
     {
         do
@@ -145,9 +165,10 @@ void BonkFoundStore::Load()
             found.upgrades = fields[8].GetUInt32();
             found.season = fields[9].GetUInt32();
             m_items[fields[0].GetUInt32()] = found;
+            ++count;
         } while (result->NextRow());
     }
-    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u Bonk found gear pieces", uint32(m_items.size()));
+    return count;
 }
 
 bool BonkFoundStore::Get(uint32 itemGuid, BonkFoundGear& found) const

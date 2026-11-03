@@ -1,4 +1,5 @@
 #include "BonkCoop.h"
+#include "BonkFoundGear.h"
 #include "BonkPlayer.h"
 
 #include "AccountMgr.h"
@@ -500,6 +501,7 @@ namespace
         DumpReturn const loaded = reader.LoadDump(DUMP_FILE, accountId, name, guid);
         if (loaded != DUMP_SUCCESS)
             return "error The character couldn't be loaded (" + std::to_string(uint32(loaded)) + ").";
+        sBonkFound.LoadCharacter(GuidOfName(name));
         {
             std::lock_guard<std::mutex> guard(s_pendingMailLock);
             s_pendingMail[name] = ReadHomeMail(dump);

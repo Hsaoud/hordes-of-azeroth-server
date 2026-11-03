@@ -41,6 +41,7 @@ class BonkFoundStore
 {
     public:
         void Load();
+        void LoadCharacter(uint32 characterGuid);
         bool Get(uint32 itemGuid, BonkFoundGear& found) const;
         bool IsFound(uint32 itemGuid) const;
         void Set(uint32 itemGuid, BonkFoundGear const& found);
@@ -49,6 +50,7 @@ class BonkFoundStore
     private:
         mutable std::mutex m_lock;
         std::unordered_map<uint32, BonkFoundGear> m_items;
+        uint32 ReadRows(QueryResult* result);
 };
 
 #define sBonkFound MaNGOS::Singleton<BonkFoundStore>::Instance()
