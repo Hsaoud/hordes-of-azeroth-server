@@ -740,7 +740,8 @@ void BonkRun::ResetShrines()
     m_moonwellPlaced = false;
     m_leyLinesPlaced = 0;
     m_stonePlaced = false;
-    m_placeStone = m_stage < m_tier.stages || m_difficultyLevel <= m_player->GetBonkPlayer()->GetCarriedLevel();
+    Player* host = IsCoopGuest() ? ObjectAccessor::FindPlayerNotInWorld(m_coopHost) : nullptr;
+    m_placeStone = m_stage < m_tier.stages || m_difficultyLevel <= (host ? host : m_player)->GetBonkPlayer()->GetCarriedLevel();
     if (IsFinale())
         return;
 

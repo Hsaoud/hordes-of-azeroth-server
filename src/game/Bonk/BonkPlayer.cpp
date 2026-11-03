@@ -1555,6 +1555,11 @@ bool BonkPlayer::ResetUpgrades(std::string& message)
 
 bool BonkPlayer::ResetTalents(std::string& message)
 {
+    if (BonkCoop::IsGuestAccount(m_player))
+    {
+        message = GetString(BONK_STRING_COOP_HOST_FORTUNES);
+        return false;
+    }
     if (m_run)
     {
         message = GetString(BONK_STRING_CANT_DO_THAT_DURING_RUN);
@@ -2067,7 +2072,8 @@ BonkRunBonuses BonkPlayer::GetRunBonuses() const
             bonuses.passives[title->stat] += title->value;
 
     AddTalentBonuses(bonuses, false);
-    GetFortuneOwner()->AddTalentBonuses(bonuses, true);
+    if (BonkPlayer const* owner = GetFortuneOwner())
+        owner->AddTalentBonuses(bonuses, true);
 
     return bonuses;
 }
@@ -2082,8 +2088,10 @@ bool BonkPlayer::RefusesGuestFortune(BonkTalent const& talent, std::string& mess
 
 BonkPlayer const* BonkPlayer::GetFortuneOwner() const
 {
+    if (!BonkCoop::IsGuestAccount(m_player))
+        return this;
     Player* host = BonkCoop::FortuneHostOf(m_player);
-    return host && host->GetBonkPlayer() ? host->GetBonkPlayer() : this;
+    return host ? host->GetBonkPlayer() : nullptr;
 }
 
 void BonkPlayer::AddTalentBonuses(BonkRunBonuses& bonuses, bool fortunes) const
@@ -2099,6 +2107,7 @@ void BonkPlayer::AddTalentBonuses(BonkRunBonuses& bonuses, bool fortunes) const
         {
             if (!IsTalentEnabled(talent->id))
                 continue;
+            ++bonuses.darkFortunes;
             bonuses.goldBonus += talent->goldBonus;
         }
 
@@ -3225,8 +3234,9 @@ void BonkPlayer::SendArena(std::string const& npc) const
         BonkRunBonuses const bonuses = GetRunBonuses();
 
         std::string challenges;
+        BonkPlayer const* fortunes = GetFortuneOwner();
         for (auto const& itr : sBonkMgr.GetTalents())
-            if (itr.second.IsToggle() && GetTalentRank(itr.first) && IsTalentEnabled(itr.first))
+            if (fortunes && itr.second.IsToggle() && fortunes->GetTalentRank(itr.first) && fortunes->IsTalentEnabled(itr.first))
                 challenges += (challenges.empty() ? "" : ", ") + Localize(BONK_FIELD_TALENT_NAME, itr.first, itr.second.name);
 
         std::vector<std::string> perks;

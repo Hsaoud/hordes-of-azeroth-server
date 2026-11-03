@@ -5831,7 +5831,7 @@ bool BonkRun::CloseStage()
     m_telegraphs.Clear(m_player);
     RemoveHeroLooks();
     GiveGold(m_map.stageGold * m_stage);
-    sBonkQuests.OnProgress(m_player, BONK_QUEST_DARK_FORTUNES, 0, m_player->GetBonkPlayer()->GetFortuneOwner()->CountDarkFortunes(), true);
+    sBonkQuests.OnProgress(m_player, BONK_QUEST_DARK_FORTUNES, 0, m_bonuses.darkFortunes, true);
     CollectAllOrbs();
     CollectAllGear();
     DespawnShrines();

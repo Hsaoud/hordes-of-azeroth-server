@@ -190,7 +190,6 @@ class BonkPlayer
         uint32 GetFortuneSpentAbove(uint8 row, uint32 refundedId = 0) const;
         uint32 GetFortuneSpent(uint32 tree) const;
         bool IsTalentEnabled(uint32 talentId) const { return m_enabledTalents.count(talentId) != 0; }
-        uint32 CountDarkFortunes() const { return uint32(m_enabledTalents.size()); }
         bool BuyUpgrade(uint32 upgradeId, std::string& message);
         void VisitSpellbook(Creature const* keeper);
         bool BuyTalent(uint32 talentId, std::string& message);
