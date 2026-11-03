@@ -295,6 +295,7 @@ class BonkRun
         bool ChooseGlyph(uint32 choice, std::string& error);
         bool RerollGlyphs(std::string& error);
         void GiveGlyphPickNow() { QueueGlyphPick(); }
+        void PlaceTicketsAhead();
         void TakeGlyph(BonkGlyph const& glyph);
         bool UseHidden(GameObject* go);
         bool UseItem(Item* item);
@@ -501,6 +502,10 @@ class BonkRun
             uint32 count = 0;
             uint32 marker = 0;
             uint32 sparkle = 0;
+            bool pulled = false;
+            float aimX = 0.0f;
+            float aimY = 0.0f;
+            float aimZ = 0.0f;
         };
 
         BonkMap const* ChooseNextMap();
@@ -1035,6 +1040,10 @@ class BonkRun
         void UpdateHeals(uint32 diff);
         void GiveShards(uint32 count);
         uint32 PlaceMarker(GameObject const* go, uint32 spellId, float scale);
+        uint32 PlaceMarkerAt(float x, float y, float z, uint32 spellId, float scale);
+        void RemoveTicket(ShardDrop& drop, bool vanish);
+        void PlaceTicket(float x, float y, float z, uint32 count);
+        void PullTicket(ShardDrop& drop, Creature* ticket, float heroX, float heroY, float heroZ);
         void ShowFromFar(WorldObject* object);
         uint32 PlaceLootBeam(GameObject const* go, uint8 quality, uint32& core, uint32& swirl);
         void RemovePickup(ObjectGuid const& goGuid, uint32 beamKey, uint32 sparkleKey = 0, uint32 coreKey = 0);

@@ -607,6 +607,14 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
             SendSysMessage("No Quartermaster within 10 yards.");
         return true;
     }
+    if (tab == "testticket" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        if (BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun())
+            run->PlaceTicketsAhead();
+        else
+            SendSysMessage("Tickets need a run.");
+        return true;
+    }
     if (tab == "testglyph" && GetAccessLevel() >= SEC_GAMEMASTER)
     {
         if (BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun())

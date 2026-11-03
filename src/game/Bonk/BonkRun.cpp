@@ -82,7 +82,7 @@ namespace
     float const BONK_LEECH_CAP_PER_CHANCE  = 0.03f;
     float const BONK_SHARD_PICKUP_RANGE    = 3.0f;
     float const BONK_SHARD_SCATTER         = 2.0f;
-    uint32 const BONK_SHARD_CHECK_MS       = 250;
+    uint32 const BONK_SHARD_CHECK_MS       = 100;
     uint32 const BONK_SPAWN_TICK_MS        = 1000;
     uint32 const BONK_SPAWN_PER_TICK       = 12;
     uint32 const BONK_OPENING_REFILL_MIN   = 6;
@@ -5443,8 +5443,8 @@ void BonkRun::DespawnObjects()
             if (GameObject* powerup = map->GetGameObject(guid))
                 powerup->Delete();
         }
-        for (ShardDrop const& drop : m_shardDrops)
-            RemovePickup(drop.guid, drop.marker, drop.sparkle);
+        for (ShardDrop& drop : m_shardDrops)
+            RemoveTicket(drop, false);
         for (GlyphDrop const& drop : m_glyphDrops)
             RemovePickup(drop.guid, drop.marker, drop.sparkle);
         for (HealDrop const& drop : m_healDrops)
@@ -11791,20 +11791,38 @@ void BonkRun::DropShards(Creature const* mob, BonkSpawnKind kind)
         y = mob->GetPositionY();
         z = mob->GetPositionZ();
     }
+    PlaceTicket(x, y, z, count);
+}
 
-    GameObject* go = PlaceObject(BONK_GO_SHARD, x, y, z, BONK_OBJECT_LIFETIME_SEC);
-    if (!go)
+void BonkRun::PlaceTicketsAhead()
+{
+    float const facing = m_player->GetOrientation();
+    for (float distance : { 4.0f, 9.0f, 14.0f })
+    {
+        float const x = m_player->GetPositionX() + distance * std::cos(facing);
+        float const y = m_player->GetPositionY() + distance * std::sin(facing);
+        float const z = m_player->GetMap()->GetHeight(x, y, m_player->GetPositionZ() + 2.0f, true, 10.0f);
+        if (z > INVALID_HEIGHT)
+            PlaceTicket(x, y, z, 1);
+    }
+}
+
+void BonkRun::PlaceTicket(float x, float y, float z, uint32 count)
+{
+    Creature* ticket = m_player->SummonCreature(BONK_TICKET_PICKUP, x, y, z, frand(0.0f, 2.0f * M_PI_F), TEMPSUMMON_TIMED_DESPAWN,
+        BONK_OBJECT_LIFETIME_SEC * IN_MILLISECONDS, false, 0, &InstallOrbAI);
+    if (!ticket)
     {
         GiveShards(count);
         return;
     }
-    ShowFromFar(go);
+    ShowFromFar(ticket);
 
     ShardDrop drop;
-    drop.guid = go->GetObjectGuid();
+    drop.guid = ticket->GetObjectGuid();
     drop.count = count;
-    drop.marker = PlaceMarker(go, BONK_SPELL_TICKET_POOL, BONK_DROP_POOL_SCALE);
-    drop.sparkle = PlaceMarker(go, BONK_SPELL_FEET_SPARKLE, 1.0f);
+    drop.marker = PlaceMarkerAt(x, y, z, BONK_SPELL_TICKET_POOL, BONK_DROP_POOL_SCALE);
+    drop.sparkle = PlaceMarkerAt(x, y, z, BONK_SPELL_FEET_SPARKLE, 1.0f);
     m_shardDrops.push_back(drop);
     m_player->GetBonkPlayer()->Notify(count == 1 ? BONK_STRING_DARKMOON_TICKET_DROPPED : BONK_STRING_TICKETS_DROPPED, { FormatBonkShards(count, GetLocale()) });
 }
@@ -11832,19 +11850,30 @@ void BonkRun::UpdateShards(uint32 diff)
         QueueGlyphPick();
     }
 
+    float chestX, chestY, chestZ;
+    GetHeroChestPositionNow(m_player, chestX, chestY, chestZ);
+    float const magnet = GetMagnetRange();
     uint32 taken = 0;
     for (auto itr = m_shardDrops.begin(); itr != m_shardDrops.end();)
     {
-        GameObject* go = map->GetGameObject(itr->guid);
-        if (go && go->isSpawned() && GetHeroDistance(m_player, heroX, heroY, heroZ, go) > BONK_SHARD_PICKUP_RANGE)
+        Creature* ticket = map->GetCreature(itr->guid);
+        if (!ticket)
         {
-            ++itr;
+            RemoveTicket(*itr, false);
+            itr = m_shardDrops.erase(itr);
             continue;
         }
-
-        taken += itr->count;
-        RemovePickup(itr->guid, itr->marker, itr->sparkle);
-        itr = m_shardDrops.erase(itr);
+        float const distance = GetHeroDistance(m_player, chestX, chestY, chestZ, ticket);
+        if (distance <= BONK_ORB_PICKUP_RANGE || (!itr->pulled && distance <= BONK_SHARD_PICKUP_RANGE))
+        {
+            taken += itr->count;
+            RemoveTicket(*itr, true);
+            itr = m_shardDrops.erase(itr);
+            continue;
+        }
+        if (itr->pulled || distance <= magnet)
+            PullTicket(*itr, ticket, chestX, chestY, chestZ);
+        ++itr;
     }
 
     if (taken)
@@ -11896,10 +11925,10 @@ void BonkRun::CollectAllGlyphs()
 void BonkRun::CollectAllShards()
 {
     uint32 taken = 0;
-    for (ShardDrop const& drop : m_shardDrops)
+    for (ShardDrop& drop : m_shardDrops)
     {
         taken += drop.count;
-        RemovePickup(drop.guid, drop.marker, drop.sparkle);
+        RemoveTicket(drop, true);
     }
     m_shardDrops.clear();
 
@@ -12061,6 +12090,52 @@ void BonkRun::GiveShards(uint32 count)
     bonk->SendAddon("shard~" + std::to_string(count) + "~" + std::to_string(bonk->GetShards()));
     bonk->Notify(BONK_STRING_YOU_COLLECTED, { FormatBonkShards(count, GetLocale()) });
     SendState();
+}
+
+uint32 BonkRun::PlaceMarkerAt(float x, float y, float z, uint32 spellId, float scale)
+{
+    uint32 const key = NextBonkAuraKey();
+    SendBonkAuraAt(m_player, key, spellId, x, y, z, scale);
+    return key;
+}
+
+void BonkRun::RemoveTicket(ShardDrop& drop, bool vanish)
+{
+    for (uint32* key : { &drop.marker, &drop.sparkle })
+        if (*key)
+        {
+            SendBonkAuraGone(m_player, *key);
+            *key = 0;
+        }
+    Map* map = m_player->FindMap();
+    Creature* ticket = map ? map->GetCreature(drop.guid) : nullptr;
+    if (!ticket)
+        return;
+    if (vanish)
+        VanishOrb(ticket);
+    else
+        ticket->DespawnOrUnsummon();
+}
+
+void BonkRun::PullTicket(ShardDrop& drop, Creature* ticket, float heroX, float heroY, float heroZ)
+{
+    if (!drop.pulled)
+    {
+        for (uint32* key : { &drop.marker, &drop.sparkle })
+            if (*key)
+            {
+                SendBonkAuraGone(m_player, *key);
+                *key = 0;
+            }
+        drop.pulled = true;
+    }
+    else if ((heroX - drop.aimX) * (heroX - drop.aimX) + (heroY - drop.aimY) * (heroY - drop.aimY) + (heroZ - drop.aimZ) * (heroZ - drop.aimZ) <=
+        BONK_ORB_REAIM_DISTANCE * BONK_ORB_REAIM_DISTANCE)
+        return;
+    drop.aimX = heroX;
+    drop.aimY = heroY;
+    drop.aimZ = heroZ;
+    ticket->MonsterMoveWithSpeed(heroX, heroY, heroZ, -10.0f, BONK_ORB_FLY_SPEED, MOVE_FLY_MODE);
 }
 
 uint32 BonkRun::PlaceMarker(GameObject const* go, uint32 spellId, float scale)
