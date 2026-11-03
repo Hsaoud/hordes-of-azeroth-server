@@ -1341,6 +1341,22 @@ bool BonkRun::SendHomeFromHearth(uint32 guidLow, std::string& error)
     return true;
 }
 
+uint32 BonkRun::PutRunGearInVault()
+{
+    uint32 placed = 0;
+    for (ObjectGuid const& guid : m_runGear)
+    {
+        if (m_vault.size() >= GetVaultSlots())
+            break;
+        if (!IsInVault(guid) && m_player->GetItemByGuid(guid))
+        {
+            m_vault.push_back(guid);
+            ++placed;
+        }
+    }
+    return placed;
+}
+
 bool BonkRun::PutInVault(uint32 guidLow, std::string& error)
 {
     if (!CheckVaultReach(error))

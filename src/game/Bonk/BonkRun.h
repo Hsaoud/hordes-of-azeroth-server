@@ -325,6 +325,7 @@ class BonkRun
         void CloseVault();
         bool SendHomeFromHearth(uint32 guidLow, std::string& error);
         bool PutInVault(uint32 guidLow, std::string& error);
+        uint32 PutRunGearInVault();
         bool TakeFromVault(uint32 guidLow, std::string& error);
         std::vector<VaultFind> GetVaultFinds() const;
         std::string DescribeBroughtGearFor(uint32 entry) const;

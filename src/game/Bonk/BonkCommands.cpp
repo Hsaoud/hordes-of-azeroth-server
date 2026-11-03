@@ -633,6 +633,15 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
             SendSysMessage("No Sayge within 10 yards.");
         return true;
     }
+    if (tab == "testvault" && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+        if (run)
+            PSendSysMessage("Put %u run gear pieces in the vault.", run->PutRunGearInVault());
+        else
+            SendSysMessage("You are not in a run.");
+        return true;
+    }
     if (tab == "testhearth" && GetAccessLevel() >= SEC_GAMEMASTER)
     {
         Player* player = m_session->GetPlayer();
