@@ -3,6 +3,7 @@
 #include "Bag.h"
 #include "BonkEnchant.h"
 #include "BonkFoundGear.h"
+#include "BonkLeaderboard.h"
 #include "BonkLocale.h"
 #include "BonkMastery.h"
 #include "BonkMgr.h"
@@ -2685,6 +2686,7 @@ std::string BonkPlayer::GetUnlockHint(BonkTier const& tier) const
 
 bool BonkPlayer::RecordLevelClear(uint32 level, uint32 clearMs)
 {
+    m_sessionClears.insert(level);
     LevelRecord& record = m_levels[m_player->GetClass()];
     bool const firstClear = level > record.best;
     bool const faster = level == record.best && clearMs && (!record.bestMs || clearMs < record.bestMs);
@@ -3201,7 +3203,17 @@ void BonkPlayer::SetBoardChoice(bool show)
 
 void BonkPlayer::SendBoardChoice() const
 {
-    SendAddon("boardchoice~" + std::to_string(m_boardChoice));
+    SendAddon("boardchoice~" + std::to_string(m_boardChoice) + "~" + std::to_string(GetBoardClimb()));
+}
+
+uint32 BonkPlayer::GetBoardClimb() const
+{
+    uint32 top = BonkLeaderboard::GetClimbTop(m_player->GetGUIDLow());
+    if (!top)
+        return 0;
+    while (m_sessionClears.count(top + 1))
+        ++top;
+    return top;
 }
 
 bool BonkPlayer::HasBoardGear(uint32 level) const
