@@ -5944,7 +5944,9 @@ void Aura::PeriodicTick(SpellEntry const* sProto, AuraType auraType, uint32 data
             if (pdamage && pCaster->IsPlayer())
                 if (BonkRun* run = static_cast<Player*>(pCaster)->GetBonkPlayer()->GetRun())
                     run->OnPeriodicDamage(spellProto->Id, std::min(pdamage, target->GetHealth()));
+            BonkRun::SetGroundTickEffect(spellProto->Effect[GetEffIndex()] == SPELL_EFFECT_PERSISTENT_AREA_AURA ? int32(GetEffIndex()) : -1);
             pCaster->DealDamage(target, pdamage, &cleanDamage, DOT, spellProto->GetSpellSchoolMask(), spellProto, true, nullptr, GetHolder()->IsReflected());
+            BonkRun::SetGroundTickEffect(-1);
             // Curse of Doom: If the target dies from this damage, there is a chance that a Doomguard will be summoned.
             if (spellProto->Id == 603 && !target->IsAlive() && !urand(0, 9))
                 pCaster->CastSpell(pCaster, 18662, true);

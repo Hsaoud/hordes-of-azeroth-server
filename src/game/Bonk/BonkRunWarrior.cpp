@@ -511,23 +511,32 @@ uint32 BonkRun::GetSwingEmote() const
     return weapon->GetProto()->InventoryType == INVTYPE_2HWEAPON ? EMOTE_ONESHOT_ATTACK2HTIGHT : EMOTE_ONESHOT_ATTACK1H;
 }
 
-bool BonkRun::SpreadsRend(OwnedWeapon const& owned)
+BonkRun::OwnedWeapon const* BonkRun::FindRendSpreadBy(OwnedWeapon const& owned)
 {
     uint32 const root = GetRootWeapon(owned.weapon);
-    return (root == BONK_WEAPON_CLEAVE || root == BONK_WEAPON_WHIRLWIND || root == BONK_WEAPON_THUNDER_CLAP) && FindOwnedByRoot(BONK_WEAPON_REND);
+    if (root != BONK_WEAPON_CLEAVE && root != BONK_WEAPON_WHIRLWIND && root != BONK_WEAPON_THUNDER_CLAP)
+        return nullptr;
+    return FindOwnedByRoot(BONK_WEAPON_REND);
 }
 
-void BonkRun::ApplyRendSwingBleed(Creature* mob)
+void BonkRun::QueueRendSwingBleed(OwnedWeapon const& rend, Unit* mob)
 {
-    if (OwnedWeapon const* rend = FindOwnedByRoot(BONK_WEAPON_REND))
-        ApplyWeaponKeyword(*rend, mob, BONK_KEYWORD_BLEED, BONK_REND_SWING_BLEED);
+    BonkKeywordInfo const* info = sBonkMgr.GetKeyword(BONK_KEYWORD_BLEED);
+    if (!info)
+        return;
+    PendingKeyword bleed;
+    bleed.mob = mob->GetObjectGuid();
+    bleed.keyword = BONK_KEYWORD_BLEED;
+    bleed.stacks = BONK_REND_SWING_BLEED;
+    bleed.durationMs = uint32(info->durationMs * GetWeaponDurationScale(rend));
+    bleed.damageScale = 1.0f + rend.damageBonus / 100.0f;
+    bleed.spellId = rend.weapon.spellId;
+    m_pendingKeywords.push_back(bleed);
 }
 
 void BonkRun::OnAroundStrike(OwnedWeapon const& owned, Creature* mob)
 {
     uint32 const root = GetRootWeapon(owned.weapon);
-    if (SpreadsRend(owned))
-        ApplyRendSwingBleed(mob);
     if (root == BONK_WEAPON_MORTAL_STRIKE)
         TearBleed(owned, mob);
     if (owned.weapon.behavior == BONK_BEHAVIOR_BLOODLUST && GetKeywordStacks(mob, BONK_KEYWORD_BLEED))

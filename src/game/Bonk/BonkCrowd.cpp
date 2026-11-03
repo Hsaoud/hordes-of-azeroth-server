@@ -236,8 +236,7 @@ void BonkCrowd::Update(uint32 diff, Player* hero, std::vector<ObjectGuid> const&
         body.qx = body.px;
         body.qy = body.py;
         body.radius = std::min(m_settings.maxRadius, std::max(m_settings.minRadius, mob->GetObjectBoundingRadius() * m_settings.bodyScale));
-        if (BonkMobAI const* ai = dynamic_cast<BonkMobAI const*>(mob->AI()))
-            body.passThrough = ai->GetKind() != BONK_SPAWN_NORMAL;
+        body.passThrough = mob->IsBonkEnemy() && !mob->IsBonkNormal();
 
         Hold const hold = hasNavMesh ? GetHold(mob, hero, heroPerched) : HOLD_NAVMESH;
         ++m_holdCounts[hold];
@@ -491,7 +490,7 @@ void BonkCrowd::Solve(std::vector<Body>& bodies, float heroX, float heroY)
                     if (j <= i)
                         continue;
                     Body& b = bodies[j];
-                    if ((a.invMass <= 0.0f && b.invMass <= 0.0f) || a.passThrough || b.passThrough)
+                    if ((a.invMass <= 0.0f && b.invMass <= 0.0f) || a.passThrough != b.passThrough)
                         continue;
                     float const contact = a.radius + b.radius;
                     if (Distance2d(a.qx, a.qy, b.qx, b.qy) >= contact + BONK_CROWD_PAIR_SLACK)

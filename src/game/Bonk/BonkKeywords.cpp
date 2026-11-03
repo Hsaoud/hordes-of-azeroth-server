@@ -37,6 +37,8 @@ namespace
     uint32 const BONK_KIT_BLOOD_BURST        = 903;
     uint32 const BONK_KIT_BURNING_BURST      = 728;
 
+    thread_local int32 t_groundTickEffect = -1;
+
     BonkMobAI const* GetRunAI(Unit const* unit)
     {
         Creature const* creature = unit ? unit->ToCreature() : nullptr;
@@ -49,6 +51,11 @@ namespace
     }
 }
 
+void BonkRun::SetGroundTickEffect(int32 effectIndex)
+{
+    t_groundTickEffect = effectIndex;
+}
+
 void BonkRun::OnWeaponHit(Unit* victim, SpellEntry const* spell)
 {
     if (m_state != STATE_RUNNING || !spell || !GetRunAI(victim) || m_keywordlessHits)
@@ -57,7 +64,11 @@ void BonkRun::OnWeaponHit(Unit* victim, SpellEntry const* spell)
     OwnedWeapon const* owned = FindOwnedBySpell(spell->Id);
     if (!owned || owned->weapon.behavior == BONK_BEHAVIOR_PET)
         return;
+    if (t_groundTickEffect >= 0 && t_groundTickEffect == owned->weapon.tickEffectIndex && HasLingeringGround(owned->weapon, spell))
+        return;
 
+    if (OwnedWeapon const* rend = FindRendSpreadBy(*owned))
+        QueueRendSwingBleed(*rend, victim);
     QueueTalentSlowAndStun(*owned, victim);
     if (m_mastery.Has(BONK_CAPSTONE_TRUESHOT) && !GetKeywordStacks(victim, BONK_KEYWORD_HUNTERS_MARK))
     {

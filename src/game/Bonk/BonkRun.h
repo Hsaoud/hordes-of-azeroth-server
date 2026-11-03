@@ -257,6 +257,7 @@ class BonkRun
         void OnCriticalStrike(SpellCaster const* caster, SpellEntry const* spell, Unit const* victim);
         void CountThunderHit(SpellEntry const* spell);
         static void SetPeriodicHit(bool periodic);
+        static void SetGroundTickEffect(int32 effectIndex);
         static uint32 GetSpawnKit();
         static void SetSpawnKit(uint32 kit);
         static uint32 GetSpawnLookLeadMs();
@@ -917,7 +918,7 @@ class BonkRun
         float GetWeaponRadius(OwnedWeapon const& owned) const;
         uint32 GetWeaponTargets(OwnedWeapon const& owned) const;
         void FireWeapon(OwnedWeapon& owned);
-        static bool IsGroundLookOnly(BonkWeapon const& weapon, SpellEntry const* spellInfo);
+        static bool HasLingeringGround(BonkWeapon const& weapon, SpellEntry const* spellInfo);
         void GetBasePoints(OwnedWeapon const& owned, SpellEntry const* spellInfo, float damageShare, nonstd::optional<int32>* basePoints) const;
         void StrikeWith(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target, float damageShare, bool followUp = false,
             Creature* source = nullptr);
@@ -2363,8 +2364,8 @@ class BonkRun
         void SwingWeapon(OwnedWeapon const& owned);
         uint32 GetSwingEmote() const;
         void OnAroundStrike(OwnedWeapon const& owned, Creature* mob);
-        bool SpreadsRend(OwnedWeapon const& owned);
-        void ApplyRendSwingBleed(Creature* mob);
+        OwnedWeapon const* FindRendSpreadBy(OwnedWeapon const& owned);
+        void QueueRendSwingBleed(OwnedWeapon const& rend, Unit* mob);
         void OnAroundCast(OwnedWeapon const& owned, SpellEntry const* spellInfo, uint32 struck);
         PendingCast MakeHeroSpotCast(OwnedWeapon const& owned, SpellEntry const* spellInfo, int32 delayMs) const;
         void QueueWakeEcho(OwnedWeapon const& owned, SpellEntry const* spellInfo);
