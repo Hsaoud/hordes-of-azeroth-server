@@ -569,7 +569,7 @@ void BonkMgr::LoadArchetypes()
         archetype = BonkArchetypeInfo();
 
     std::unique_ptr<QueryResult> result(WorldDatabase.Query(
-        "SELECT `id`, `name`, `health_multiplier`, `damage_multiplier`, `experience`, `first_sec`, `first_sec_later`, `orb` FROM `bonk_archetype`"));
+        "SELECT `id`, `name`, `health_multiplier`, `damage_multiplier`, `experience`, `first_sec`, `first_sec_later`, `orb`, `threat` FROM `bonk_archetype`"));
     uint32 count = 0;
     if (result)
     {
@@ -591,6 +591,7 @@ void BonkMgr::LoadArchetypes()
             archetype.firstSecond = fields[5].GetUInt32();
             archetype.firstSecondLater = fields[6].GetUInt32();
             archetype.orb = BonkOrb(std::min<uint8>(fields[7].GetUInt8(), BONK_ORB_RED));
+            archetype.threat = std::max(0.1f, fields[8].GetFloat());
             ++count;
         } while (result->NextRow());
     }

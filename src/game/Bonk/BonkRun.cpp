@@ -134,6 +134,9 @@ namespace
     float const BONK_BOSS_MAX_GROWTH       = 1.5f;
     uint32 const BONK_MAX_PLATE_ID         = 65535;
     float const BONK_RING_DISTANCE         = 22.0f;
+    float const BONK_RING_GAP_NORMAL       = 100.0f * M_PI_F / 180.0f;
+    float const BONK_RING_GAP_HEROIC       = 70.0f * M_PI_F / 180.0f;
+    float const BONK_RING_GAP_MYTHIC       = 45.0f * M_PI_F / 180.0f;
     float const BONK_RUSH_WIDTH            = 0.6f;
 
     uint32 const BONK_HEADING_SAMPLE_MS    = 250;
@@ -2301,7 +2304,10 @@ uint32 BonkRun::SpawnFormation(BonkMapEvent const& event)
     uint32 const alive = m_mobs.size();
     uint32 const count = std::min(event.count, m_tier.maxAlive > alive ? m_tier.maxAlive - alive : 0u);
 
-    float const side = frand(0.0f, 2.0f * M_PI_F);
+    float heading;
+    bool const ring = event.type == BONK_EVENT_RING;
+    float const gap = ring ? GetRingGap() : 0.0f;
+    float const side = ring ? (GetHeading(heading) ? heading : m_player->GetOrientation()) + gap / 2.0f : frand(0.0f, 2.0f * M_PI_F);
     uint32 spawned = 0;
     for (uint32 i = 0; i < count; ++i)
     {
@@ -2310,9 +2316,9 @@ uint32 BonkRun::SpawnFormation(BonkMapEvent const& event)
             break;
 
         float angle, distance;
-        if (event.type == BONK_EVENT_RING)
+        if (ring)
         {
-            angle = side + 2.0f * M_PI_F * i / count;
+            angle = side + (2.0f * M_PI_F - gap) * (i + 0.5f) / count;
             distance = BONK_RING_DISTANCE;
         }
         else
@@ -2322,10 +2328,21 @@ uint32 BonkRun::SpawnFormation(BonkMapEvent const& event)
         }
 
         float x, y, z;
-        if (FindSpawnPositionAt(angle, distance, x, y, z) && SpawnMobAt(*creature, x, y, z))
+        if (!FindSpawnPositionAt(angle, distance, x, y, z))
+            continue;
+        if (ring ? EmergeMobAt(*creature, x, y, z, false, 0) : SpawnMobAt(*creature, x, y, z) != nullptr)
             ++spawned;
     }
     return spawned;
+}
+
+float BonkRun::GetRingGap() const
+{
+    if (m_tier.key == "normal")
+        return BONK_RING_GAP_NORMAL;
+    if (m_tier.key == "heroic")
+        return BONK_RING_GAP_HEROIC;
+    return BONK_RING_GAP_MYTHIC;
 }
 
 void BonkRun::PruneMobs()
@@ -2405,7 +2422,7 @@ void BonkRun::UpdateSpawns(uint32 diff)
         m_spawnTimer += int32(BONK_SPAWN_TICK_MS);
 
         uint32 const target = GetSpawnTarget();
-        uint32 const trash = (m_stress.on ? CountTrash() : CountRoster()) + m_emerging.size();
+        uint32 const trash = (m_stress.on ? CountTrash() : uint32(std::ceil(CountRosterThreat()))) + m_emerging.size();
         uint32 const alive = m_mobs.size() + m_emerging.size();
         uint32 const fullPerTick = GetWave().spawnPerTick ? GetWave().spawnPerTick : BONK_SPAWN_PER_TICK;
         uint32 const perTick = fullPerTick > BONK_OPENING_REFILL_MIN ?
@@ -2435,16 +2452,16 @@ bool BonkRun::IsInRoster(BonkArchetype archetype) const
     return wave.roster[archetype] > 0;
 }
 
-uint32 BonkRun::CountRoster() const
+float BonkRun::CountRosterThreat() const
 {
     Map* map = m_player->GetMap();
-    uint32 count = 0;
+    float threat = 0.0f;
     for (ObjectGuid const& guid : m_mobs)
         if (Creature const* mob = map->GetCreature(guid))
             if (BonkMobAI const* ai = dynamic_cast<BonkMobAI const*>(mob->AI()))
                 if (ai->GetKind() == BONK_SPAWN_NORMAL && !ai->IsFlyer() && IsInRoster(ai->GetArchetype()))
-                    ++count;
-    return count;
+                    threat += sBonkMgr.GetArchetype(ai->GetArchetype()).threat;
+    return threat;
 }
 
 float BonkRun::GetCurveMinAlive() const

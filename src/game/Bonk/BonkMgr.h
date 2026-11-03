@@ -126,6 +126,7 @@ struct BonkArchetypeInfo
     uint32 firstSecond = 0;
     uint32 firstSecondLater = 0;
     BonkOrb orb = BONK_ORB_BLUE;
+    float threat = 1.0f;
 };
 
 enum BonkWaveBeat : uint8

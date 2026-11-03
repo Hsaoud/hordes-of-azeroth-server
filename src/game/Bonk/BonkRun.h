@@ -646,7 +646,8 @@ class BonkRun
         uint32 GetMaxBruisers() const;
         BonkWave const& GetWave() const;
         bool IsInRoster(BonkArchetype archetype) const;
-        uint32 CountRoster() const;
+        float CountRosterThreat() const;
+        float GetRingGap() const;
         float GetCurveMinAlive() const;
         float GetStageCrowdFloor() const;
         float GetStageCrowdScale() const;
