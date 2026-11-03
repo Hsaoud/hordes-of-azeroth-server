@@ -13861,6 +13861,21 @@ void BonkRun::SendState() const
     m_player->GetBonkPlayer()->SendAddon("support~" + DescribeSupport());
     m_player->GetBonkPlayer()->SendAddon("gmeter~" + DescribeGlyphStats());
     m_player->GetBonkPlayer()->SendAddon("xmeter~" + DescribeOtherDamage());
+    if (BonkCoop::InGroupRun(m_player))
+    {
+        std::vector<Player*> members = BonkCoop::RunGroupOf(m_player);
+        if (std::find(members.begin(), members.end(), m_player) == members.end())
+            members.push_back(m_player);
+        std::string party;
+        for (Player* member : members)
+        {
+            if (!member)
+                continue;
+            party += std::string(member->GetName()) + "~" +
+                std::to_string(BonkStats::TotalDamage(member->GetObjectGuid())) + "~" + std::to_string(uint32(member->GetClass())) + "~";
+        }
+        m_player->GetBonkPlayer()->SendAddon("pmeter~" + party);
+    }
 }
 
 std::string BonkRun::DescribeWeaponStats() const
