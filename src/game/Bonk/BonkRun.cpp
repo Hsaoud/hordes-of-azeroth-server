@@ -628,8 +628,8 @@ float const BONK_START_POLY_REACH   = 10.0f;
     {
         switch (kind)
         {
-            case BONK_SPAWN_ELITE:    return 4.0f;
-            case BONK_SPAWN_MINIBOSS: return 35.0f;
+            case BONK_SPAWN_ELITE:    return 14.0f;
+            case BONK_SPAWN_MINIBOSS: return 55.0f;
             case BONK_SPAWN_BOSS:     return 110.0f;
             default:                  return 1.0f;
         }
@@ -4121,7 +4121,12 @@ uint32 BonkRun::GetSpawnHealth(BonkSpawnKind kind, BonkArchetype archetype, floa
 
 float BonkRun::GetTierKindHealth(BonkSpawnKind kind) const
 {
-    return kind == BONK_SPAWN_BOSS ? m_tier.bossHealthMultiplier : kind == BONK_SPAWN_MINIBOSS ? m_tier.minibossHealthMultiplier : 1.0f;
+    return kind == BONK_SPAWN_BOSS ? m_tier.bossHealthMultiplier * m_levelRow.bossHealth : kind == BONK_SPAWN_MINIBOSS ? m_tier.minibossHealthMultiplier : 1.0f;
+}
+
+float BonkRun::GetTierKindDamage(BonkSpawnKind kind) const
+{
+    return kind == BONK_SPAWN_BOSS ? m_levelRow.bossDamage : kind == BONK_SPAWN_MINIBOSS ? m_tier.minibossDamageMultiplier : 1.0f;
 }
 
 float BonkRun::GetProcBaseHealth() const
@@ -4955,7 +4960,7 @@ Creature* BonkRun::SpawnMobAt(BonkMapCreature const& creature, float x, float y,
 
     {
         float const damage = std::max(1.0f, GetHeroBaseHealth() * GetScalingNow().hitShare * GetStageDamageMultiplier() *
-            m_map.damageMultiplier * creature.damageMultiplier * archetypeDamage * veteranDamage * GetKindDamage(creature.kind) * m_spawnDamageScale);
+            m_map.damageMultiplier * creature.damageMultiplier * archetypeDamage * veteranDamage * GetKindDamage(creature.kind) * GetTierKindDamage(creature.kind) * m_spawnDamageScale);
         mob->SetAttackTime(BASE_ATTACK, BONK_MOB_SWING_MS);
         mob->SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, damage * 0.85f);
         mob->SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, damage * 1.15f);

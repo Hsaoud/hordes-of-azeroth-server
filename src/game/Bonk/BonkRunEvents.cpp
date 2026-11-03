@@ -25,7 +25,7 @@ namespace
     uint32 const BONK_GOBLIN_SECONDS         = 20;
     float const BONK_GOBLIN_MIN_DISTANCE     = 18.0f;
     float const BONK_GOBLIN_MAX_DISTANCE     = 28.0f;
-    float const BONK_GOBLIN_HEALTH           = 0.5f;
+    float const BONK_GOBLIN_HEALTH           = 0.15f;
     float const BONK_GOBLIN_SPEED[3]         = { 0.85f, 0.95f, 1.05f };
     float const BONK_GOBLIN_SCALE            = 1.2f;
     uint32 const BONK_GOBLIN_GUARDS          = 2;
@@ -37,7 +37,7 @@ namespace
     uint32 const BONK_BOUNTY_SECONDS         = 60;
     float const BONK_BOUNTY_MIN_DISTANCE     = 35.0f;
     float const BONK_BOUNTY_MAX_DISTANCE     = 50.0f;
-    float const BONK_BOUNTY_HEALTH           = 2.0f;
+    float const BONK_BOUNTY_HEALTH           = 4.0f;
     float const BONK_BOUNTY_SCALE            = 1.25f;
     char const* const BONK_BOUNTY_ICON       = "INV_Misc_Bone_HumanSkull_01";
 
@@ -49,7 +49,7 @@ namespace
     float const BONK_KOBOLD_MIN_DISTANCE     = 12.0f;
     float const BONK_KOBOLD_MAX_DISTANCE     = 35.0f;
     float const BONK_KOBOLD_GRAB_RANGE       = 12.0f;
-    float const BONK_KOBOLD_HEALTH           = 0.3f;
+    float const BONK_KOBOLD_HEALTH           = 0.09f;
     float const BONK_KOBOLD_SPEED[3]         = { 0.8f, 0.9f, 1.0f };
     uint32 const BONK_KOBOLD_HEAD_START_MS   = 2500;
     float const BONK_KOBOLD_SPREAD           = 0.6f;

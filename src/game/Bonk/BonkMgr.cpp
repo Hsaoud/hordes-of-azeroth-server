@@ -332,7 +332,7 @@ void BonkMgr::LoadTiers()
         "`shard_chance_normal`, `shard_chance_elite`, `shards_miniboss`, `shards_boss`, `description`, `art`, "
         "`mastery_xp_minute`, `mastery_xp_miniboss`, `mastery_xp_boss`, `elite_affixes`, "
         "`stage_damage_accel`, `min_alive_multiplier`, `max_alive`, `max_bruisers`, `first_elite_sec`, `charge_interval_ms`, `stages`, `finale`, `veteran_chance`, `chest_cost_minute_growth`, `details`, `opening_crowd`, `opening_sec`, "
-        "`levels`, `level_health_growth`, `level_damage_growth`, `boss_health_multiplier`, `miniboss_health_multiplier` FROM `bonk_tier`"));
+        "`levels`, `level_health_growth`, `level_damage_growth`, `boss_health_multiplier`, `miniboss_health_multiplier`, `miniboss_damage_multiplier` FROM `bonk_tier`"));
 
     if (!result)
     {
@@ -384,6 +384,7 @@ void BonkMgr::LoadTiers()
         tier.levelDamageGrowth = std::max(1.0f, fields[36].GetFloat());
         tier.bossHealthMultiplier = std::max(1.0f, fields[37].GetFloat());
         tier.minibossHealthMultiplier = std::max(1.0f, fields[38].GetFloat());
+        tier.minibossDamageMultiplier = std::max(0.1f, fields[39].GetFloat());
 
         m_tiers[tier.id] = std::move(tier);
     } while (result->NextRow());
@@ -408,7 +409,7 @@ void BonkMgr::LoadLevels()
 {
     std::unique_ptr<QueryResult> result(WorldDatabase.Query(
         "SELECT `tier`, `level`, `health`, `damage`, `extra_affixes`, `veteran_chance`, `reward`, `green_chance`, `blue_chance`, `epic_chance`, "
-        "`legendary_chance`, `roll_floor` FROM `bonk_level` ORDER BY `tier`, `level`"));
+        "`legendary_chance`, `roll_floor`, `boss_health`, `boss_damage` FROM `bonk_level` ORDER BY `tier`, `level`"));
     if (!result)
     {
         sLog.Out(LOG_DBERROR, LOG_LVL_MINIMAL, "Table `bonk_level` is empty or missing; every level plays as level 1.");
@@ -434,6 +435,8 @@ void BonkMgr::LoadLevels()
         level.epicChance = fields[9].GetFloat();
         level.legendaryChance = fields[10].GetFloat();
         level.rollFloor = std::min(1.0f, std::max(0.0f, fields[11].GetFloat()));
+        level.bossHealth = std::max(0.1f, fields[12].GetFloat());
+        level.bossDamage = std::max(0.1f, fields[13].GetFloat());
         tier->second.levelRows.push_back(level);
     } while (result->NextRow());
 }

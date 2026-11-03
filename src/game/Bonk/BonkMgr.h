@@ -278,6 +278,8 @@ struct BonkLevel
     float epicChance = 0.0f;
     float legendaryChance = 0.0f;
     float rollFloor = 0.0f;
+    float bossHealth = 1.0f;
+    float bossDamage = 1.0f;
 };
 
 struct BonkTier
@@ -296,6 +298,7 @@ struct BonkTier
     float stageDamageAccel = 0.05f;
     float bossHealthMultiplier = 1.0f;
     float minibossHealthMultiplier = 1.0f;
+    float minibossDamageMultiplier = 1.0f;
     float minAliveMultiplier = 1.0f;
     float openingCrowd = 1.0f;
     uint32 openingMs = 0;
