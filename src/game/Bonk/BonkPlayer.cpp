@@ -477,7 +477,7 @@ std::string BonkPlayer::DescribeGear() const
 
 uint32 BonkPlayer::GetLevelTalentPoints() const
 {
-    uint32 const best = GetBestLevel();
+    uint32 const best = GetClearedLevel();
     uint32 const mythic = std::min(BONK_TALENT_MYTHIC_LEVELS, best > BONK_TALENT_HEROIC_LAST_LEVEL ? best - BONK_TALENT_HEROIC_LAST_LEVEL : 0u);
     uint32 const earned = (best >= BONK_TALENT_NORMAL_LAST_LEVEL ? 1u : 0u) + (best >= BONK_TALENT_HEROIC_LAST_LEVEL ? 1u : 0u) +
         mythic * BONK_TALENT_MYTHIC_POINTS / BONK_TALENT_MYTHIC_LEVELS;
@@ -2641,11 +2641,22 @@ uint32 BonkPlayer::GetAccountBestLevel() const
     return best;
 }
 
+uint32 BonkPlayer::GetCarriedLevel() const
+{
+    uint32 const best = GetAccountBestLevel();
+    return best > BONK_CARRIED_LEVELS_BELOW_BEST ? best - BONK_CARRIED_LEVELS_BELOW_BEST : 0;
+}
+
+uint32 BonkPlayer::GetClearedLevel() const
+{
+    return std::max(GetBestLevel(), GetCarriedLevel());
+}
+
 uint32 BonkPlayer::GetOpenLevel(BonkTier const& tier) const
 {
     if (!IsTierUnlocked(tier))
         return 0;
-    return std::min(tier.GetLastLevel(), std::max(tier.firstLevel, GetBestLevel() + 1));
+    return std::min(tier.GetLastLevel(), std::max(tier.firstLevel, GetClearedLevel() + 1));
 }
 
 uint32 BonkPlayer::GetTierBest(BonkTier const& tier) const
@@ -2658,7 +2669,7 @@ uint32 BonkPlayer::GetTierBest(BonkTier const& tier) const
 
 bool BonkPlayer::IsLevelOpen(uint32 level) const
 {
-    return level && level <= GetBestLevel() + 1 && sBonkMgr.GetLevelTier(level);
+    return level && level <= GetClearedLevel() + 1 && sBonkMgr.GetLevelTier(level);
 }
 
 std::string BonkPlayer::GetLevelName(uint32 level) const

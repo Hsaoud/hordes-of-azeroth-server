@@ -70,6 +70,8 @@ class BonkPlayer
 
         uint32 GetBestLevel() const;
         uint32 GetAccountBestLevel() const;
+        uint32 GetCarriedLevel() const;
+        uint32 GetClearedLevel() const;
         uint32 GetOpenLevel(BonkTier const& tier) const;
         uint32 GetTierBest(BonkTier const& tier) const;
         bool IsLevelOpen(uint32 level) const;
