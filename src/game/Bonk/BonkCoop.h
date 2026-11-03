@@ -75,7 +75,7 @@ namespace BonkCoop
     bool IsPlayingElsewhere(std::string const& username);
     void SyncGuest(Player* guest);
     void ForgetGuest(Player const* guest);
-    void RecordMail(Player const* guest, uint32 entry, std::string const& subject, std::string const& body, BonkFoundGear const* found);
+    void RecordMail(Player const* guest, uint32 hostItem, uint32 entry, std::string const& subject, std::string const& body, BonkFoundGear const* found);
     void RememberHomeMail(uint32 hostMail, uint32 homeMail);
     void LinkHomeMail(Player const* guest);
     void RememberHomeMailItem(uint32 hostItem, uint32 homeMail, uint32 homeItem);

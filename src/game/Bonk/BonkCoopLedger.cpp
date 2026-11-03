@@ -434,6 +434,11 @@ namespace
         return out.str();
     }
 
+    bool IsMailToken(std::string const& text)
+    {
+        return !text.empty() && text.size() <= 48 && text.find_first_not_of("0123456789-") == std::string::npos;
+    }
+
     std::string ApplyMailItemTaken(HomeTarget const& home, std::vector<std::string> const& fields)
     {
         uint32 mailId = 0, itemGuid = 0, entry = 0;
@@ -451,6 +456,29 @@ namespace
         CharacterDatabase.PExecute("DELETE FROM `bonk_item_found` WHERE `item_guid` = %u", itemGuid);
         CharacterDatabase.PExecute("UPDATE `mail` SET `has_items` = (SELECT COUNT(*) > 0 FROM `mail_items` WHERE `mail_id` = %u) WHERE `id` = %u", mailId, mailId);
         CharacterDatabase.PExecute("INSERT INTO `bonk_coop_mail_taken` (`character_guid`, `item_id`) VALUES (%u, %u)", home.characterGuid, entry);
+        return "";
+    }
+
+    std::string ApplyMailTokenTaken(HomeTarget const& home, std::vector<std::string> const& fields)
+    {
+        if (fields.size() < 3 || !IsMailToken(fields[2]))
+            return "broken mail token entry";
+        if (!home.characterGuid)
+            return "no home character";
+        std::unique_ptr<QueryResult> found(CharacterDatabase.PQuery(
+            "SELECT `item_guid` FROM `bonk_coop_mail_token` WHERE `token` = '%s' AND `character_guid` = %u", fields[2].c_str(), home.characterGuid));
+        if (!found)
+            return "that extracted piece never reached the home mailbox";
+        uint32 const itemGuid = found->Fetch()[0].GetUInt32();
+        std::unique_ptr<QueryResult> taken(CharacterDatabase.PQuery("SELECT 1 FROM `character_inventory` WHERE `item_guid` = %u", itemGuid));
+        if (taken)
+            return "that extracted piece was already taken from the home mailbox";
+        CharacterDatabase.PExecute("DELETE `m` FROM `mail` `m` JOIN `mail_items` `mi` ON `mi`.`mail_id` = `m`.`id` WHERE `mi`.`item_guid` = %u AND `m`.`receiver_guid` = %u",
+            itemGuid, home.characterGuid);
+        CharacterDatabase.PExecute("DELETE FROM `mail_items` WHERE `item_guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `item_instance` WHERE `guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `bonk_item_found` WHERE `item_guid` = %u", itemGuid);
+        CharacterDatabase.PExecute("DELETE FROM `bonk_coop_mail_token` WHERE `token` = '%s' AND `character_guid` = %u", fields[2].c_str(), home.characterGuid);
         return "";
     }
 
@@ -508,6 +536,9 @@ namespace
             found.tier = std::min(found.tier, TierCap(home));
             BonkFound::Remember(item, found);
         }
+        if (fields.size() > 6 && IsMailToken(fields[6]))
+            CharacterDatabase.DirectPExecute("INSERT IGNORE INTO `bonk_coop_mail_token` (`token`, `character_guid`, `item_guid`) VALUES ('%s', %u, %u)",
+                fields[6].c_str(), home.characterGuid, item->GetGUIDLow());
         MailDraft(Unescape(fields[3]), Unescape(fields[4]))
             .AddItem(item)
             .SendMailTo(MailReceiver(receiver), MailSender(MAIL_CREATURE, HOME_MAIL_SENDER));
@@ -850,6 +881,8 @@ namespace
             return ApplyMailItemTaken(home, fields);
         if (kind == "mailmoney")
             return ApplyMailMoneyTaken(home, fields);
+        if (kind == "mailtoken")
+            return ApplyMailTokenTaken(home, fields);
         if (kind == "rows")
             return ApplyRows(home, fields);
         if (kind == "gold")
@@ -1168,13 +1201,6 @@ void BonkCoop::ForgetGuest(Player const* guest)
     s_guests.erase(guest->GetObjectGuid());
 }
 
-void BonkCoop::RecordMail(Player const* guest, uint32 entry, std::string const& subject, std::string const& body, BonkFoundGear const* found)
-{
-    if (!IsGuestAccount(guest))
-        return;
-    Record(guest, "mail\t" + std::to_string(entry) + "\t" + Escape(subject) + "\t" + Escape(body) + "\t" + (found ? WriteFound(*found) : std::string("-")));
-}
-
 namespace
 {
     struct HomeMailItemLink
@@ -1186,6 +1212,20 @@ namespace
     std::mutex s_homeMailLock;
     std::map<uint32, uint32> s_homeMails;
     std::map<uint32, HomeMailItemLink> s_homeMailItems;
+    std::map<uint32, std::string> s_sentHomeTokens;
+}
+
+void BonkCoop::RecordMail(Player const* guest, uint32 hostItem, uint32 entry, std::string const& subject, std::string const& body, BonkFoundGear const* found)
+{
+    if (!IsGuestAccount(guest))
+        return;
+    std::string const token = std::to_string(guest->GetGUIDLow()) + "-" + std::to_string(hostItem) + "-" + std::to_string(uint64(time(nullptr)));
+    {
+        std::lock_guard<std::mutex> guard(s_homeMailLock);
+        s_sentHomeTokens[hostItem] = token;
+    }
+    Record(guest, "mail\t" + std::to_string(entry) + "\t" + Escape(subject) + "\t" + Escape(body) + "\t" + (found ? WriteFound(*found) : std::string("-")) +
+        "\t" + token);
 }
 
 void BonkCoop::RememberHomeMail(uint32 hostMail, uint32 homeMail)
@@ -1205,13 +1245,29 @@ void BonkCoop::OnMailItemTaken(Player const* guest, uint32 hostMail, uint32 host
     if (!IsGuestAccount(guest))
         return;
     HomeMailItemLink link;
+    std::string token;
     {
         std::lock_guard<std::mutex> guard(s_homeMailLock);
         auto found = s_homeMailItems.find(hostItem);
-        if (found == s_homeMailItems.end())
-            return;
-        link = found->second;
-        s_homeMailItems.erase(found);
+        if (found != s_homeMailItems.end())
+        {
+            link = found->second;
+            s_homeMailItems.erase(found);
+        }
+        else
+        {
+            auto sent = s_sentHomeTokens.find(hostItem);
+            if (sent == s_sentHomeTokens.end())
+                return;
+            token = sent->second;
+            s_sentHomeTokens.erase(sent);
+        }
+    }
+    if (!token.empty())
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s took extracted item %u on the host (%s)", guest->GetName(), entry, token.c_str());
+        Record(guest, "mailtoken\t" + token);
+        return;
     }
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s took item %u from home mail %u", guest->GetName(), entry, link.mail);
     Record(guest, "mailitem\t" + std::to_string(link.mail) + "\t" + std::to_string(link.item) + "\t" + std::to_string(entry));

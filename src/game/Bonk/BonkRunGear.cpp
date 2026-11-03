@@ -310,18 +310,21 @@ bool BonkRun::GetGearQuality(uint32 entry, uint8& quality) const
 void BonkRun::MailKeptPiece(uint32 entry, std::string const& body, BonkFoundGear const* found)
 {
     ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
-    if (proto && BonkCoop::IsGuestAccount(m_player))
-    {
-        BonkCoop::RecordMail(m_player, entry, GetString(BONK_STRING_MAIL_EXTRACTED_SUBJECT, { m_player->GetBonkPlayer()->GetItemName(proto) }), body, found);
-        return;
-    }
     Item* keep = proto ? Item::CreateItem(entry, 1, m_player->GetObjectGuid()) : nullptr;
     if (!keep)
         return;
     keep->SaveToDB();
+    BonkFoundGear kept;
     if (found)
-        BonkFound::Remember(keep, *found);
-    MailDraft(GetString(BONK_STRING_MAIL_EXTRACTED_SUBJECT, { m_player->GetBonkPlayer()->GetItemName(proto) }), body)
+    {
+        kept = *found;
+        if (BonkCoop::IsGuestAccount(m_player))
+            kept.tier = std::min(kept.tier, std::max(1u, m_player->GetBonkPlayer()->GetAccountBestLevel()));
+        BonkFound::Remember(keep, kept);
+    }
+    std::string const subject = GetString(BONK_STRING_MAIL_EXTRACTED_SUBJECT, { m_player->GetBonkPlayer()->GetItemName(proto) });
+    BonkCoop::RecordMail(m_player, keep->GetGUIDLow(), entry, subject, body, found ? &kept : nullptr);
+    MailDraft(subject, body)
         .AddItem(keep)
         .SendMailTo(MailReceiver(m_player), MailSender(MAIL_CREATURE, BONK_BANKER_ENTRY));
 }
