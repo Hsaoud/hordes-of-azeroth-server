@@ -74,6 +74,7 @@ namespace BonkStats
     std::string DescribeDamageTypes(ObjectGuid player, uint32 spellId);
     std::vector<uint32> GetWeaponSpells(BonkWeapon const& weapon);
     std::vector<BonkOtherSource> GetOtherSources(Player* player, std::set<uint32> const& shown);
+    uint64 TotalDamage(ObjectGuid guid);
     void SendSummary(Player* player, std::vector<BonkSummaryWeapon> const& weapons);
 
     void UpdateBossBar(Player* player, uint32 diff);
