@@ -63,7 +63,7 @@ namespace
     float const BONK_SHARD_MIN_DISTANCE      = 45.0f;
     float const BONK_SHARD_MAX_DISTANCE      = 90.0f;
     float const BONK_SHARD_SPREAD            = 35.0f;
-    float const BONK_SHARD_HEALTH            = 1.5f;
+    float const BONK_SHARD_HEALTH            = 0.43f;
     int32 const BONK_SHARD_SPAWN_MS          = 5000;
     uint32 const BONK_SHARD_ADDS             = 2;
     float const BONK_SHARD_VALOR             = 0.5f;
@@ -75,7 +75,7 @@ namespace
     uint32 const BONK_PORTAL_SECONDS         = 75;
     float const BONK_PORTAL_MIN_DISTANCE     = 40.0f;
     float const BONK_PORTAL_MAX_DISTANCE     = 70.0f;
-    float const BONK_PORTAL_HEALTH[3]        = { 3.0f, 4.0f, 5.0f };
+    float const BONK_PORTAL_HEALTH[3]        = { 0.86f, 1.14f, 1.43f };
     int32 const BONK_PORTAL_SPAWN_MS         = 6000;
     uint32 const BONK_PORTAL_ADDS            = 3;
     uint32 const BONK_PORTAL_ELITE_WAVE      = 3;
