@@ -1,4 +1,4 @@
-﻿#include "BonkRun.h"
+#include "BonkRun.h"
 #include "BonkCoop.h"
 #include "Group.h"
 #include "BonkCodex.h"
