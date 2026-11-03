@@ -45,6 +45,7 @@
 #include "AccountMgr.h"
 #include "Bonk/BonkCoop.h"
 #include "Bonk/BonkPlayer.h"
+#include "Bonk/BonkVersion.h"
 
 class LoginQueryHolder : public SqlQueryHolder
 {
@@ -748,6 +749,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder *holder)
 
     if (!alreadyOnline)
         pCurrChar->GetBonkPlayer()->OnLogin();
+    BonkVersion::SendPatchLines(pCurrChar);
 
     sObjectMgr.UpdatePlayerCachedPosition(pCurrChar);
 

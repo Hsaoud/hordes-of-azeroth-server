@@ -25,6 +25,7 @@
 #include "MapManager.h"
 #include "Util.h"
 #include "Bonk/BonkPlayer.h"
+#include "Bonk/BonkStrings.h"
 
 bool ChatHandler::HandleTeleCommand(char* args)
 {
@@ -1043,7 +1044,7 @@ bool ChatHandler::HandleStartCommand(char* /*args*/)
 
     if (chr->GetBonkPlayer()->GetRun())
     {
-        SendSysMessage("Leave the run first with .bonk stop.");
+        SendSysMessage(chr->GetBonkPlayer()->GetString(BONK_STRING_LEAVE_RUN_FIRST).c_str());
         SetSentErrorMessage(true);
         return false;
     }
@@ -1082,7 +1083,7 @@ bool ChatHandler::HandleUnstuckCommand(char* /*args*/)
 
     if (pPlayer->GetBonkPlayer()->GetRun())
     {
-        SendSysMessage("Leave the run first with .bonk stop.");
+        SendSysMessage(pPlayer->GetBonkPlayer()->GetString(BONK_STRING_LEAVE_RUN_FIRST).c_str());
         SetSentErrorMessage(true);
         return false;
     }

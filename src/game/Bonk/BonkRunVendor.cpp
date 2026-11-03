@@ -470,7 +470,7 @@ void BonkRun::SendVendor() const
     if (bonk->IsAddonReady())
     {
         bonk->SendAddon("vendor~" + std::to_string(m_coins) + "~" + std::to_string(rerollCost) + "~" +
-            std::to_string((m_vendorLeftMs + IN_MILLISECONDS - 1) / IN_MILLISECONDS) + "~" + BONK_VENDOR_NAME + "~" +
+            std::to_string((m_vendorLeftMs + IN_MILLISECONDS - 1) / IN_MILLISECONDS) + "~" + VendorName(m_player) + "~" +
             std::to_string(GetVendorRestocksLeft()));
         for (size_t i = 0; i < m_vendorStock.size(); ++i)
         {
@@ -511,8 +511,8 @@ void BonkRun::SendVendor() const
     }
 
     ChatHandler handler(m_player);
-    handler.PSendSysMessage("%s's wares (you have %u Valor): .bonk vendor buy <number>, .bonk vendor lock <number>, "
-        ".bonk vendor reroll (%u Valor, %u left), .bonk vendor close", BONK_VENDOR_NAME, m_coins, rerollCost, GetVendorRestocksLeft());
+    handler.SendSysMessage(GetString(BONK_STRING_VENDOR_CHAT_HEADER, { VendorName(m_player), std::to_string(m_coins), std::to_string(rerollCost),
+        std::to_string(GetVendorRestocksLeft()) }).c_str());
     for (size_t i = 0; i < m_vendorStock.size(); ++i)
     {
         VendorSlot const& slot = m_vendorStock[i];
@@ -521,12 +521,15 @@ void BonkRun::SendVendor() const
             name = GetString(BONK_STRING_VENDOR_CHARGE, { GetString(CHARGE_NAMES[slot.charge < MAX_BONK_VENDOR_CHARGE ? slot.charge : BONK_VENDOR_CHARGE_SKIP]) });
         else
         {
-            name = DescribeOffer(slot.card, nullptr) + " rank " + std::to_string(slot.card.newLevel);
-            if (slot.card.isWeapon && slot.card.step != BONK_STEP_NEW)
-                name += std::string(" (") + GetBonkRarityName(slot.card.rarity) + ")";
+            std::string const offer = DescribeOffer(slot.card, nullptr);
+            std::string const rank = std::to_string(slot.card.newLevel);
+            name = slot.card.isWeapon && slot.card.step != BONK_STEP_NEW ?
+                GetString(BONK_STRING_VENDOR_CHAT_RANK_RARITY, { offer, rank, GetString(GetBonkRarityString(slot.card.rarity)) }) :
+                GetString(BONK_STRING_VENDOR_CHAT_RANK, { offer, rank });
             name += ": " + JoinBonkLines(DescribeStep(slot.card));
         }
-        char const* state = slot.state == VENDOR_SOLD ? ", bought" : slot.state == VENDOR_GONE ? ", no longer fits" : slot.locked ? ", locked" : "";
-        handler.PSendSysMessage("  %u) %s (%u Valor%s)", uint32(i + 1), name.c_str(), slot.price, state);
+        BonkString const price = slot.state == VENDOR_SOLD ? BONK_STRING_VENDOR_CHAT_PRICE_BOUGHT : slot.state == VENDOR_GONE ? BONK_STRING_VENDOR_CHAT_PRICE_GONE :
+            slot.locked ? BONK_STRING_VENDOR_CHAT_PRICE_LOCKED : BONK_STRING_VENDOR_CHAT_PRICE;
+        handler.PSendSysMessage("  %u) %s (%s)", uint32(i + 1), name.c_str(), GetString(price, { std::to_string(slot.price) }).c_str());
     }
 }

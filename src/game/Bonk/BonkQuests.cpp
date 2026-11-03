@@ -845,9 +845,15 @@ std::vector<std::string> BonkQuests::DescribeAll(Player* player) const
         if (IsHiddenUntilDone(quest) && !entry.completed)
             continue;
         std::string icon;
-        std::string const reward = DescribeReward(quest, &icon);
-        lines.push_back(quest.name + (entry.completed ? " (done): " : " " + std::to_string(GetShownProgress(quest, entry)) + "/" +
-            std::to_string(quest.amount) + ": ") + quest.description + (reward.empty() ? "" : " Reward: " + reward + "."));
+        BonkPlayer const* bonk = player->GetBonkPlayer();
+        std::string const reward = DescribeReward(quest, &icon, bonk->GetLocale());
+        std::string const name = bonk->Localize(BONK_FIELD_QUEST_NAME, quest.id, quest.name);
+        std::string const description = bonk->Localize(BONK_FIELD_QUEST_DESCRIPTION, quest.id, quest.description);
+        std::string line = entry.completed ? bonk->GetString(BONK_STRING_QUEST_GOSSIP_DONE, { name, description }) :
+            bonk->GetString(BONK_STRING_QUEST_GOSSIP_PROGRESS, { name, std::to_string(GetShownProgress(quest, entry)), std::to_string(quest.amount), description });
+        if (!reward.empty())
+            line += " " + bonk->GetString(BONK_STRING_QUEST_GOSSIP_REWARD, { reward });
+        lines.push_back(line);
     }
     return lines;
 }

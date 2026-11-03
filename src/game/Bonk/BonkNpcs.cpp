@@ -66,14 +66,8 @@ bool GossipHello_npc_bonk_run_master(Player* player, Creature* creature)
             break;
 
         BonkTier const& tier = *tierPtr;
-        std::string text = bonk->IsTierUnlocked(tier) ? bonk->GetLevelName(bonk->GetOpenLevel(tier)) : tier.name;
-        if (!bonk->IsTierUnlocked(tier))
-        {
-            std::string hint = bonk->GetUnlockHint(tier);
-            if (!hint.empty())
-                hint[0] = char(tolower(static_cast<unsigned char>(hint[0])));
-            text += " (locked: " + hint + ")";
-        }
+        std::string const text = bonk->IsTierUnlocked(tier) ? bonk->GetLevelName(bonk->GetOpenLevel(tier)) :
+            bonk->GetString(BONK_STRING_TIER_LOCKED, { bonk->Localize(BONK_FIELD_TIER_NAME, tier.id, tier.name), bonk->GetUnlockHint(tier) });
         player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, text.c_str(), GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + tier.id);
     }
 
@@ -113,8 +107,9 @@ bool GossipHello_npc_bonk_quartermaster(Player* player, Creature* creature)
 
         BonkUpgrade const& upgrade = itr.second;
         uint8 const rank = bonk->GetUpgradeRank(upgrade.id);
-        std::string text = upgrade.name + " " + std::to_string(rank) + "/" + std::to_string(upgrade.maxRank) + ": " + upgrade.description;
-        text += rank < upgrade.maxRank ? " (" + FormatBonkMoney(upgrade.GetCost(rank)) + ")" : " (max)";
+        std::string text = bonk->GetString(BONK_STRING_GOSSIP_RANK_LINE, { bonk->Localize(BONK_FIELD_UPGRADE_NAME, upgrade.id, upgrade.name),
+            std::to_string(rank), std::to_string(upgrade.maxRank), bonk->Localize(BONK_FIELD_UPGRADE_DESCRIPTION, upgrade.id, upgrade.description) });
+        text += " (" + (rank < upgrade.maxRank ? FormatBonkMoney(upgrade.GetCost(rank), bonk->GetLocale()) : bonk->GetString(BONK_STRING_GOSSIP_MAX_RANK)) + ")";
         player->ADD_GOSSIP_ITEM(rank < upgrade.maxRank ? GOSSIP_ICON_TRAINER : GOSSIP_ICON_CHAT, text.c_str(), SENDER_BUY,
             GOSSIP_ACTION_INFO_DEF + upgrade.id);
     }
@@ -159,16 +154,17 @@ bool GossipHello_npc_bonk_talents(Player* player, Creature* creature)
 
         if (talent.IsToggle() && rank)
         {
-            std::string const text = std::string(bonk->IsTalentEnabled(talent.id) ? "[On] " : "[Off] ") + talent.name + ": " + talent.description;
+            std::string const text = bonk->GetString(bonk->IsTalentEnabled(talent.id) ? BONK_STRING_GOSSIP_TOGGLE_ON : BONK_STRING_GOSSIP_TOGGLE_OFF,
+                { bonk->Localize(BONK_FIELD_TALENT_NAME, talent.id, talent.name), bonk->Localize(BONK_FIELD_TALENT_DESCRIPTION, talent.id, talent.description) });
             player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, text.c_str(), SENDER_TOGGLE, action);
             continue;
         }
 
-        std::string text = talent.name;
-        if (!talent.IsToggle())
-            text += " " + std::to_string(rank) + "/" + std::to_string(talent.maxRank);
-        text += ": " + talent.description;
-        text += rank < talent.maxRank ? " (" + FormatBonkShards(talent.GetCost(rank)) + ")" : " (max)";
+        std::string const name = bonk->Localize(BONK_FIELD_TALENT_NAME, talent.id, talent.name);
+        std::string const description = bonk->Localize(BONK_FIELD_TALENT_DESCRIPTION, talent.id, talent.description);
+        std::string text = talent.IsToggle() ? bonk->GetString(BONK_STRING_GOSSIP_NAME_LINE, { name, description }) :
+            bonk->GetString(BONK_STRING_GOSSIP_RANK_LINE, { name, std::to_string(rank), std::to_string(talent.maxRank), description });
+        text += " (" + (rank < talent.maxRank ? FormatBonkShards(talent.GetCost(rank), bonk->GetLocale()) : bonk->GetString(BONK_STRING_GOSSIP_MAX_RANK)) + ")";
         player->ADD_GOSSIP_ITEM(rank < talent.maxRank ? GOSSIP_ICON_TRAINER : GOSSIP_ICON_CHAT, text.c_str(), SENDER_BUY, action);
     }
 
@@ -212,8 +208,9 @@ bool GossipHello_npc_bonk_mastery(Player* player, Creature* creature)
 
     uint32 const points = bonk->GetMasteryPoints();
     uint32 const spent = bonk->GetMasterySpent();
-    std::string const header = "Mastery level " + std::to_string(bonk->GetMasteryLevel()) + ", " +
-        std::to_string(points > spent ? points - spent : 0) + " talent points to spend";
+    uint32 const unspent = points > spent ? points - spent : 0;
+    std::string const header = bonk->GetString(unspent == 1 ? BONK_STRING_GOSSIP_MASTERY_HEADER_ONE : BONK_STRING_GOSSIP_MASTERY_HEADER,
+        { std::to_string(bonk->GetMasteryLevel()), std::to_string(unspent) });
     player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, header.c_str(), GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
     for (auto const& itr : sBonkMastery.GetNodes())
     {
@@ -223,11 +220,12 @@ bool GossipHello_npc_bonk_mastery(Player* player, Creature* creature)
         if (player->PlayerTalkClass->GetGossipMenu().MenuItemCount() >= GOSSIP_MAX_MENU_ITEMS - 1)
             break;
         uint8 const rank = bonk->GetMasteryRank(node.id);
-        std::string const text = node.name + " " + std::to_string(rank) + "/" + std::to_string(node.maxRank) + ": " + node.description;
+        std::string const text = bonk->GetString(BONK_STRING_GOSSIP_RANK_LINE, { bonk->Localize(BONK_FIELD_MASTERY_NAME, node.id, node.name),
+            std::to_string(rank), std::to_string(node.maxRank), bonk->Localize(BONK_FIELD_MASTERY_DESCRIPTION, node.id, node.description) });
         player->ADD_GOSSIP_ITEM(rank < node.maxRank ? GOSSIP_ICON_TRAINER : GOSSIP_ICON_CHAT, text.c_str(), SENDER_BUY,
             GOSSIP_ACTION_INFO_DEF + node.id);
     }
-    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_INTERACT_1, "Reset my talents (free)", SENDER_BUY, MASTERY_ACTION_RESPEC);
+    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_INTERACT_1, bonk->GetString(BONK_STRING_GOSSIP_RESET_TALENTS).c_str(), SENDER_BUY, MASTERY_ACTION_RESPEC);
 
     player->SEND_GOSSIP_MENU(BONK_TEXT_MASTERY, creature->GetObjectGuid());
     return true;
@@ -376,7 +374,8 @@ bool GOHello_go_bonk_vault(Player* player, GameObject* go)
     {
         for (BonkRun::VaultFind const& find : run->GetVaultFinds())
             if (ItemPrototype const* proto = sObjectMgr.GetItemPrototype(find.entry))
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_VENDOR, (std::string("Send home now: ") + proto->Name1).c_str(), SENDER_VAULT_SEND, find.guid.GetCounter());
+                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_VENDOR, player->GetBonkPlayer()->GetString(BONK_STRING_VAULT_GOSSIP_SEND,
+                    { player->GetBonkPlayer()->GetItemName(proto) }).c_str(), SENDER_VAULT_SEND, find.guid.GetCounter());
         player->SEND_GOSSIP_MENU(BONK_TEXT_VAULT, go->GetObjectGuid());
         return true;
     }
@@ -386,8 +385,9 @@ bool GOHello_go_bonk_vault(Player* player, GameObject* go)
         ItemPrototype const* proto = sObjectMgr.GetItemPrototype(find.entry);
         if (!proto)
             continue;
-        std::string const text = find.inVault ? std::string("In the vault: ") + proto->Name1 + " (take it out)" :
-            std::string("Put in the vault: ") + proto->Name1 + " (otherwise it sells for " + std::to_string(find.sellCopper / 100) + "s)";
+        BonkPlayer const* bonk = player->GetBonkPlayer();
+        std::string const text = find.inVault ? bonk->GetString(BONK_STRING_VAULT_GOSSIP_TAKE, { bonk->GetItemName(proto) }) :
+            bonk->GetString(BONK_STRING_VAULT_GOSSIP_PUT, { bonk->GetItemName(proto), FormatBonkMoney(find.sellCopper, bonk->GetLocale()) });
         player->ADD_GOSSIP_ITEM(find.inVault ? GOSSIP_ICON_INTERACT_1 : GOSSIP_ICON_VENDOR, text.c_str(),
             find.inVault ? SENDER_VAULT_TAKE : SENDER_VAULT_PUT, find.guid.GetCounter());
     }

@@ -472,6 +472,7 @@ float const BONK_RARITY_WEIGHT[BONK_RARITY_LEGENDARY] = { 55.0f, 30.0f, 11.0f, 4
 float const BONK_RARITY_LUCK[BONK_RARITY_LEGENDARY]   = { 0.0f, 1.0f, 2.0f, 3.0f };
 
 char const* GetBonkRarityName(BonkRarity rarity);
+BonkString GetBonkRarityString(BonkRarity rarity);
 
 enum BonkWeaponBehavior : uint8
 {

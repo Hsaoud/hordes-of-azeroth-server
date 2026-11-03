@@ -66,7 +66,6 @@ namespace
         return creature ? dynamic_cast<BonkMobAI const*>(creature->AI()) : nullptr;
     }
 
-    char const* const RARITY_NAMES[MAX_BONK_RARITY] = { "Common", "Uncommon", "Rare", "Epic", "Legendary" };
 
     std::string FormatTimes(float times, LocaleConstant locale)
     {
@@ -201,11 +200,18 @@ void BonkRun::SendGlyphOffer() const
     }
 
     ChatHandler handler(m_player);
-    handler.SendSysMessage("Choose a Glyph (.bonk glyph <number>):");
+    handler.SendSysMessage(GetString(BONK_STRING_GLYPH_OFFER_CHAT).c_str());
     for (size_t i = 0; i < m_glyphOffer.size(); ++i)
-        if (BonkGlyph const* glyph = sBonkMgr.GetGlyph(m_glyphOffer[i]))
-            handler.PSendSysMessage("  %u) %s (%s): %s%s", uint32(i + 1), glyph->name.c_str(), RARITY_NAMES[glyph->rarity], glyph->description.c_str(),
-                glyph->drawback.empty() ? "" : (" Drawback: " + glyph->drawback).c_str());
+    {
+        BonkGlyph const* glyph = sBonkMgr.GetGlyph(m_glyphOffer[i]);
+        if (!glyph)
+            continue;
+        std::string const drawback = glyph->drawback.empty() ? std::string() :
+            " " + GetString(BONK_STRING_GLYPH_DRAWBACK, { Localize(BONK_FIELD_GLYPH_DRAWBACK, glyph->id, glyph->drawback) });
+        handler.PSendSysMessage("  %u) %s (%s): %s%s", uint32(i + 1), Localize(BONK_FIELD_GLYPH_NAME, glyph->id, glyph->name).c_str(),
+            GetString(GetBonkRarityString(BonkRarity(glyph->rarity))).c_str(), Localize(BONK_FIELD_GLYPH_DESCRIPTION, glyph->id, glyph->description).c_str(),
+            drawback.c_str());
+    }
 }
 
 bool BonkRun::ChooseGlyph(uint32 choice, std::string& error)

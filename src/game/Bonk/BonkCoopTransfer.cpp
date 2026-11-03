@@ -1,5 +1,6 @@
 #include "BonkCoop.h"
 #include "BonkFoundGear.h"
+#include "BonkLocale.h"
 #include "BonkPlayer.h"
 
 #include "AccountMgr.h"
@@ -468,6 +469,23 @@ namespace
         return IsIronman(guid) ? BonkPlayer::GetIronmanAccount(guid) : accountId;
     }
 
+    LocaleConstant AccountLocale(uint32 accountId)
+    {
+        if (accountId)
+            if (std::unique_ptr<QueryResult> result{ CharacterDatabase.PQuery("SELECT `locale` FROM `bonk_account` WHERE `account` = %u", accountId) })
+            {
+                uint8 const locale = result->Fetch()[0].GetUInt8();
+                if (locale < MAX_LOCALE)
+                    return LocaleConstant(locale);
+            }
+        return LOCALE_enUS;
+    }
+
+    std::string Error(uint32 accountId, BonkString id, std::vector<std::string> const& args = {})
+    {
+        return "error " + sBonkLocale.GetString(id, AccountLocale(accountId), args);
+    }
+
     std::string WriteExport(uint32 low)
     {
         uint32 const accountId = AccountOfCharacter(low);
@@ -481,7 +499,7 @@ namespace
     {
         uint32 const low = GuidOfName(name);
         if (!low)
-            return "error There is no character called " + name + ".";
+            return Error(0, BONK_STRING_COOP_TRANSFER_NO_CHARACTER, { name });
         if (Player* online = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, low)))
         {
             online->SaveToDB();
@@ -500,14 +518,14 @@ namespace
         PlayerDumpReader reader;
         DumpReturn const loaded = reader.LoadDump(DUMP_FILE, accountId, name, guid);
         if (loaded != DUMP_SUCCESS)
-            return "error The character couldn't be loaded (" + std::to_string(uint32(loaded)) + ").";
+            return Error(accountId, BONK_STRING_COOP_TRANSFER_LOAD_FAILED, { std::to_string(uint32(loaded)) });
         sBonkFound.LoadCharacter(GuidOfName(name));
         {
             std::lock_guard<std::mutex> guard(s_pendingMailLock);
             s_pendingMail[name] = ReadHomeMail(dump);
         }
         if (!ImportAccountRows(ReadFile(ACCOUNT_FILE), accountId))
-            return "error The account progress couldn't be loaded.";
+            return Error(accountId, BONK_STRING_COOP_TRANSFER_PROGRESS_FAILED);
         return "ok 0 " + name;
     }
 
@@ -515,21 +533,21 @@ namespace
     {
         uint32 const accountId = sAccountMgr.GetId(username);
         if (!accountId)
-            return "error There is no account called " + username + ".";
+            return Error(0, BONK_STRING_COOP_TRANSFER_NO_ACCOUNT, { username });
         if (!replaceGuid)
         {
             std::string const useName = FreeName(name);
             if (useName.empty())
-                return "error No free name for " + name + ".";
+                return Error(accountId, BONK_STRING_COOP_TRANSFER_NO_FREE_NAME, { name });
             return Load(accountId, useName, 0);
         }
         ObjectGuid const old = ObjectGuid(HIGHGUID_PLAYER, replaceGuid);
         if (sObjectMgr.GetPlayer(old))
-            return "error That character is online.";
+            return Error(accountId, BONK_STRING_COOP_TRANSFER_CHARACTER_ONLINE);
         if (CharacterRowExists(replaceGuid))
         {
             if (AccountOfCharacter(replaceGuid) != accountId)
-                return "error That character belongs to another account.";
+                return Error(accountId, BONK_STRING_COOP_TRANSFER_OTHER_ACCOUNT);
             DiscardHeldBank(replaceGuid);
             Player::DeleteFromDB(old, accountId, true, true);
         }
@@ -557,7 +575,7 @@ namespace
             if (s_pending.waitedMs < DELETE_WAIT_MS)
                 return "";
             s_pending.active = false;
-            return "error The old copy of the character couldn't be removed.";
+            return Error(s_pending.accountId, BONK_STRING_COOP_TRANSFER_OLD_COPY);
         }
         s_pending.active = false;
         return Load(s_pending.accountId, s_pending.name, 0);
@@ -581,7 +599,7 @@ namespace
             in >> username >> name >> replaceGuid;
             return Import(username, name, replaceGuid);
         }
-        return "error Unknown request.";
+        return Error(0, BONK_STRING_COOP_TRANSFER_UNKNOWN_REQUEST);
     }
 }
 

@@ -384,16 +384,17 @@ void BonkRun::SendLeyOffer() const
     }
 
     ChatHandler handler(m_player);
-    handler.SendSysMessage("Ley Line! Choose a blessing with .bonk leypick <number>:");
+    handler.SendSysMessage(GetString(BONK_STRING_LEY_OFFER_CHAT).c_str());
     for (size_t i = 0; i < m_leyOffer.size(); ++i)
     {
         if (m_leyOffer[i].cardId)
         {
             if (BonkCard const* card = sBonkMgr.GetCard(m_leyOffer[i].cardId))
-                handler.PSendSysMessage("%u. %s: %s", uint32(i + 1), card->name.c_str(), card->description.c_str());
+                handler.PSendSysMessage("%u. %s: %s", uint32(i + 1), Localize(BONK_FIELD_CARD_NAME, card->id, card->name).c_str(),
+                    Localize(BONK_FIELD_CARD_DESCRIPTION, card->id, card->description).c_str());
         }
         else if (LeyStat const* stat = GetLeyStat(m_leyOffer[i].effect))
-            handler.PSendSysMessage("%u. %s", uint32(i + 1), FormatLeyValue(*stat, m_leyOffer[i].value, LOCALE_enUS).c_str());
+            handler.PSendSysMessage("%u. %s", uint32(i + 1), FormatLeyValue(*stat, m_leyOffer[i].value, GetLocale()).c_str());
     }
 }
 
@@ -711,7 +712,7 @@ void BonkRun::UpdateMoonwell(size_t index, uint32 diff)
         shrine.tickMs -= IN_MILLISECONDS;
         if (m_player->IsAlive() && m_player->GetHealth() < m_player->GetMaxHealth())
         {
-            SupportScope scope(*this, { "Spell_Nature_Rejuvenation", "Moonwell" });
+            SupportScope scope(*this, { "Spell_Nature_Rejuvenation", GetString(BONK_STRING_SHRINE_MOONWELL) });
             m_player->ModifyHealth(int32(ReduceHealing(std::max(1u, uint32(m_player->GetMaxHealth() * BONK_MOONWELL_HEAL)))));
         }
     }

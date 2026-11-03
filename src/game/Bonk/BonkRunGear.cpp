@@ -153,11 +153,11 @@ namespace
         return quality >= ITEM_QUALITY_RARE && quality <= ITEM_QUALITY_LEGENDARY ? BONK_SPELL_FIRST_LOOT_SWIRL + quality - ITEM_QUALITY_RARE : 0;
     }
 
-    std::string GetItemLink(ItemPrototype const* proto)
+    std::string GetItemLink(ItemPrototype const* proto, std::string const& name)
     {
         char color[16];
         snprintf(color, sizeof(color), "%08x", ItemQualityColors[proto->Quality]);
-        return "|c" + std::string(color) + "|Hitem:" + std::to_string(proto->ItemId) + ":0:0:0|h[" + proto->Name1 + "]|h|r";
+        return "|c" + std::string(color) + "|Hitem:" + std::to_string(proto->ItemId) + ":0:0:0|h[" + name + "]|h|r";
     }
 }
 
@@ -699,8 +699,8 @@ void BonkRun::SendGearOffer() const
         return;
     }
 
-    ChatHandler(m_player).PSendSysMessage("Loot: %s. Type .bonk gear equip to wear it for this run, .bonk gear loot to carry it in your bags, or .bonk gear salvage for %u Valor.",
-        GetItemLink(proto).c_str(), valor);
+    ChatHandler(m_player).SendSysMessage(GetString(BONK_STRING_GEAR_OFFER_CHAT,
+        { GetItemLink(proto, bonk->GetItemName(proto)), std::to_string(valor) }).c_str());
 }
 
 void BonkRun::CloseGearOffer()

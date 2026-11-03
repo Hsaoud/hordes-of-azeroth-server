@@ -5,9 +5,12 @@
 
 #include <string>
 
+class Player;
+
 namespace BonkVersion
 {
     std::string BuildMotd(std::string const& welcome);
+    void SendPatchLines(Player* player);
     void Update(uint32 diff);
 }
 

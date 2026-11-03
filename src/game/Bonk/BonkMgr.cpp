@@ -1545,6 +1545,18 @@ char const* GetBonkRarityName(BonkRarity rarity)
     }
 }
 
+BonkString GetBonkRarityString(BonkRarity rarity)
+{
+    switch (rarity)
+    {
+        case BONK_RARITY_UNCOMMON:  return BONK_STRING_RARITY_UNCOMMON;
+        case BONK_RARITY_RARE:      return BONK_STRING_RARITY_RARE;
+        case BONK_RARITY_EPIC:      return BONK_STRING_RARITY_EPIC;
+        case BONK_RARITY_LEGENDARY: return BONK_STRING_RARITY_LEGENDARY;
+        default:                    return BONK_STRING_RARITY_COMMON;
+    }
+}
+
 uint32 BonkUpgrade::GetCost(uint8 ownedRanks) const
 {
     uint32 const copper = uint32(cost * std::pow(costGrowth, float(ownedRanks)) + 0.5f);

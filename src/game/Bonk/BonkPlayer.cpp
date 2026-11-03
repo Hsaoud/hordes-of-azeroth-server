@@ -2554,7 +2554,7 @@ bool BonkPlayer::UpgradeFoundGear(uint32 guidLow, std::string& error)
     uint8 const quality = uint8(item->GetProto()->Quality);
     if (found.upgrades >= BONK_FOUND_MAX_UPGRADES)
     {
-        error = GetString(BONK_STRING_ITEM_FULLY_UPGRADED, { item->GetProto()->Name1, std::to_string(BONK_FOUND_MAX_UPGRADES) });
+        error = GetString(BONK_STRING_ITEM_FULLY_UPGRADED, { GetItemName(item->GetProto()), std::to_string(BONK_FOUND_MAX_UPGRADES) });
         return false;
     }
     if (tier >= GetUpgradeCeiling())
@@ -2725,12 +2725,12 @@ bool BonkPlayer::StartGuestRun(BonkTier const& tier, BonkRunChoice const& choice
 {
     if (m_run)
     {
-        error = "You are already in a run.";
+        error = GetString(BONK_STRING_ALREADY_IN_A_RUN);
         return false;
     }
     if (m_player->IsTaxiFlying() || !IsPlayableClass(m_player->GetClass()) || !sBonkMgr.HasStarterSpell(m_player->GetClassMask()))
     {
-        error = "You can't start a run right now.";
+        error = GetString(m_player->IsTaxiFlying() ? BONK_STRING_CANT_START_RUN_WHILE_FLYING : BONK_STRING_CANT_START_RUN_NOW);
         return false;
     }
     TrimPoolToggles();
@@ -3283,14 +3283,11 @@ void BonkPlayer::SendArena(std::string const& npc) const
             SendLevelPreview(tier, GetRunBonuses());
         }
         else if (unlocked)
-            ChatHandler(m_player).PSendSysMessage("  %s: .bonk start %s %u", GetLevelName(GetOpenLevel(tier)).c_str(), tier.key.c_str(), tier.GetBandLevel(GetOpenLevel(tier)));
+            ChatHandler(m_player).PSendSysMessage("  %s", GetString(BONK_STRING_MAPS_CHAT_OPEN,
+                { GetLevelName(GetOpenLevel(tier)), tier.key, std::to_string(tier.GetBandLevel(GetOpenLevel(tier))) }).c_str());
         else
-        {
-            std::string hint = GetUnlockHint(tier);
-            if (!hint.empty())
-                hint[0] = char(tolower(static_cast<unsigned char>(hint[0])));
-            ChatHandler(m_player).PSendSysMessage("  %s (locked: %s)", tier.name.c_str(), hint.c_str());
-        }
+            ChatHandler(m_player).PSendSysMessage("  %s", GetString(BONK_STRING_TIER_LOCKED,
+                { Localize(BONK_FIELD_TIER_NAME, tier.id, tier.name), GetUnlockHint(tier) }).c_str());
     }
     if (m_addonReady)
         SendStarters();

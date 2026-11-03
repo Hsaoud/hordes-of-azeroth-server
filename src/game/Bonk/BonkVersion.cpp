@@ -1,5 +1,10 @@
 #include "BonkVersion.h"
+#include "BonkPlayer.h"
+#include "BonkStrings.h"
+#include "Chat.h"
+#include "Player.h"
 #include "World.h"
+#include "WorldSession.h"
 
 #include <cctype>
 #include <fstream>
@@ -80,19 +85,19 @@ namespace
         return shown;
     }
 
-    std::string AvailableLine(std::string const& version)
+    std::string AvailableLine(BonkPlayer const* bonk, std::string const& version)
     {
-        return "Patch " + DisplayVersion(version) + " is available. Restart the game to update.";
+        return bonk->GetString(BONK_STRING_PATCH_AVAILABLE, { DisplayVersion(version) });
     }
 
-    std::string CurrentMotd()
+    void SendAvailableToEveryone(std::string const& version)
     {
-        std::string motd = g_welcome;
-        if (!g_installed.empty())
-            motd += "\nPatch " + DisplayVersion(g_installed);
-        if (!g_announced.empty())
-            motd += "\n" + AvailableLine(g_announced);
-        return motd;
+        for (auto const& entry : sWorld.GetAllSessions())
+        {
+            Player* player = entry.second ? entry.second->GetPlayer() : nullptr;
+            if (player && player->IsInWorld())
+                ChatHandler(player).SendSysMessage(AvailableLine(player->GetBonkPlayer(), version).c_str());
+        }
     }
 
     void CheckLatestVersion()
@@ -103,9 +108,8 @@ namespace
             return;
 
         g_announced = pending;
-        sWorld.SetMotd(CurrentMotd());
         if (!pending.empty())
-            sWorld.SendGlobalText(AvailableLine(pending).c_str(), nullptr);
+            SendAvailableToEveryone(pending);
     }
 }
 
@@ -114,7 +118,17 @@ std::string BonkVersion::BuildMotd(std::string const& welcome)
     g_welcome = welcome;
     g_installed = ReadVersionFile(INSTALLED_VERSION_FILE);
     g_checkTimer = 0;
-    return CurrentMotd();
+    return g_welcome;
+}
+
+void BonkVersion::SendPatchLines(Player* player)
+{
+    BonkPlayer const* bonk = player->GetBonkPlayer();
+    ChatHandler chat(player);
+    if (!g_installed.empty())
+        chat.SendSysMessage(bonk->GetString(BONK_STRING_PATCH_INSTALLED, { DisplayVersion(g_installed) }).c_str());
+    if (!g_announced.empty())
+        chat.SendSysMessage(AvailableLine(bonk, g_announced).c_str());
 }
 
 void BonkVersion::Update(uint32 diff)

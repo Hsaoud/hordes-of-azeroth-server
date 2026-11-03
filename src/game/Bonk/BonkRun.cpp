@@ -1236,9 +1236,9 @@ std::string BonkRun::DescribeForLobby() const
     std::string text = m_player->GetBonkPlayer()->GetLevelName(m_difficultyLevel);
     if (IsDungeon())
         if (BonkMap const* dungeon = sBonkMgr.GetMap(m_dungeonId))
-            text += " \xC2\xB7 " + dungeon->name;
+            text += " \xC2\xB7 " + Localize(BONK_FIELD_MAP_NAME, dungeon->id, dungeon->name);
     if (IsInvasion())
-        text += " \xC2\xB7 Invasion";
+        text += " \xC2\xB7 " + GetString(BONK_STRING_LOBBY_INVASION);
     return text;
 }
 
@@ -5149,8 +5149,8 @@ Creature* BonkRun::SpawnMobAt(BonkMapCreature const& creature, float x, float y,
         m_bossArrivals[mob->GetObjectGuid()] = { m_totalMs, m_damageTaken };
         SpeakBossLine(mob, BONK_BOSS_LINE_ARRIVE);
         bool const boss = creature.kind == BONK_SPAWN_BOSS;
-        m_objectives.Follow(m_player, boss ? BONK_OBJECTIVE_BOSS : BONK_OBJECTIVE_MINIBOSS, mob, mob->GetName(), 0,
-            boss ? BONK_BOSS_PIN_ICON : BONK_MINIBOSS_PIN_ICON, boss ? "Boss" : "Mini-boss");
+        m_objectives.Follow(m_player, boss ? BONK_OBJECTIVE_BOSS : BONK_OBJECTIVE_MINIBOSS, mob, m_player->GetBonkPlayer()->GetLocalName(mob), 0,
+            boss ? BONK_BOSS_PIN_ICON : BONK_MINIBOSS_PIN_ICON, GetString(boss ? BONK_STRING_OBJECTIVE_BOSS : BONK_STRING_OBJECTIVE_MINIBOSS));
     }
     if (creature.kind == BONK_SPAWN_BOSS)
     {
@@ -11881,7 +11881,7 @@ Creature* BonkRun::SummonCaravan(uint32 entry, float x, float y, float z, float 
     caravan->SetPlateId(m_lastPlateId);
     caravan->ForceValuesUpdateAtIndex(UNIT_FIELD_HEALTH);
     caravan->ForceValuesUpdateAtIndex(UNIT_FIELD_MAXHEALTH);
-    m_player->GetBonkPlayer()->SendAddon("ally~" + std::string(caravan->GetName()) + "~" + std::to_string(caravan->GetPlateId()) + "~" +
+    m_player->GetBonkPlayer()->SendAddon("ally~" + m_player->GetBonkPlayer()->GetLocalName(caravan) + "~" + std::to_string(caravan->GetPlateId()) + "~" +
         BonkMobAI::GetUnitGuidText(caravan));
     return caravan;
 }
@@ -14127,30 +14127,31 @@ void BonkRun::SendOffer() const
 
     ChatHandler handler(m_player);
     if (m_offerSource == OFFER_CHEST)
-        handler.SendSysMessage("Chest! Choose an upgrade with .bonk pick <number>:");
+        handler.SendSysMessage(GetString(BONK_STRING_OFFER_CHAT_CHEST).c_str());
     else
-        handler.PSendSysMessage("Level %u! Choose an upgrade with .bonk pick <number>:", m_player->GetLevel());
+        handler.SendSysMessage(GetString(BONK_STRING_OFFER_CHAT_LEVEL, { std::to_string(m_player->GetLevel()) }).c_str());
     for (size_t i = 0; i < m_offer.size(); ++i)
     {
         Offer const& offer = m_offer[i];
         std::string const name = DescribeOffer(offer, nullptr);
         std::string kind;
+        std::string const rarity = GetString(GetBonkRarityString(offer.rarity));
         if (offer.isCard)
-            kind = std::string(GetBonkRarityName(offer.rarity)) + " card";
+            kind = GetString(BONK_STRING_OFFER_KIND_CARD, { rarity });
         else if (offer.isWeapon && offer.step == BONK_STEP_NEW)
-            kind = "new";
+            kind = GetString(BONK_STRING_OFFER_KIND_NEW);
         else if (offer.isWeapon)
-            kind = std::string(GetBonkRarityName(offer.rarity)) + " rank " + std::to_string(offer.newLevel);
+            kind = GetString(BONK_STRING_OFFER_KIND_RARITY_RANK, { rarity, std::to_string(offer.newLevel) });
         else
-            kind = "rank " + std::to_string(offer.newLevel);
+            kind = GetString(BONK_STRING_OFFER_KIND_RANK, { std::to_string(offer.newLevel) });
         handler.PSendSysMessage("  %u) %s (%s): %s", uint32(i + 1), name.c_str(), kind.c_str(), JoinBonkLines(DescribeStep(offer)).c_str());
     }
     if (m_rerolls)
-        handler.PSendSysMessage("  .bonk reroll for new choices (%u left)", m_rerolls);
+        handler.PSendSysMessage("  %s", GetString(BONK_STRING_OFFER_CHAT_REROLL, { std::to_string(m_rerolls) }).c_str());
     if (m_banishes)
-        handler.PSendSysMessage("  .bonk banish <number> to remove one for this run (%u left)", m_banishes);
+        handler.PSendSysMessage("  %s", GetString(BONK_STRING_OFFER_CHAT_BANISH, { std::to_string(m_banishes) }).c_str());
     if (m_skips)
-        handler.PSendSysMessage("  .bonk pass to skip this choice for a little Valor (%u left)", m_skips);
+        handler.PSendSysMessage("  %s", GetString(BONK_STRING_OFFER_CHAT_SKIP, { std::to_string(m_skips) }).c_str());
 }
 
 void BonkRun::Finish(bool wentHome)
@@ -14198,9 +14199,9 @@ void BonkRun::Finish(bool wentHome)
             "~" + (m_victory ? "1" : "0") + "~" + (IsMythic() ? "1" : "0") + "~" + std::to_string(bonk->GetBestLevel()) + "~" +
             std::to_string(m_levelBestAtStart) + "~" + bonk->GetLevelName(m_difficultyLevel) + "~" + std::to_string(IsFinale() ? GetEndlessMs() / IN_MILLISECONDS : 0));
     else
-        ChatHandler(m_player).PSendSysMessage("%s You reached stage %u in %s with %u kills at level %u, and earned %s and %s.",
-            m_victory ? "Victory!" : wentHome ? "Run complete!" : "Defeated.",
-            m_stage, FormatTime(seconds).c_str(), m_kills, m_player->GetLevel(), FormatBonkMoney(m_goldEarned).c_str(), FormatBonkShards(m_shardsEarned).c_str());
+        ChatHandler(m_player).SendSysMessage(GetString(m_victory ? BONK_STRING_RUN_END_CHAT_VICTORY : wentHome ? BONK_STRING_RUN_END_CHAT_HOME : BONK_STRING_RUN_END_CHAT_DEFEAT,
+            { std::to_string(m_stage), FormatTime(seconds), std::to_string(m_kills), std::to_string(m_player->GetLevel()),
+            FormatBonkMoney(m_goldEarned, GetLocale()), FormatBonkShards(m_shardsEarned, GetLocale()) }).c_str());
 
     if (bonk->IsAddonReady())
     {

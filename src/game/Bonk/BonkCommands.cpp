@@ -445,7 +445,7 @@ bool ChatHandler::HandleBonkVaultCommand(char* args)
     bool const known = action && (!strcmp(action, "put") || !strcmp(action, "take") || !strcmp(action, "send"));
     if (!run || !known || !ExtractUInt32(&args, guidLow))
     {
-        SendSysMessage(run ? "Use .bonk vault put|take|send <item>." : "You are not in a run.");
+        SendSysMessage(GetString(m_session, run ? BONK_STRING_VAULT_USAGE : BONK_STRING_NOT_IN_A_RUN).c_str());
         SetSentErrorMessage(true);
         return false;
     }
