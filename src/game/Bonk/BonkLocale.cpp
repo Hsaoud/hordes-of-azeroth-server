@@ -77,6 +77,8 @@ namespace
         { "item_template",     "name",    "locales_item"     },
         { "creature_template", "name",    "locales_creature" },
         { "creature_template", "subname", "locales_creature" },
+        { "broadcast_text",   "male_text",   "locales_broadcast_text" },
+        { "broadcast_text",   "female_text", "locales_broadcast_text" },
     };
 
     std::string KeyColumns(BonkFieldSource const& source)
