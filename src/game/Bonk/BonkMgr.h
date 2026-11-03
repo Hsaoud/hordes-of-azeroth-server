@@ -1083,6 +1083,12 @@ uint32 const BONK_TALENT_HEROIC_LAST_LEVEL = 9;
 uint32 const BONK_TALENT_MYTHIC_LEVELS = 20;
 uint32 const BONK_TALENT_MYTHIC_POINTS = 8;
 uint32 const BONK_CARRIED_LEVELS_BELOW_BEST = 10;
+uint32 const BONK_DROP_MILESTONE_LEVELS = 10;
+float const BONK_DROP_MILESTONE_EPIC = 5.0f;
+float const BONK_DROP_MILESTONE_LEGENDARY = 1.0f;
+float const BONK_DROP_MILESTONE_REWARD = 0.1f;
+float const BONK_DROP_MAX_EPIC = 60.0f;
+float const BONK_DROP_MAX_LEGENDARY = 10.0f;
 uint32 const BONK_LEVEL_TICKETS_BASE = 3;
 
 inline uint32 GetLevelFirstClearTickets(uint32 level)
@@ -1346,6 +1352,7 @@ class BonkMgr
         std::vector<BonkTier const*> const& GetTiersInOrder() const { return m_tiersInOrder; }
         BonkTier const* GetLevelTier(uint32 level) const;
         BonkLevel GetLevel(BonkTier const& tier, uint32 bandLevel) const;
+        static void AddDropMilestones(BonkLevel& level, uint32 milestones);
 
         BonkMap const* GetMap(uint32 id) const;
         std::vector<BonkMapStart> GetMapStarts(uint32 bonkMapId) const;

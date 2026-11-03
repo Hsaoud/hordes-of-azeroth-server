@@ -481,6 +481,16 @@ BonkTier const* BonkMgr::GetLevelTier(uint32 level) const
     return nullptr;
 }
 
+void BonkMgr::AddDropMilestones(BonkLevel& level, uint32 milestones)
+{
+    if (!milestones)
+        return;
+    level.epicChance = std::min(BONK_DROP_MAX_EPIC, level.epicChance + BONK_DROP_MILESTONE_EPIC * float(milestones));
+    level.blueChance = std::max(0.0f, 100.0f - level.epicChance - level.greenChance);
+    level.legendaryChance = std::min(BONK_DROP_MAX_LEGENDARY, level.legendaryChance + BONK_DROP_MILESTONE_LEGENDARY * float(milestones));
+    level.reward += BONK_DROP_MILESTONE_REWARD * float(milestones);
+}
+
 BonkLevel BonkMgr::GetLevel(BonkTier const& tier, uint32 bandLevel) const
 {
     BonkLevel scaled;
@@ -490,6 +500,7 @@ BonkLevel BonkMgr::GetLevel(BonkTier const& tier, uint32 bandLevel) const
     uint32 const past = bandLevel > scaled.level ? bandLevel - scaled.level : 0;
     scaled.health *= std::pow(tier.levelHealthGrowth, float(past));
     scaled.damage *= std::pow(tier.levelDamageGrowth, float(past));
+    AddDropMilestones(scaled, bandLevel / BONK_DROP_MILESTONE_LEVELS - scaled.level / BONK_DROP_MILESTONE_LEVELS);
     scaled.level = bandLevel;
     return scaled;
 }
