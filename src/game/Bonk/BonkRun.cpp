@@ -6407,6 +6407,12 @@ uint32 BonkRun::GetWeaponTargets(OwnedWeapon const& owned) const
     return owned.weapon.baseTargets + GetSpellCount(owned) + mastery + uint32(GetSpellUpgrade(owned, BONK_SPELL_UPGRADE_TARGETS));
 }
 
+bool BonkRun::IsGroundLookOnly(BonkWeapon const& weapon, SpellEntry const* spellInfo)
+{
+    return weapon.damageEffectIndex >= 0 && weapon.behavior != BONK_BEHAVIOR_TRAP &&
+        spellInfo->Effect[weapon.tickEffectIndex] == SPELL_EFFECT_PERSISTENT_AREA_AURA;
+}
+
 void BonkRun::GetBasePoints(OwnedWeapon const& owned, SpellEntry const* spellInfo, float damageShare, optional<int32>* basePoints) const
 {
     BonkWeapon const& weapon = owned.weapon;
@@ -6428,7 +6434,9 @@ void BonkRun::GetBasePoints(OwnedWeapon const& owned, SpellEntry const* spellInf
         basePoints[weapon.damageEffectIndex] = std::max(1, int32(damage * share));
     }
 
-    if (weapon.tickEffectIndex >= 0)
+    if (weapon.tickEffectIndex >= 0 && IsGroundLookOnly(weapon, spellInfo))
+        basePoints[weapon.tickEffectIndex] = 0;
+    else if (weapon.tickEffectIndex >= 0)
     {
         float share = 1.0f;
         if (spellInfo->Effect[weapon.tickEffectIndex] == SPELL_EFFECT_APPLY_AURA ||
@@ -8514,6 +8522,10 @@ void BonkRun::CastSelfArea(OwnedWeapon& owned, SpellEntry const* spellInfo, floa
     GetBasePoints(owned, spellInfo, share, basePoints);
     m_player->CastCustomSpell(m_player, spellInfo, basePoints[0], basePoints[1], basePoints[2], true);
     ShowAreaImpact(spellInfo, owned.weapon.radius * areaScale);
+    if (SpreadsRend(owned))
+        for (Creature* mob : GetMobsInRange(owned.weapon.radius * areaScale))
+            if (m_player->IsWithinLOSInMap(mob))
+                ApplyRendSwingBleed(mob);
     if (owned.weapon.HasFlag(BONK_WEAPON_FLAG_KNOCKBACK))
         for (Creature* mob : GetMobsInRange(owned.weapon.radius * areaScale))
             KnockBack(mob);

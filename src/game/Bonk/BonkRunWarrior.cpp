@@ -511,12 +511,23 @@ uint32 BonkRun::GetSwingEmote() const
     return weapon->GetProto()->InventoryType == INVTYPE_2HWEAPON ? EMOTE_ONESHOT_ATTACK2HTIGHT : EMOTE_ONESHOT_ATTACK1H;
 }
 
+bool BonkRun::SpreadsRend(OwnedWeapon const& owned)
+{
+    uint32 const root = GetRootWeapon(owned.weapon);
+    return (root == BONK_WEAPON_CLEAVE || root == BONK_WEAPON_WHIRLWIND || root == BONK_WEAPON_THUNDER_CLAP) && FindOwnedByRoot(BONK_WEAPON_REND);
+}
+
+void BonkRun::ApplyRendSwingBleed(Creature* mob)
+{
+    if (OwnedWeapon const* rend = FindOwnedByRoot(BONK_WEAPON_REND))
+        ApplyWeaponKeyword(*rend, mob, BONK_KEYWORD_BLEED, BONK_REND_SWING_BLEED);
+}
+
 void BonkRun::OnAroundStrike(OwnedWeapon const& owned, Creature* mob)
 {
     uint32 const root = GetRootWeapon(owned.weapon);
-    if (root == BONK_WEAPON_CLEAVE || root == BONK_WEAPON_WHIRLWIND || root == BONK_WEAPON_THUNDER_CLAP)
-        if (OwnedWeapon const* rend = FindOwnedByRoot(BONK_WEAPON_REND))
-            ApplyWeaponKeyword(*rend, mob, BONK_KEYWORD_BLEED, BONK_REND_SWING_BLEED);
+    if (SpreadsRend(owned))
+        ApplyRendSwingBleed(mob);
     if (root == BONK_WEAPON_MORTAL_STRIKE)
         TearBleed(owned, mob);
     if (owned.weapon.behavior == BONK_BEHAVIOR_BLOODLUST && GetKeywordStacks(mob, BONK_KEYWORD_BLEED))
