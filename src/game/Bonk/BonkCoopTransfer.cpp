@@ -1,5 +1,4 @@
 #include "BonkCoop.h"
-#include "BonkFoundGear.h"
 #include "BonkLocale.h"
 #include "BonkPlayer.h"
 
@@ -519,7 +518,6 @@ namespace
         DumpReturn const loaded = reader.LoadDump(DUMP_FILE, accountId, name, guid);
         if (loaded != DUMP_SUCCESS)
             return Error(accountId, BONK_STRING_COOP_TRANSFER_LOAD_FAILED, { std::to_string(uint32(loaded)) });
-        sBonkFound.LoadCharacter(GuidOfName(name));
         {
             std::lock_guard<std::mutex> guard(s_pendingMailLock);
             s_pendingMail[name] = ReadHomeMail(dump);

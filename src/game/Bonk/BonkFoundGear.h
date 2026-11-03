@@ -50,7 +50,7 @@ class BonkFoundStore
     private:
         mutable std::mutex m_lock;
         std::unordered_map<uint32, BonkFoundGear> m_items;
-        uint32 ReadRows(QueryResult* result);
+        uint32 ReadRows(QueryResult* result, bool keepKnown);
 };
 
 #define sBonkFound MaNGOS::Singleton<BonkFoundStore>::Instance()

@@ -124,7 +124,7 @@ void BonkFoundStore::Load()
     CharacterDatabase.DirectExecute("DELETE `f` FROM `bonk_item_found` `f` LEFT JOIN `item_instance` `i` ON `i`.`guid` = `f`.`item_guid` WHERE `i`.`guid` IS NULL");
     std::unique_ptr<QueryResult> result(CharacterDatabase.Query(
         "SELECT `item_guid`, `tier`, `line1_effect`, `line1_roll`, `line2_effect`, `line2_roll`, `rerolls`, `reroll_line`, `upgrades`, `season` FROM `bonk_item_found`"));
-    uint32 const loaded = ReadRows(result.get());
+    uint32 const loaded = ReadRows(result.get(), false);
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Loaded %u Bonk found gear pieces", loaded);
 }
 
@@ -135,10 +135,10 @@ void BonkFoundStore::LoadCharacter(uint32 characterGuid)
         "`f`.`upgrades`, `f`.`season` FROM `bonk_item_found` `f` WHERE `f`.`item_guid` IN "
         "(SELECT `item_guid` FROM `character_inventory` WHERE `guid` = %u UNION SELECT `item_guid` FROM `mail_items` WHERE `receiver_guid` = %u)",
         characterGuid, characterGuid));
-    ReadRows(result.get());
+    ReadRows(result.get(), true);
 }
 
-uint32 BonkFoundStore::ReadRows(QueryResult* result)
+uint32 BonkFoundStore::ReadRows(QueryResult* result, bool keepKnown)
 {
     std::lock_guard<std::mutex> guard(m_lock);
     uint32 count = 0;
@@ -147,6 +147,8 @@ uint32 BonkFoundStore::ReadRows(QueryResult* result)
         do
         {
             Field* fields = result->Fetch();
+            if (keepKnown && m_items.count(fields[0].GetUInt32()))
+                continue;
             BonkFoundGear found;
             found.tier = fields[1].GetUInt32();
             for (uint32 i = 0; i < BONK_FOUND_MAX_LINES; ++i)
