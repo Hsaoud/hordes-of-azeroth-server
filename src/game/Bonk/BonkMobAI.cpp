@@ -1542,7 +1542,7 @@ float BonkMobAI::GetKindSize(BonkAbilityShape shape, float size) const
         case BONK_SHAPE_LEAP:
             return std::max(size, boss ? BONK_BOSS_LEAP_RADIUS : BONK_MINI_LEAP_RADIUS);
         case BONK_SHAPE_DONUT:
-            return size > 0.0f ? size : boss ? BONK_BOSS_DONUT_SIZE : BONK_MINI_DONUT_SIZE;
+            return std::max(size, boss ? BONK_BOSS_DONUT_SIZE : BONK_MINI_DONUT_SIZE);
         default:
             return size;
     }
