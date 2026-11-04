@@ -635,6 +635,17 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
             SendSysMessage("No Sayge within 10 yards.");
         return true;
     }
+    if (tab.compare(0, 12, "testtabards ") == 0 && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+        uint32 const rolls = uint32(atoi(tab.c_str() + 12));
+        if (!run)
+            SendSysMessage("You are not in a run.");
+        else
+            for (uint32 roll = 0; roll < rolls; ++roll)
+                run->RollGroupTabardDrops();
+        return true;
+    }
     if (tab == "testvault" && GetAccessLevel() >= SEC_GAMEMASTER)
     {
         BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();

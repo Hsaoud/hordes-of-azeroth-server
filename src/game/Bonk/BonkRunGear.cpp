@@ -612,12 +612,17 @@ bool BonkRun::PlaceChestLooksNow(std::string& error)
     return true;
 }
 
+void BonkRun::RollGroupTabardDrops()
+{
+    for (Player* member : BonkCoop::RunGroupOf(m_player))
+        BonkTransmog::RollTabardDrops(member, m_map.key);
+}
+
 void BonkRun::DropGear(Creature const* mob, BonkSpawnKind kind)
 {
     MaybeDropHearthstone(kind);
     if (kind == BONK_SPAWN_BOSS)
-        for (Player* member : BonkCoop::RunGroupOf(m_player))
-            BonkTransmog::RollTabardDrops(member, m_map.key);
+        RollGroupTabardDrops();
     if (kind == BONK_SPAWN_ELITE)
         AddEliteScrap();
     else if (kind != BONK_SPAWN_NORMAL)

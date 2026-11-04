@@ -434,6 +434,7 @@ class BonkRun
         bool RunSandboxVerb(std::string const& verb, uint32 first, uint32 second, std::string& error);
         void RollSandboxDrops(uint8 quality, uint32 count);
         void QueueSandboxGearOffer(uint8 quality);
+        void RollGroupTabardDrops();
         void LeaveSandbox();
         time_t GetSkyTime() const;
 
