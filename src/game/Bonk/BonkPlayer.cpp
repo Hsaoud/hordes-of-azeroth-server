@@ -3405,19 +3405,18 @@ void BonkPlayer::SendArena(std::string const& npc) const
         bool const unlocked = IsTierUnlocked(tier);
         if (m_addonReady)
         {
-            std::string maps;
-            for (uint32 mapId : tier.mapIds)
-                if (BonkMap const* map = sBonkMgr.GetMap(mapId))
-                    maps += (maps.empty() ? "" : ",") + map->icon + ":" + Localize(BONK_FIELD_MAP_NAME, map->id, map->name) + ":" + std::to_string(uint32(map->type)) + ":" +
-                        std::to_string(GetBonkMapRewardPercent(map->type)) + ":" + map->key;
             std::string dungeons;
             bool const cleared = IsTierCleared(tier);
             for (BonkMap const* dungeon : sBonkMgr.GetDungeons())
                 dungeons += (dungeons.empty() ? "" : ",") + dungeon->key + ":" + dungeon->icon + ":" + Localize(BONK_FIELD_MAP_NAME, dungeon->id, dungeon->name) + ":" + (cleared ? "1" : "0");
             SendAddon("tier~" + std::to_string(tier.id) + "~" + tier.key + "~" + Localize(BONK_FIELD_TIER_NAME, tier.id, tier.name) + "~" + (unlocked ? "1" : "0") + "~" +
-                (unlocked ? "" : GetUnlockHint(tier)) + "~" + std::to_string(GetTierBest(tier)) + "~" + Localize(BONK_FIELD_TIER_DESCRIPTION, tier.id, tier.description) + "~" + tier.art + "~" + maps + "~" +
+                (unlocked ? "" : GetUnlockHint(tier)) + "~" + std::to_string(GetTierBest(tier)) + "~" + Localize(BONK_FIELD_TIER_DESCRIPTION, tier.id, tier.description) + "~" + tier.art + "~~" +
                 std::to_string(tier.levels) + "~" + std::to_string(unlocked ? tier.GetBandLevel(GetOpenLevel(tier)) : 0) + "~" + dungeons + "~" + Localize(BONK_FIELD_TIER_DETAILS, tier.id, tier.details) + "~" +
                 std::to_string(tier.firstLevel));
+            for (uint32 mapId : tier.mapIds)
+                if (BonkMap const* map = sBonkMgr.GetMap(mapId))
+                    SendAddon("tiermap~" + std::to_string(tier.id) + "~" + map->icon + ":" + Localize(BONK_FIELD_MAP_NAME, map->id, map->name) + ":" +
+                        std::to_string(uint32(map->type)) + ":" + std::to_string(GetBonkMapRewardPercent(map->type)) + ":" + map->key);
             SendLevelPreview(tier, GetRunBonuses());
         }
         else if (unlocked)
