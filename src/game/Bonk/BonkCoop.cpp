@@ -224,6 +224,11 @@ void BonkCoop::JoinHostGroup(Player* guest)
                 Player::RemoveFromGroup(current, guid);
         group = host->GetGroup();
     }
+    if (host->GetBonkPlayer()->IsHardcore())
+    {
+        SendAway(guest, BONK_STRING_COOP_HOST_HARDCORE);
+        return;
+    }
     if (group && ClassTaken(group, guest))
     {
         SendAway(guest, BONK_STRING_COOP_CLASS_TAKEN);

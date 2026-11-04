@@ -974,8 +974,7 @@ namespace
         if (!result)
             return home;
         home.characterGuid = result->Fetch()[0].GetUInt32();
-        if (std::unique_ptr<QueryResult> ironman{ CharacterDatabase.PQuery("SELECT 1 FROM `bonk_ironman` WHERE `guid` = %u", home.characterGuid) })
-            home.accountId = BonkPlayer::GetIronmanAccount(home.characterGuid);
+        home.accountId = BonkPlayer::GetProgressAccountOf(home.characterGuid, home.accountId);
         return home;
     }
 

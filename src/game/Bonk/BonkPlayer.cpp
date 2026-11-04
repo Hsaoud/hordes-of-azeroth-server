@@ -5,6 +5,7 @@
 #include "BonkEnchant.h"
 #include "BonkFoundGear.h"
 #include "BonkTransmog.h"
+#include "BonkHardcore.h"
 #include "BonkLeaderboard.h"
 #include "BonkLocale.h"
 #include "BonkMastery.h"
@@ -992,6 +993,9 @@ void BonkPlayer::WriteHeroScreenStats() const
         uint32 itemLevels = 0;
         uint32 gearValue = 0;
         bool ironman = false;
+        bool hardcore = false;
+        bool fell = false;
+        uint32 fellBest = 0;
         uint32 gold = 0;
         uint32 ironmanMasteryXp = 0;
     };
@@ -1043,25 +1047,48 @@ void BonkPlayer::WriteHeroScreenStats() const
         } while (result->NextRow());
     }
 
-    std::map<uint8, uint32> masteryXp;
-    result = CharacterDatabase.PQuery("SELECT `class`, `xp` FROM `bonk_account_mastery` WHERE `account` = %u", accountId);
+    result = CharacterDatabase.PQuery("SELECT h.`guid` FROM `bonk_hardcore` h JOIN `characters` c ON c.`guid` = h.`guid` WHERE c.`account` = %u", accountId);
     if (result)
     {
         do
         {
-            Field* fields = result->Fetch();
-            masteryXp[fields[0].GetUInt8()] = fields[1].GetUInt32();
+            auto hero = heroes.find(result->Fetch()[0].GetUInt32());
+            if (hero != heroes.end())
+                hero->second.hardcore = true;
         } while (result->NextRow());
     }
-    if (!IsIronman())
-        masteryXp[m_player->GetClass()] = m_masteryXp;
 
-    uint32 sharedGold = m_player->GetMoney();
-    if (IsIronman())
+    uint32 const hardcoreAccount = GetHardcoreAccount(accountId);
+    auto loadMastery = [](uint32 account)
     {
-        result = CharacterDatabase.PQuery("SELECT `gold` FROM `bonk_account` WHERE `account` = %u", accountId);
-        sharedGold = result ? result->Fetch()[0].GetUInt32() : 0;
-    }
+        std::map<uint8, uint32> xp;
+        std::unique_ptr<QueryResult> rows(CharacterDatabase.PQuery("SELECT `class`, `xp` FROM `bonk_account_mastery` WHERE `account` = %u", account));
+        if (rows)
+        {
+            do
+            {
+                Field* fields = rows->Fetch();
+                xp[fields[0].GetUInt8()] = fields[1].GetUInt32();
+            } while (rows->NextRow());
+        }
+        return xp;
+    };
+    auto loadGold = [](uint32 account)
+    {
+        std::unique_ptr<QueryResult> row(CharacterDatabase.PQuery("SELECT `gold` FROM `bonk_account` WHERE `account` = %u", account));
+        return row ? row->Fetch()[0].GetUInt32() : 0u;
+    };
+
+    std::map<uint8, uint32> masteryXp = loadMastery(accountId);
+    std::map<uint8, uint32> hardcoreMasteryXp = loadMastery(hardcoreAccount);
+    bool const usesSharedPool = !IsIronman() && !UsesHardcorePool();
+    if (usesSharedPool)
+        masteryXp[m_player->GetClass()] = m_masteryXp;
+    else if (!IsIronman())
+        hardcoreMasteryXp[m_player->GetClass()] = m_masteryXp;
+
+    uint32 const sharedGold = usesSharedPool ? m_player->GetMoney() : loadGold(accountId);
+    uint32 const hardcoreGold = !IsIronman() && UsesHardcorePool() ? m_player->GetMoney() : loadGold(hardcoreAccount);
 
     result = CharacterDatabase.PQuery("SELECT s.`guid`, s.`runs`, s.`best_level`, s.`best_time_sec`, s.`kills`, s.`gold_earned` "
         "FROM `bonk_character_stats` s JOIN `characters` c ON c.`guid` = s.`guid` WHERE c.`account` = %u", accountId);
@@ -1099,15 +1126,28 @@ void BonkPlayer::WriteHeroScreenStats() const
     self.record = m_record;
     self.played = m_player->GetTotalPlayedTime();
     self.ironman = IsIronman();
+    self.hardcore = IsHardcore();
     self.gold = m_player->GetMoney();
     self.ironmanMasteryXp = m_masteryXp;
     for (uint32 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         if (Item const* item = m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
             addItem(self, slot, item->GetEntry());
 
+    std::vector<BonkFallenRecord> const fallen = LoadBonkFallenRecords(accountId);
+    for (BonkFallenRecord const& record : fallen)
+    {
+        auto hero = heroes.find(record.guid);
+        if (hero != heroes.end() && !hero->second.hardcore && !hero->second.fell)
+        {
+            hero->second.fell = true;
+            hero->second.fellBest = record.bestLevel;
+        }
+    }
+
     std::ostringstream lua;
     lua << "{\n";
     lua << "\tgold = " << sharedGold << ",\n";
+    lua << "\thardcoreGold = " << hardcoreGold << ",\n";
     lua << "\tlastHero = \"" << m_player->GetName() << "\",\n";
     lua << "\theroes = {\n";
     for (auto const& itr : heroes)
@@ -1125,11 +1165,21 @@ void BonkPlayer::WriteHeroScreenStats() const
             << ", gearValue = " << hero.gearValue
             << ", played = " << hero.played
             << ", class = " << uint32(hero.classId)
-            << ", mastery = " << BonkMastery::GetLevel(hero.ironman ? hero.ironmanMasteryXp : masteryXp[hero.classId]);
+            << ", mastery = " << BonkMastery::GetLevel(hero.ironman ? hero.ironmanMasteryXp : hero.hardcore ? hardcoreMasteryXp[hero.classId] : masteryXp[hero.classId]);
         if (hero.ironman)
             lua << ", ironman = true, gold = " << hero.gold;
+        else if (hero.hardcore)
+            lua << ", gold = " << hardcoreGold;
+        if (hero.hardcore)
+            lua << ", hardcore = true";
+        if (hero.fell)
+            lua << ", fell = true, fellBest = " << hero.fellBest;
         lua << " },\n";
     }
+    lua << "\t},\n";
+    lua << "\tfallen = {\n";
+    for (BonkFallenRecord const& record : fallen)
+        lua << "\t\t" << DescribeBonkFallenForGlue(record) << ",\n";
     lua << "\t},\n}";
     WriteHeroScreenFile(m_player->GetSession()->GetUsername(), lua.str());
 }
@@ -1243,6 +1293,7 @@ uint32 BonkPlayer::GetIronmanAccount(uint32 guidLow)
 
 void BonkPlayer::GatherAccountBank(uint32 accountId, uint32 guidLow)
 {
+    ParkFallenBanks(accountId);
     if (!CharacterDatabase.PQuery("SELECT 1 FROM `characters` c WHERE c.`guid` = %u AND c.`account` = %u "
         "AND NOT EXISTS (SELECT 1 FROM `bonk_ironman` m WHERE m.`guid` = c.`guid`)", guidLow, accountId))
         return;
@@ -1258,12 +1309,15 @@ void BonkPlayer::GatherAccountBank(uint32 accountId, uint32 guidLow)
         } while (result->NextRow());
     }
 
+    bool const hardcore = IsHardcoreCharacter(guidLow);
+    uint32 const poolAccount = hardcore ? GetHardcoreAccount(accountId) : accountId;
     std::vector<AccountBankItem> items;
     result = CharacterDatabase.PQuery("SELECT i.`item_guid`, i.`item_id`, i.`slot`, i.`guid` FROM `character_inventory` i JOIN `characters` c ON c.`guid` = i.`guid` "
         "WHERE c.`account` = %u AND i.`guid` <> %u AND i.`bag` = 0 AND i.`slot` >= %u AND i.`slot` < %u "
         "AND NOT EXISTS (SELECT 1 FROM `bonk_ironman` m WHERE m.`guid` = i.`guid`) "
+        "AND %s EXISTS (SELECT 1 FROM `bonk_hardcore` h WHERE h.`guid` = i.`guid`) "
         "UNION ALL SELECT `item_guid`, `item_id`, `slot`, 0 FROM `bonk_account_bank` WHERE `account` = %u AND `bag` = 0",
-        accountId, guidLow, uint32(BANK_SLOT_ITEM_START), uint32(BANK_SLOT_BAG_END), accountId);
+        accountId, guidLow, uint32(BANK_SLOT_ITEM_START), uint32(BANK_SLOT_BAG_END), hardcore ? "" : "NOT", poolAccount);
     if (result)
     {
         do
@@ -1302,13 +1356,17 @@ void BonkPlayer::GatherAccountBank(uint32 accountId, uint32 guidLow)
 
 void BonkPlayer::ParkAccountBank(uint32 guidLow)
 {
-    CharacterDatabase.PExecute("INSERT IGNORE INTO `bonk_account_bank` (`account`, `bag`, `slot`, `item_guid`, `item_id`) "
-        "SELECT c.`account`, i.`bag`, i.`slot`, i.`item_guid`, i.`item_id` FROM `character_inventory` i JOIN `characters` c ON c.`guid` = i.`guid` "
-        "WHERE i.`guid` = %u AND c.`account` <> 0 AND NOT EXISTS (SELECT 1 FROM `bonk_ironman` m WHERE m.`guid` = i.`guid`) "
-        "AND ((i.`bag` = 0 AND i.`slot` >= %u AND i.`slot` < %u) OR i.`bag` IN "
-        "(SELECT b.`item_guid` FROM `character_inventory` b WHERE b.`guid` = %u AND b.`bag` = 0 AND b.`slot` >= %u AND b.`slot` < %u))",
-        guidLow, uint32(BANK_SLOT_ITEM_START), uint32(BANK_SLOT_BAG_END), guidLow, uint32(BANK_SLOT_BAG_START), uint32(BANK_SLOT_BAG_END));
-    CharacterDatabase.PExecute("UPDATE `item_instance` i JOIN `bonk_account_bank` b ON b.`item_guid` = i.`guid` SET i.`owner_guid` = 0 WHERE i.`owner_guid` = %u", guidLow);
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT c.`account` FROM `characters` c WHERE c.`guid` = %u AND c.`account` <> 0 "
+        "AND NOT EXISTS (SELECT 1 FROM `bonk_ironman` m WHERE m.`guid` = c.`guid`)", guidLow));
+    if (!result)
+        return;
+    uint32 const accountId = result->Fetch()[0].GetUInt32();
+    std::unique_ptr<QueryResult> unparkedFall(CharacterDatabase.PQuery("SELECT 1 FROM `bonk_hardcore_fallen` WHERE `guid` = %u AND `bank_parked` = 0", guidLow));
+    bool const hardcorePool = IsHardcoreCharacter(guidLow) || unparkedFall;
+    if (unparkedFall)
+        CharacterDatabase.PExecute("UPDATE `bonk_hardcore_fallen` SET `bank_parked` = 1 WHERE `guid` = %u", guidLow);
+    for (std::string const& statement : BonkParkBankStatements(guidLow, hardcorePool ? GetHardcoreAccount(accountId) : accountId, false))
+        CharacterDatabase.Execute(statement.c_str());
 }
 
 bool BonkPlayer::IsIronman() const
@@ -1323,7 +1381,10 @@ bool BonkPlayer::IsIronman() const
 
 uint32 BonkPlayer::GetProgressAccount() const
 {
-    return IsIronman() ? GetIronmanAccount(m_player->GetGUIDLow()) : m_player->GetSession()->GetAccountId();
+    if (IsIronman())
+        return GetIronmanAccount(m_player->GetGUIDLow());
+    uint32 const accountId = m_player->GetSession()->GetAccountId();
+    return UsesHardcorePool() ? GetHardcoreAccount(accountId) : accountId;
 }
 
 void BonkPlayer::OnSave()
@@ -2677,6 +2738,12 @@ bool BonkPlayer::StartRun(BonkTier const& tier, std::string& error, BonkRunChoic
     if (m_run)
     {
         error = GetString(BONK_STRING_YOU_ARE_ALREADY_IN_RUN);
+        return false;
+    }
+
+    if (m_fellInHardcore)
+    {
+        error = GetString(BONK_STRING_HARDCORE_FALLEN_RELOG);
         return false;
     }
 

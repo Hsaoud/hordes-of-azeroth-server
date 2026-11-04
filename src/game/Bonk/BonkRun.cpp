@@ -14283,6 +14283,8 @@ void BonkRun::Finish(bool wentHome)
         sBonkQuests.OnProgress(m_player, BONK_QUEST_DEATHS, 0, 1);
         LogDeath();
         m_player->GetBonkPlayer()->AddDetermination();
+        if (!m_sandbox && !IsCoopGuest())
+            m_player->GetBonkPlayer()->OnHardcoreDeath(m_lastStriker, m_map.name, m_player->GetLevel() + m_overcapLevel, m_kills);
     }
 
     if (wentHome)

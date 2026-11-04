@@ -4487,6 +4487,7 @@ void Player::DeleteFromDB(ObjectGuid playerGuid, uint32 accountId, bool updateRe
             CharacterDatabase.PExecute("DELETE FROM `bonk_character_talent` WHERE `guid` = '%u'", lowGuid);
             CharacterDatabase.PExecute("DELETE FROM `bonk_character_upgrade` WHERE `guid` = '%u'", lowGuid);
             BonkPlayer::DeleteIronmanProgress(lowGuid);
+            CharacterDatabase.PExecute("DELETE FROM `bonk_hardcore` WHERE `guid` = '%u'", lowGuid);
             CharacterDatabase.CommitTransaction();
             break;
         }

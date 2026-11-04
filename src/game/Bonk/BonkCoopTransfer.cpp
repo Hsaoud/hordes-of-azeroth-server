@@ -197,12 +197,6 @@ namespace
         return result ? result->Fetch()[0].GetUInt32() : 0;
     }
 
-    bool IsIronman(uint32 guid)
-    {
-        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT 1 FROM `bonk_ironman` WHERE `guid` = %u", guid));
-        return result != nullptr;
-    }
-
     uint32 GuidOfName(std::string name)
     {
         CharacterDatabase.escape_string(name);
@@ -465,7 +459,7 @@ namespace
 
     uint32 ProgressAccountOf(uint32 guid, uint32 accountId)
     {
-        return IsIronman(guid) ? BonkPlayer::GetIronmanAccount(guid) : accountId;
+        return BonkPlayer::GetProgressAccountOf(guid, accountId);
     }
 
     LocaleConstant AccountLocale(uint32 accountId)

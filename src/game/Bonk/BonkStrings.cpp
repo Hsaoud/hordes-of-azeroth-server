@@ -1007,6 +1007,8 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_BOARD_MISS_CLIMB,                            "This clear will appear on the leaderboard once you clear {1} this season." },
         { BONK_STRING_BOARD_MISS_MODIFIED_SERVER,                  "This clear won't be listed on the leaderboard because another program changed the game while it was running." },
         { BONK_STRING_SERVER_CODE_MODIFIED,                        "Another program changed the game while it was running, so your runs won't count for the leaderboard until you restart the game." },
+        { BONK_STRING_HARDCORE_FALLEN_RELOG,                       "Your character has fallen in Hardcore. Return to character select to play on as a regular character." },
+        { BONK_STRING_COOP_HOST_HARDCORE,                          "Your host is playing a Hardcore character. Hardcore characters can't play co-op yet." },
         { BONK_STRING_APPEARANCE_COLLECTED,                        "{1} has been added to your appearance collection." },
         { BONK_STRING_TRANSMOG_EQUIP_FIRST,                        "Equip an item in that slot first." },
         { BONK_STRING_TRANSMOG_NOT_COLLECTED,                      "You haven't collected that appearance." },

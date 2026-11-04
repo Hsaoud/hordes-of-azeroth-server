@@ -1010,6 +1010,8 @@ enum BonkString : uint32
     BONK_STRING_BOARD_MISS_CLIMB                        = 1129,
     BONK_STRING_BOARD_MISS_MODIFIED_SERVER              = 1130,
     BONK_STRING_SERVER_CODE_MODIFIED                    = 1131,
+    BONK_STRING_HARDCORE_FALLEN_RELOG                   = 1132,
+    BONK_STRING_COOP_HOST_HARDCORE                      = 1133,
     BONK_STRING_APPEARANCE_COLLECTED                    = 1134,
     BONK_STRING_TRANSMOG_EQUIP_FIRST                    = 1135,
     BONK_STRING_TRANSMOG_NOT_COLLECTED                  = 1136,
