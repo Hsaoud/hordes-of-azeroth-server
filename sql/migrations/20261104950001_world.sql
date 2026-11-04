@@ -18,7 +18,7 @@ DROP TEMPORARY TABLE IF EXISTS `bonk_transmogrifier`;
 DELETE FROM `creature` WHERE `guid` = 900191;
 DROP TEMPORARY TABLE IF EXISTS `bonk_transmogrifier_spawn`;
 CREATE TEMPORARY TABLE `bonk_transmogrifier_spawn` SELECT * FROM `creature` WHERE `guid` = 900014;
-UPDATE `bonk_transmogrifier_spawn` SET `guid` = 900191, `id` = 900170, `position_x` = 16236.0, `position_y` = 16316.0, `position_z` = 20.86, `orientation` = 4.71;
+UPDATE `bonk_transmogrifier_spawn` SET `guid` = 900191, `id` = 900170, `position_x` = 16224.0, `position_y` = 16299.22, `position_z` = 29.28, `orientation` = 0.65;
 INSERT INTO `creature` SELECT * FROM `bonk_transmogrifier_spawn`;
 DROP TEMPORARY TABLE IF EXISTS `bonk_transmogrifier_spawn`;
 
