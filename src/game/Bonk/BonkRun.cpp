@@ -1,5 +1,6 @@
 #include "BonkRun.h"
 #include "BonkCoop.h"
+#include "BonkIntegrity.h"
 #include "Group.h"
 #include "BonkCodex.h"
 #include "BonkLocale.h"
@@ -1814,6 +1815,8 @@ void BonkRun::StartStage()
     std::string const bossIn = !minutes ? secondText : !seconds ? minuteText : GetString(BONK_STRING_DURATION_MINUTES_AND_SECONDS, { minuteText, secondText });
     m_player->GetBonkPlayer()->Notify(BONK_STRING_STAGE_BEGINS, { m_player->GetBonkPlayer()->GetLevelName(m_difficultyLevel), std::to_string(m_stage),
         std::to_string(m_tier.stages), Localize(BONK_FIELD_MAP_NAME, m_map.id, m_map.name), bossIn });
+    if (m_stage == 1 && IsMythic() && !m_sandbox && BonkIntegrity::IsServerModified())
+        m_player->GetBonkPlayer()->Notify(BONK_STRING_SERVER_CODE_MODIFIED);
 }
 
 void BonkRun::SendFullState() const
@@ -2862,7 +2865,8 @@ std::string BonkRun::DescribeBoardEntry() const
     char text[96];
     snprintf(text, sizeof(text), "coop %u, gm %u, board %d, gear %u", coop ? 1u : 0u, bonk->IsBoardGameMaster() ? 1u : 0u,
         bonk->GetBoardChoice(), bonk->HasBoardGear(m_difficultyLevel) ? 1u : 0u);
-    return coop ? std::string(text) + ", party " + DescribeBoardParty() : std::string(text);
+    std::string const entry = std::string(text) + (BonkIntegrity::IsServerModified() ? ", modified 1" : "");
+    return coop ? entry + ", party " + DescribeBoardParty() : entry;
 }
 
 std::string BonkRun::DescribeBoardParty() const
@@ -2898,6 +2902,11 @@ void BonkRun::NotifyBoardMiss() const
     if (bonk->IsBoardGameMaster())
     {
         bonk->Notify(BONK_STRING_BOARD_MISS_GAME_MASTER);
+        return;
+    }
+    if (BonkIntegrity::IsServerModified())
+    {
+        bonk->Notify(BONK_STRING_BOARD_MISS_MODIFIED_SERVER);
         return;
     }
     BonkPlayer::OffBoardGear const gear = bonk->FindOffBoardGear(m_difficultyLevel);

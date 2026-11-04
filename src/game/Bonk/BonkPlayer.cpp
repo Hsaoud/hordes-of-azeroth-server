@@ -1,5 +1,6 @@
 #include "BonkPlayer.h"
 #include "BonkCoop.h"
+#include "BonkIntegrity.h"
 #include "Bag.h"
 #include "BonkEnchant.h"
 #include "BonkFoundGear.h"
@@ -3372,7 +3373,8 @@ void BonkPlayer::SetBoardChoice(bool show)
 
 void BonkPlayer::SendBoardChoice() const
 {
-    SendAddon("boardchoice~" + std::to_string(m_boardChoice) + "~" + std::to_string(GetBoardClimb()) + "~" + (IsBoardGameMaster() ? "1" : "0"));
+    SendAddon("boardchoice~" + std::to_string(m_boardChoice) + "~" + std::to_string(GetBoardClimb()) + "~" + (IsBoardGameMaster() ? "1" : "0") + "~" +
+        (BonkIntegrity::IsServerModified() ? "1" : "0"));
 }
 
 bool BonkPlayer::IsBoardGameMaster() const

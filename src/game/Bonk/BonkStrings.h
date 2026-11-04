@@ -1008,6 +1008,8 @@ enum BonkString : uint32
     BONK_STRING_BOARD_MISS_PARTY_GAME_MASTER            = 1127,
     BONK_STRING_BOARD_MISS_PARTY_GEAR                   = 1128,
     BONK_STRING_BOARD_MISS_CLIMB                        = 1129,
+    BONK_STRING_BOARD_MISS_MODIFIED_SERVER              = 1130,
+    BONK_STRING_SERVER_CODE_MODIFIED                    = 1131,
 };
 
 struct BonkStringText

@@ -1005,6 +1005,8 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_BOARD_MISS_PARTY_GAME_MASTER,                "This group clear won't be listed on the leaderboard because {1} is a Game Master." },
         { BONK_STRING_BOARD_MISS_PARTY_GEAR,                       "This group clear won't be listed on the leaderboard because {1} wears legacy gear or gear above this level." },
         { BONK_STRING_BOARD_MISS_CLIMB,                            "This clear will appear on the leaderboard once you clear {1} this season." },
+        { BONK_STRING_BOARD_MISS_MODIFIED_SERVER,                  "This clear won't be listed on the leaderboard because another program changed the game while it was running." },
+        { BONK_STRING_SERVER_CODE_MODIFIED,                        "Another program changed the game while it was running, so your runs won't count for the leaderboard until you restart the game." },
     };
     return texts;
 }
