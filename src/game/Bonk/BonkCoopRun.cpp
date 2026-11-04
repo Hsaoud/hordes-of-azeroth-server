@@ -793,6 +793,12 @@ void BonkCoop::PlaceGroupVaults(Player* host, GameObject const* portal, float si
     }
 }
 
+void BonkCoop::ShareEnchanter(Player* host, ObjectGuid enchanter)
+{
+    for (BonkRun* run : GuestRunsOf(host))
+        run->UseHostEnchanter(enchanter);
+}
+
 Player* BonkCoop::VaultOwner(Player* viewer, GameObject const* vault)
 {
     for (Player* member : RunGroupOf(viewer))

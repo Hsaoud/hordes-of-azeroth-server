@@ -187,6 +187,7 @@ class BonkRun
         void DiscardEnchantOffers();
         void SendEnchants() const;
         void PlaceEnchanter(float x, float y, float z, float facing);
+        void UseHostEnchanter(ObjectGuid enchanter);
         void CloseVendor();
         bool SpawnVendorNow(std::string& error);
 
@@ -1782,6 +1783,7 @@ class BonkRun
         void AddEnchantStats(float* passives) const;
         void DespawnEnchanter();
         bool IsNearEnchanter() const;
+        bool IsOwnSummon(Creature const* creature) const;
         float m_leechCarry = 0.0f;
         uint32 m_necroticStacks = 0;
         uint32 m_necroticCheckMs = 0;

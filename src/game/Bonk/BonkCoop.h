@@ -69,6 +69,7 @@ namespace BonkCoop
     void ForgetShownOnly(ObjectGuid object);
     bool IsShownOnlyToOther(ObjectGuid object, ObjectGuid viewer);
     void PlaceGroupVaults(Player* host, GameObject const* portal, float side);
+    void ShareEnchanter(Player* host, ObjectGuid enchanter);
     Player* VaultOwner(Player* viewer, GameObject const* vault);
     void Record(Player const* guest, std::string const& entry);
     void UpdateLedger();
