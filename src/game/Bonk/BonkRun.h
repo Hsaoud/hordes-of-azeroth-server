@@ -2480,6 +2480,9 @@ class BonkRun
         bool IsLavaBurstOnBurning(SpellEntry const* spell, Unit const* victim) const;
         float GetShamanDamageMultiplier(SpellEntry const* spell, Unit const* victim) const;
         float GetHunterDamageMultiplier(SpellEntry const* spell, Unit const* victim) const;
+        float GetMageSpellDamageMultiplier(SpellEntry const* spell, Unit const* victim) const;
+        bool IsChampion(Unit const* victim) const;
+        bool IsInDeepFreeze(Unit const* victim) const;
         uint32 GetShamanExtraPets(OwnedWeapon const& owned);
         bool ApplyShamanKeyword(OwnedWeapon const& owned, Creature* mob, BonkKeyword keyword, uint32 stacks);
         void BurnWithFlametongue(OwnedWeapon& owned, Creature* target, uint32 stacks);

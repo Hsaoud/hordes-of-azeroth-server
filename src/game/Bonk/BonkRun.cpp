@@ -412,6 +412,7 @@ float const BONK_START_POLY_REACH   = 10.0f;
     uint32 const BONK_WEAPON_CORROSIVE_VIPERS = 226;
     uint32 const BONK_WEAPON_VENOM_BURST   = 227;
     uint32 const BONK_WEAPON_EXPLOSIVE_TRAP = 202;
+    float const BONK_BLOODTHIRST_ENRAGED   = 1.5f;
     float const BONK_TRAP_POISON_BONUS     = 0.05f;
     uint32 const BONK_VENOM_BURST_STACKS   = 5;
     float const BONK_VENOM_BURST_RADIUS    = 5.0f;
@@ -4931,7 +4932,8 @@ float BonkRun::GetDamageMultiplier(SpellEntry const* spell, Unit const* victim, 
         GetCastChargePower(spell, victim));
     float const mark = GetKeywordDamageMultiplier(spell, victim) * GetMageDamageMultiplier(victim) *
         GetShamanDamageMultiplier(spell, victim) * GetPriestDamageMultiplier(victim) * GetRogueDamageMultiplier(victim) *
-        GetPaladinDamageMultiplier(victim) * GetHunterDamageMultiplier(spell, victim) * GetTrinketDamageMultiplier();
+        GetPaladinDamageMultiplier(victim) * GetHunterDamageMultiplier(spell, victim) * GetMageSpellDamageMultiplier(spell, victim) *
+        GetTrinketDamageMultiplier();
     if (!spell)
         return std::max(0.0f, 1.0f + percent / 100.0f) * GetGearDamageScale() * mark * GetCapstoneDamageMultiplier(false, victim) * minionScale;
 
@@ -6540,6 +6542,8 @@ void BonkRun::StrikeWith(OwnedWeapon& owned, SpellEntry const* spellInfo, Creatu
         damageShare *= GetShieldSlamMultiplier(owned);
     if (weapon.behavior == BONK_BEHAVIOR_VENGEANCE)
         damageShare *= m_vengeanceShare;
+    if (weapon.behavior == BONK_BEHAVIOR_BLOODTHIRST && IsEnraged())
+        damageShare *= BONK_BLOODTHIRST_ENRAGED;
 
     optional<int32> basePoints[MAX_EFFECT_INDEX];
     GetBasePoints(owned, spellInfo, damageShare, basePoints);

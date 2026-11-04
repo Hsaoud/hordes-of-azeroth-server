@@ -21,6 +21,8 @@ namespace
     uint32 const BONK_KIT_WHIRLWIND_SPIN      = 369;
     uint32 const BONK_KIT_BLADESTORM_SPIN     = 7352;
     uint32 const BONK_REVENGE_WINDOW_MS       = 500;
+    float const BONK_REVENGE_SHIELD_PER_HIT   = 2.0f;
+    float const BONK_REVENGE_SHIELD_MAX       = 6.0f;
     size_t const BONK_MAX_PENDING_CRITS       = 200;
     size_t const BONK_MAX_DEEP_WOUNDS_PER_SEC = 20;
     size_t const BONK_DEEP_WOUNDS_PRUNE_SIZE  = 256;
@@ -1062,6 +1064,12 @@ void BonkRun::OnRevenge(OwnedWeapon const& owned)
 {
     if (owned.weapon.behavior == BONK_BEHAVIOR_BERSERKER_RAGE)
         Enrage();
+    size_t const hits = GetMobsInRange(GetWeaponRadius(owned)).size();
+    if (!hits || !m_player->IsAlive())
+        return;
+    float const percent = std::min(BONK_REVENGE_SHIELD_MAX, BONK_REVENGE_SHIELD_PER_HIT * hits);
+    SupportScope scope(*this, WeaponSupport(owned));
+    AddSpellShield(uint32(m_player->GetMaxHealth() * percent / 100.0f));
 }
 
 void BonkRun::ThrowShield(OwnedWeapon const& owned, SpellEntry const* spellInfo, Creature* target, float share)

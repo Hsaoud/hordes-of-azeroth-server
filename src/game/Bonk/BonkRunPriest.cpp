@@ -74,6 +74,8 @@ namespace
     float const BONK_SHACKLE_TICK_SHARE       = 0.5f;
     int32 const BONK_MIND_FLAY_SLOW           = -30;
     int32 const BONK_MIND_FLAY_SLOW_MS        = 1000;
+    uint32 const BONK_MIND_FLAY_HEAL_DECAY    = 10;
+    float const BONK_MIND_FLAY_HEAL           = 0.2f;
     uint32 const BONK_MIND_BLAST_MAX_COPY     = 10;
     int32 const BONK_SURGE_OF_DARKNESS_MS     = 600000;
 
@@ -747,7 +749,10 @@ void BonkRun::FlayMind(OwnedWeapon& owned, SpellEntry const* spellInfo)
     m_mindFlayTarget = target->GetObjectGuid();
     owned.timer = GetWeaponCooldown(owned);
     ShowStrike(m_player, spellInfo, target);
+    bool const feedsOnDecay = GetKeywordStacks(target, BONK_KEYWORD_DECAY) >= BONK_MIND_FLAY_HEAL_DECAY;
     DealShamanHit(spellInfo, owned.weapon.spellId, target, GetWeaponDamage(owned));
+    if (feedsOnDecay)
+        HealPriest(BONK_MIND_FLAY_HEAL, owned.weapon.spellId, false);
     if (owned.weapon.id == BONK_WEAPON_MIND_SEAR)
         for (Creature* mob : GetMobsInRange(GetWeaponRadius(owned), target))
             DealShamanHit(spellInfo, owned.weapon.spellId, mob, GetWeaponDamage(owned) * BONK_MIND_SEAR_SHARE);

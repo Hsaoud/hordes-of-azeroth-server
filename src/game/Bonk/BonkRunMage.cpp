@@ -17,6 +17,9 @@ namespace
     uint32 const BONK_BLINK_CHILL             = 2;
     int32 const BONK_BLINK_NOVA_RESET_MS      = 60000;
     uint32 const BONK_WEAPON_FROST_NOVA       = 402;
+    uint32 const BONK_WEAPON_ARCANE_MISSILES  = 409;
+    float const BONK_MISSILES_CHAMPION_BONUS  = 1.5f;
+    float const BONK_DEEP_FREEZE_FROST_BONUS  = 1.3f;
     uint32 const BONK_BLINK_CHARGES           = 1;
     uint32 const BONK_SHIMMER_CHARGES         = 2;
     float const BONK_BLINK_RECHARGE_RATE      = 1.0f / 0.7f;
@@ -1164,6 +1167,36 @@ float BonkRun::GetArcanePowerMultiplier() const
 float BonkRun::GetMageDamageMultiplier(Unit const* victim) const
 {
     return GetArcanePowerMultiplier() * GetTimeBubbleMultiplier(victim);
+}
+
+float BonkRun::GetMageSpellDamageMultiplier(SpellEntry const* spell, Unit const* victim) const
+{
+    if (!spell || !victim)
+        return 1.0f;
+    auto root = m_spellRoots.find(spell->Id);
+    if (root != m_spellRoots.end() && root->second == BONK_WEAPON_ARCANE_MISSILES && IsChampion(victim))
+        return BONK_MISSILES_CHAMPION_BONUS;
+    if (spell->School == SPELL_SCHOOL_FROST && IsFrozen(victim) && IsInDeepFreeze(victim))
+        return BONK_DEEP_FREEZE_FROST_BONUS;
+    return 1.0f;
+}
+
+bool BonkRun::IsChampion(Unit const* victim) const
+{
+    Creature const* mob = victim->ToCreature();
+    BonkMobAI const* ai = mob ? dynamic_cast<BonkMobAI const*>(mob->AI()) : nullptr;
+    return ai && ai->GetKind() != BONK_SPAWN_NORMAL;
+}
+
+bool BonkRun::IsInDeepFreeze(Unit const* victim) const
+{
+    uint32 const now = WorldTimer::getMSTime();
+    return std::any_of(m_frostStorms.begin(), m_frostStorms.end(), [&](FrostStorm const& storm)
+    {
+        OwnedWeapon const* owned = FindOwned(storm.weaponId);
+        return owned && owned->weapon.behavior == BONK_BEHAVIOR_DEEP_FREEZE && int32(storm.untilMs - now) > 0 &&
+            victim->GetDistance2d(storm.x, storm.y) <= storm.radius;
+    });
 }
 
 void BonkRun::QueuePresenceOfMind(OwnedWeapon const& owned)
