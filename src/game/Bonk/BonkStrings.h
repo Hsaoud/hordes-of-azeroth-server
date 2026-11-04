@@ -1020,6 +1020,7 @@ enum BonkString : uint32
     BONK_STRING_CANT_BE_REFUNDED                        = 1140,
     BONK_STRING_REWARD_APPEARANCE                       = 1141,
     BONK_STRING_HARDCORE_REST_ONLY_FALLEN               = 1142,
+    BONK_STRING_TRANSMOG_EQUIP_TABARD_FIRST             = 1143,
 };
 
 struct BonkStringText

@@ -1017,6 +1017,7 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_CANT_BE_REFUNDED,                            "{1} can't be refunded." },
         { BONK_STRING_REWARD_APPEARANCE,                           "{1} appearance" },
         { BONK_STRING_HARDCORE_REST_ONLY_FALLEN,                   "Only a character that just fell in Hardcore can be laid to rest." },
+        { BONK_STRING_TRANSMOG_EQUIP_TABARD_FIRST,                 "Equip a tabard first. Durgan Ironbelly, the gear vendor, sells a Blank Tabard." },
     };
     return texts;
 }

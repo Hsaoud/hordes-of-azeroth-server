@@ -436,7 +436,7 @@ bool BonkTransmogStore::Apply(Player* player, uint8 slot, uint32 entry, std::str
     Item const* worn = BonkTransmog::IsTransmogSlot(slot) ? player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot) : nullptr;
     if (!worn)
     {
-        error = bonk->GetString(BONK_STRING_TRANSMOG_EQUIP_FIRST);
+        error = bonk->GetString(slot == EQUIPMENT_SLOT_TABARD ? BONK_STRING_TRANSMOG_EQUIP_TABARD_FIRST : BONK_STRING_TRANSMOG_EQUIP_FIRST);
         return false;
     }
     if (entry == BONK_HIDDEN_LOOK && BonkTransmog::CanHide(slot))
