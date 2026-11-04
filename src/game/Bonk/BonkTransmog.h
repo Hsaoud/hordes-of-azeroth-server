@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class Item;
 class Player;
@@ -37,6 +38,7 @@ class BonkTransmogStore
     private:
         mutable std::mutex m_lock;
         std::unordered_map<uint32, std::set<uint32>> m_collections;
+        std::unordered_map<uint32, std::set<uint32>> m_looks;
         std::unordered_map<uint32, std::array<uint32, BONK_TRANSMOG_SLOTS>> m_choices;
 
         uint32 GetChoice(uint32 characterGuid, uint8 slot) const;

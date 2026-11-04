@@ -1410,6 +1410,7 @@ class BonkMgr
 
         static uint32 GetGearEntry(uint32 kind, uint8 quality, uint32 tier);
         static bool ReadGearEntry(uint32 entry, uint32& kind, uint8& quality, uint32& tier);
+        static uint32 GetEpicLookMythic(uint32 look);
         static std::vector<uint32> GetGearKindsFor(uint32 classMask);
         static bool ReadTrinketEffect(uint32 entry, BonkTrinketEffect& effect);
         static BonkTrinket const& GetTrinket(BonkTrinketEffect effect);

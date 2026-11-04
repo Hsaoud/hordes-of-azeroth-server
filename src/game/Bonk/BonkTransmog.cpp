@@ -11,6 +11,7 @@
 #include "SharedDefines.h"
 #include "WorldSession.h"
 
+#include <algorithm>
 #include <cstdio>
 
 INSTANTIATE_SINGLETON_1(BonkTransmogStore);
@@ -92,6 +93,86 @@ namespace
         return player->GetSession()->GetAccountId();
     }
 
+    uint32 LookKey(ItemPrototype const* proto)
+    {
+        return proto ? (uint32(BonkTransmog::GetLookGroup(proto)) << 24) | (proto->DisplayInfoID & 0xFFFFFF) : 0;
+    }
+
+    struct CatalogLook
+    {
+        uint8 group = 0;
+        uint32 entry = 0;
+        uint32 key = 0;
+        uint8 quality = 0;
+        uint32 order = 0;
+        std::string source;
+    };
+
+    std::string GearSource(uint32 entry, uint8 quality, uint32& order)
+    {
+        uint32 kind = 0, look = 0;
+        uint8 gearQuality = 0;
+        if (BonkMgr::ReadGearEntry(entry, kind, gearQuality, look))
+        {
+            order = look;
+            switch (gearQuality)
+            {
+                case ITEM_QUALITY_NORMAL:   return "N";
+                case ITEM_QUALITY_UNCOMMON: return "H";
+                case ITEM_QUALITY_RARE:     return "M";
+                default:                    return "E" + std::to_string(BonkMgr::GetEpicLookMythic(look));
+            }
+        }
+        if (entry >= BONK_LEGENDARY_FIRST && entry < BONK_LEGENDARY_FIRST + BONK_LEGENDARY_KINDS * BONK_GEAR_TIERS)
+        {
+            order = (entry - BONK_LEGENDARY_FIRST) % BONK_GEAR_TIERS + 1;
+            return "L";
+        }
+        order = 0;
+        return entry == BONK_BLANK_TABARD_ENTRY ? "V" : "";
+    }
+
+    std::vector<CatalogLook> BuildCatalog()
+    {
+        std::vector<CatalogLook> catalog;
+        std::set<uint32> seen;
+        auto add = [&](uint32 entry)
+        {
+            ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
+            uint8 const group = BonkTransmog::GetLookGroup(proto);
+            if (group == BONK_LOOK_NONE || !seen.insert(LookKey(proto)).second)
+                return;
+            CatalogLook look;
+            look.group = group;
+            look.entry = entry;
+            look.key = LookKey(proto);
+            look.quality = uint8(proto->Quality);
+            look.source = GearSource(entry, look.quality, look.order);
+            catalog.push_back(look);
+        };
+        for (uint32 entry = BONK_GEAR_FIRST; entry < BONK_GEAR_FIRST + BONK_GEAR_KINDS * BONK_GEAR_QUALITIES * BONK_GEAR_TIERS; ++entry)
+            add(entry);
+        for (uint32 entry = BONK_LEGENDARY_FIRST; entry < BONK_LEGENDARY_FIRST + BONK_LEGENDARY_KINDS * BONK_GEAR_TIERS; ++entry)
+            add(entry);
+        add(BONK_BLANK_TABARD_ENTRY);
+        return catalog;
+    }
+
+    std::vector<CatalogLook> const& GetCatalog()
+    {
+        static std::vector<CatalogLook> const catalog = BuildCatalog();
+        return catalog;
+    }
+
+    uint32 CatalogEntryFor(uint32 entry)
+    {
+        uint32 const key = LookKey(sObjectMgr.GetItemPrototype(entry));
+        for (CatalogLook const& look : GetCatalog())
+            if (look.key == key)
+                return look.entry;
+        return entry;
+    }
+
     std::string ItemLink(ItemPrototype const* proto)
     {
         char link[256];
@@ -133,11 +214,16 @@ void BonkTransmogStore::LoadAccount(uint32 accountId)
     std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `entry` FROM `bonk_account_appearance` WHERE `account` = %u", accountId));
     std::lock_guard<std::mutex> guard(m_lock);
     std::set<uint32>& collection = m_collections[accountId];
+    std::set<uint32>& looks = m_looks[accountId];
     if (result)
     {
         do
-            collection.insert(result->Fetch()[0].GetUInt32());
-        while (result->NextRow());
+        {
+            uint32 const entry = result->Fetch()[0].GetUInt32();
+            collection.insert(entry);
+            if (uint32 const key = LookKey(sObjectMgr.GetItemPrototype(entry)))
+                looks.insert(key);
+        } while (result->NextRow());
     }
 }
 
@@ -171,13 +257,15 @@ void BonkTransmogStore::Collect(Player* player, uint32 entry, bool announce)
     if (!player || BonkTransmog::GetLookGroup(proto) == BONK_LOOK_NONE)
         return;
     uint32 const accountId = GetAccount(player);
+    bool newLook = false;
     {
         std::lock_guard<std::mutex> guard(m_lock);
         if (!m_collections[accountId].insert(entry).second)
             return;
+        newLook = m_looks[accountId].insert(LookKey(proto)).second;
     }
     CharacterDatabase.PExecute("INSERT IGNORE INTO `bonk_account_appearance` (`account`, `entry`) VALUES (%u, %u)", accountId, entry);
-    if (announce && player->IsInWorld())
+    if (newLook && announce && player->IsInWorld())
         if (BonkPlayer* bonk = player->GetBonkPlayer())
             bonk->Notify(BONK_STRING_APPEARANCE_COLLECTED, { ItemLink(proto) });
 }
@@ -196,9 +284,10 @@ void BonkTransmogStore::CollectWorn(Player* player)
 
 bool BonkTransmogStore::IsCollected(uint32 accountId, uint32 entry) const
 {
+    uint32 const key = LookKey(sObjectMgr.GetItemPrototype(entry));
     std::lock_guard<std::mutex> guard(m_lock);
-    auto collection = m_collections.find(accountId);
-    return collection != m_collections.end() && collection->second.count(entry);
+    auto looks = m_looks.find(accountId);
+    return key && looks != m_looks.end() && looks->second.count(key);
 }
 
 uint32 BonkTransmogStore::GetChoice(uint32 characterGuid, uint8 slot) const
@@ -255,7 +344,8 @@ bool BonkTransmogStore::Apply(Player* player, uint8 slot, uint32 entry, std::str
         error = bonk->GetString(BONK_STRING_TRANSMOG_DOESNT_FIT);
         return false;
     }
-    SetChoice(player->GetGUIDLow(), slot, entry == worn->GetEntry() ? 0 : entry);
+    bool const ownLook = LookKey(sObjectMgr.GetItemPrototype(entry)) == LookKey(worn->GetProto());
+    SetChoice(player->GetGUIDLow(), slot, ownLook ? 0 : entry);
     RefreshSlot(player, slot);
     SendWindow(player);
     return true;
@@ -283,24 +373,30 @@ void BonkTransmogStore::SendWindow(Player* player) const
         uint32 const shown = GetVisibleEntry(player, slot, worn);
         uint8 const group = worn ? BonkTransmog::GetLookGroup(worn->GetProto()) : BONK_LOOK_NONE;
         bonk->SendAddon("mogslot~" + std::to_string(slot) + "~" + std::to_string(wornEntry) + "~" + std::to_string(shown != wornEntry ? shown : 0) +
-            "~" + std::to_string(group));
+            "~" + std::to_string(group) + "~" + std::to_string(shown ? CatalogEntryFor(shown) : 0));
     }
-    std::set<uint32> collection;
+    std::set<uint32> owned;
     {
         std::lock_guard<std::mutex> guard(m_lock);
-        auto found = m_collections.find(GetAccount(player));
-        if (found != m_collections.end())
-            collection = found->second;
+        auto found = m_looks.find(GetAccount(player));
+        if (found != m_looks.end())
+            owned = found->second;
     }
-    std::set<std::pair<uint8, uint32>> shownLooks;
-    for (uint32 entry : collection)
+    std::vector<CatalogLook const*> looks;
+    for (CatalogLook const& look : GetCatalog())
+        looks.push_back(&look);
+    std::stable_sort(looks.begin(), looks.end(), [&owned](CatalogLook const* a, CatalogLook const* b)
     {
-        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
-        uint8 const group = BonkTransmog::GetLookGroup(proto);
-        if (group == BONK_LOOK_NONE || !shownLooks.insert({ group, proto->DisplayInfoID }).second)
-            continue;
-        bonk->SendAddon("moglook~" + std::to_string(group) + "~" + std::to_string(entry) + "~" + std::to_string(proto->Quality));
-    }
+        bool const haveA = owned.count(a->key) > 0, haveB = owned.count(b->key) > 0;
+        if (haveA != haveB)
+            return haveA;
+        if (a->quality != b->quality)
+            return a->quality < b->quality;
+        return a->order < b->order;
+    });
+    for (CatalogLook const* look : looks)
+        bonk->SendAddon("moglook~" + std::to_string(look->group) + "~" + std::to_string(look->entry) + "~" + std::to_string(look->quality) + "~" +
+            (owned.count(look->key) ? "1" : "0") + "~" + look->source);
     bonk->SendAddon("mogend");
 }
 

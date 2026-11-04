@@ -47,6 +47,7 @@ namespace
     };
 
     float const BONK_NEWEST_RAID_CHANCE = 60.0f;
+    uint32 const BONK_MYTHIC_LEVEL_OFFSET = 9;
 
     uint32 PickLookUpTo(uint32 firstLook, uint32 lastLook, uint32 tier)
     {
@@ -2322,6 +2323,14 @@ uint32 BonkMgr::GetGearTier(uint32 entry)
     if (ReadGearEntry(entry, kind, quality, tier) || ReadLegendaryEntry(entry, kind, tier))
         return tier;
     return 0;
+}
+
+uint32 BonkMgr::GetEpicLookMythic(uint32 look)
+{
+    for (RaidLooks const& raid : BONK_EPIC_RAID_LOOKS)
+        if (look >= raid.firstLook && look <= raid.lastLook)
+            return raid.openLevel - BONK_MYTHIC_LEVEL_OFFSET;
+    return 1;
 }
 
 uint32 BonkMgr::PickGearLook(uint8 quality, uint32 tier)
