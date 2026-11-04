@@ -4623,6 +4623,13 @@ void BonkRun::StartVoidZone(BonkEnemyHit const& hit, float x, float y, float z, 
     m_voidZones.push_back(zone);
 }
 
+void BonkRun::EndVoidZones()
+{
+    for (VoidZone const& zone : m_voidZones)
+        EndVoidZone(zone);
+    m_voidZones.clear();
+}
+
 void BonkRun::EndVoidZone(VoidZone const& zone)
 {
     if (zone.markKey)
@@ -5683,9 +5690,7 @@ void BonkRun::DespawnObjects()
     m_powerups.clear();
     m_powerupObjectives.clear();
     m_powerupGlows.clear();
-    for (VoidZone const& zone : m_voidZones)
-        EndVoidZone(zone);
-    m_voidZones.clear();
+    EndVoidZones();
     ClearHidden();
     m_shardDrops.clear();
     m_glyphDrops.clear();
@@ -5903,6 +5908,9 @@ bool BonkRun::CloseStage()
     m_bossGuid.Clear();
     m_stageBosses.clear();
     m_telegraphs.Clear(m_player);
+    EndVoidZones();
+    DespawnPools();
+    ClearBossPressure();
     RemoveHeroLooks();
     GiveGold(m_map.stageGold * m_stage);
     sBonkQuests.OnProgress(m_player, BONK_QUEST_DARK_FORTUNES, 0, m_bonuses.darkFortunes, true);

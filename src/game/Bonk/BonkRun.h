@@ -623,6 +623,7 @@ class BonkRun
         };
         std::vector<VoidZone> m_voidZones;
         void EndVoidZone(VoidZone const& zone);
+        void EndVoidZones();
         std::vector<uint32> m_boltLandings;
         void UpdateVoidZones(uint32 diff);
         void UpdateHeroMark(uint32 diff);
