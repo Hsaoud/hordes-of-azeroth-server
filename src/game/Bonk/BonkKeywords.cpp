@@ -689,6 +689,8 @@ float BonkRun::GetKeywordDamageMultiplier(SpellEntry const* spell, Unit const* v
                 else if (BonkKeywordInfo const* used = sBonkMgr.GetKeyword(owned->weapon.uses))
                     count = used->IsDamageOverTime() ? std::min(GetKeywordStacks(victim, owned->weapon.uses), BONK_MAX_PAYOFF_DOT_STACKS) :
                         GetKeywordStacks(victim, owned->weapon.uses);
+                if (GetRootWeapon(owned->weapon) == BONK_WEAPON_SHADOW_BOLT)
+                    count = std::max(count, std::min(GetKeywordStacks(victim, BONK_KEYWORD_BURNING), BONK_MAX_PAYOFF_DOT_STACKS));
                 multiplier *= 1.0f + owned->weapon.usesPct * count / 100.0f;
             }
     return multiplier;

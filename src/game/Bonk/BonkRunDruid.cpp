@@ -131,6 +131,8 @@ namespace
     int32 const BONK_HURRICANE_PULSE_MS       = 1000;
     size_t const BONK_HURRICANE_ALIVE         = 2;
     size_t const BONK_SWIPE_LOOKS             = 4;
+    float const BONK_SWIPE_PER_BLEED          = 0.1f;
+    float const BONK_SWIPE_MAX_BLEEDS         = 10.0f;
     float const BONK_DRUID_AWARE_RANGE        = 30.0f;
     int32 const BONK_DRUID_POLL_MS            = 250;
     uint32 const BONK_DRUID_IDLE_MS           = 1000;
@@ -766,9 +768,15 @@ void BonkRun::SwipeAround(OwnedWeapon& owned, SpellEntry const* spellInfo)
     {
         if (shown++ < BONK_SWIPE_LOOKS)
             ShowDruidStrike(spellInfo, mob);
-        DealShamanHit(spellInfo, owned.weapon.spellId, mob, damage);
+        DealShamanHit(spellInfo, owned.weapon.spellId, mob, damage * GetSwipeBleedScale(mob));
     }
     OnSwipe(owned, mobs);
+}
+
+float BonkRun::GetSwipeBleedScale(Creature* mob) const
+{
+    float const bleeds = std::min(float(GetKeywordStacks(mob, BONK_KEYWORD_BLEED)), BONK_SWIPE_MAX_BLEEDS);
+    return 1.0f + BONK_SWIPE_PER_BLEED * bleeds;
 }
 
 float BonkRun::GetFrenziedRegenerationHeal(OwnedWeapon const& owned) const
