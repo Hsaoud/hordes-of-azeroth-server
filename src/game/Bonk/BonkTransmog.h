@@ -16,7 +16,6 @@ struct ItemPrototype;
 
 uint32 const BONK_TRANSMOGRIFIER_ENTRY = 900170;
 uint32 const BONK_BLANK_TABARD_ENTRY = 939000;
-uint32 const BONK_BLANK_TABARD_PRICE = 5000;
 uint8 const BONK_TRANSMOG_SLOTS = 19;
 
 class BonkTransmogStore
@@ -33,7 +32,6 @@ class BonkTransmogStore
 
         bool Apply(Player* player, uint8 slot, uint32 entry, std::string& error);
         void Clear(Player* player, uint8 slot);
-        bool BuyBlankTabard(Player* player, std::string& error);
         void SendWindow(Player* player) const;
 
     private:

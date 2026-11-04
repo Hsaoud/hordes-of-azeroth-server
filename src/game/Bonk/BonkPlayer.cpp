@@ -2396,6 +2396,7 @@ std::vector<uint32> BonkPlayer::GetShopStock() const
             if (uint32 const entry = BonkMgr::GetGearEntry(kind, quality, tier))
                 stock.push_back(entry);
     }
+    stock.push_back(BONK_BLANK_TABARD_ENTRY);
     return stock;
 }
 

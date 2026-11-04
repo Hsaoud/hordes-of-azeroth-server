@@ -270,33 +270,12 @@ void BonkTransmogStore::Clear(Player* player, uint8 slot)
     SendWindow(player);
 }
 
-bool BonkTransmogStore::BuyBlankTabard(Player* player, std::string& error)
-{
-    BonkPlayer* bonk = player->GetBonkPlayer();
-    if (player->GetMoney() < BONK_BLANK_TABARD_PRICE)
-    {
-        error = bonk->GetString(BONK_STRING_BLANK_TABARD_COSTS, { FormatBonkMoney(BONK_BLANK_TABARD_PRICE, bonk->GetLocale()) });
-        return false;
-    }
-    ItemPosCountVec dest;
-    InventoryResult const result = player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, BONK_BLANK_TABARD_ENTRY, 1);
-    if (result != EQUIP_ERR_OK)
-    {
-        player->SendEquipError(result, nullptr, nullptr, BONK_BLANK_TABARD_ENTRY);
-        return false;
-    }
-    player->ModifyMoney(-int32(BONK_BLANK_TABARD_PRICE));
-    if (Item* tabard = player->StoreNewItem(dest, BONK_BLANK_TABARD_ENTRY, true))
-        player->SendNewItem(tabard, 1, true, false);
-    return true;
-}
-
 void BonkTransmogStore::SendWindow(Player* player) const
 {
     BonkPlayer* bonk = player->GetBonkPlayer();
     if (!bonk || !bonk->IsAddonReady())
         return;
-    bonk->SendAddon("mogbegin~" + FormatBonkMoney(BONK_BLANK_TABARD_PRICE, bonk->GetLocale()));
+    bonk->SendAddon("mogbegin");
     for (uint8 slot : BONK_TRANSMOG_WINDOW_SLOTS)
     {
         Item const* worn = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
@@ -335,8 +314,6 @@ bool ChatHandler::HandleBonkMogCommand(char* args)
         error = bonk->GetString(BONK_STRING_TRANSMOG_ONLY_IN_TOWN);
     else if (text == "open")
         sBonkTransmog.SendWindow(player);
-    else if (text == "tabard")
-        sBonkTransmog.BuyBlankTabard(player, error);
     else if (text.compare(0, 6, "clear ") == 0)
         sBonkTransmog.Clear(player, uint8(atoi(text.c_str() + 6)));
     else if (text.compare(0, 4, "set ") == 0)

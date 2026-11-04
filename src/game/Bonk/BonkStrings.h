@@ -1014,7 +1014,6 @@ enum BonkString : uint32
     BONK_STRING_TRANSMOG_EQUIP_FIRST                    = 1135,
     BONK_STRING_TRANSMOG_NOT_COLLECTED                  = 1136,
     BONK_STRING_TRANSMOG_DOESNT_FIT                     = 1137,
-    BONK_STRING_BLANK_TABARD_COSTS                      = 1138,
     BONK_STRING_TRANSMOG_ONLY_IN_TOWN                   = 1139,
 };
 
