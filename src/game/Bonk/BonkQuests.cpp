@@ -138,7 +138,7 @@ void BonkQuests::Load()
             case BONK_REWARD_GLYPH:     rewardExists = sBonkMgr.GetGlyph(quest.rewardValue) != nullptr; break;
             case BONK_REWARD_CARD_BAN:
             case BONK_REWARD_GLYPH_BAN: rewardExists = quest.rewardValue != 0; break;
-            case BONK_REWARD_ITEM:      rewardExists = sObjectMgr.GetItemPrototype(quest.rewardValue) != nullptr; break;
+            case BONK_REWARD_APPEARANCE:      rewardExists = sObjectMgr.GetItemPrototype(quest.rewardValue) != nullptr; break;
             default: break;
         }
         if (!rewardExists)
@@ -674,8 +674,8 @@ void BonkQuests::Complete(Player* player, BonkQuest const& quest)
         case BONK_REWARD_TITLE:
             bonk->SendTitles();
             break;
-        case BONK_REWARD_ITEM:
-            BonkTransmog::GiveItem(player, quest.rewardValue);
+        case BONK_REWARD_APPEARANCE:
+            BonkTransmog::UnlockAppearance(player, quest.rewardValue);
             break;
         default:
             break;
@@ -789,11 +789,11 @@ std::string BonkQuests::DescribeReward(BonkQuest const& quest, std::string* icon
         case BONK_REWARD_GLYPH_BAN:
             *icon = "INV_Misc_Ticket_Tarot_Stack_01";
             return sBonkLocale.GetString(quest.rewardValue == 1 ? BONK_STRING_REWARD_GLYPH_BAN_ONE : BONK_STRING_REWARD_GLYPH_BANS, locale, { std::to_string(quest.rewardValue) });
-        case BONK_REWARD_ITEM:
+        case BONK_REWARD_APPEARANCE:
             if (ItemPrototype const* proto = sObjectMgr.GetItemPrototype(quest.rewardValue))
             {
                 *icon = quest.icon;
-                return proto->Name1;
+                return sBonkLocale.GetString(BONK_STRING_REWARD_APPEARANCE, locale, { proto->Name1 });
             }
             break;
         case BONK_REWARD_TITLE:

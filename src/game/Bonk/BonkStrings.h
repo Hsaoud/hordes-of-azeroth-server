@@ -1018,6 +1018,7 @@ enum BonkString : uint32
     BONK_STRING_TRANSMOG_DOESNT_FIT                     = 1137,
     BONK_STRING_TRANSMOG_ONLY_IN_TOWN                   = 1139,
     BONK_STRING_CANT_BE_REFUNDED                        = 1140,
+    BONK_STRING_REWARD_APPEARANCE                       = 1141,
 };
 
 struct BonkStringText

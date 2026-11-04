@@ -78,7 +78,7 @@ enum BonkQuestReward : uint8
     BONK_REWARD_GLYPH     = 12,
     BONK_REWARD_CARD_BAN  = 13,
     BONK_REWARD_GLYPH_BAN = 14,
-    BONK_REWARD_ITEM      = 15,
+    BONK_REWARD_APPEARANCE = 15,
     MAX_BONK_REWARD
 };
 

@@ -1591,9 +1591,9 @@ bool BonkPlayer::BuyTalent(uint32 talentId, std::string& message)
     if (talent->IsToggle())
         m_enabledTalents.insert(talentId);
     SaveTalent(talentId);
-    if (talent->effect == BONK_TALENT_ITEM)
+    if (talent->effect == BONK_TALENT_APPEARANCE)
     {
-        BonkTransmog::GiveItem(m_player, uint32(talent->valuePerRank));
+        BonkTransmog::UnlockAppearance(m_player, uint32(talent->valuePerRank));
         return true;
     }
     message = talent->IsToggle() ? GetString(BONK_STRING_LEARNED_AND_SWITCHED_ON, { name }) :
@@ -1652,7 +1652,7 @@ bool BonkPlayer::ResetTalents(std::string& message)
     for (auto const& itr : m_talentRanks)
         if (BonkTalent const* talent = sBonkMgr.GetTalent(itr.first))
         {
-            if (talent->effect == BONK_TALENT_ITEM)
+            if (talent->effect == BONK_TALENT_APPEARANCE)
             {
                 kept[itr.first] = itr.second;
                 continue;
@@ -1774,7 +1774,7 @@ bool BonkPlayer::RefundTalent(uint32 talentId, std::string& message)
         return false;
     }
 
-    if (talent->effect == BONK_TALENT_ITEM)
+    if (talent->effect == BONK_TALENT_APPEARANCE)
     {
         message = GetString(BONK_STRING_CANT_BE_REFUNDED, { name });
         return false;

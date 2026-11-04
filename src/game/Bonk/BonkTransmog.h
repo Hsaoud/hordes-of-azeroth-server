@@ -56,7 +56,7 @@ namespace BonkTransmog
     uint8 GetLookGroup(ItemPrototype const* proto);
     bool IsTransmogSlot(uint8 slot);
     bool Fits(ItemPrototype const* look, ItemPrototype const* worn);
-    void GiveItem(Player* player, uint32 entry);
+    void UnlockAppearance(Player* player, uint32 entry);
     void RollTabardDrops(Player* player, std::string const& zoneKey);
 }
 

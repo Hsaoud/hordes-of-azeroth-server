@@ -5,7 +5,6 @@
 #include "BonkStrings.h"
 #include "BonkQuests.h"
 #include "Chat.h"
-#include "Mail.h"
 #include "Database/DatabaseEnv.h"
 #include "Item.h"
 #include "ObjectMgr.h"
@@ -96,8 +95,6 @@ namespace
     {
         return player->GetSession()->GetAccountId();
     }
-
-    uint32 const BONK_REWARD_MAILER = 900009;
 
     struct TabardSource
     {
@@ -250,26 +247,10 @@ uint8 BonkTransmog::GetLookGroup(ItemPrototype const* proto)
     return BONK_LOOK_NONE;
 }
 
-void BonkTransmog::GiveItem(Player* player, uint32 entry)
+void BonkTransmog::UnlockAppearance(Player* player, uint32 entry)
 {
-    ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
-    if (!player || !proto)
-        return;
-    sBonkTransmog.Collect(player, entry);
-    ItemPosCountVec dest;
-    if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, entry, 1) == EQUIP_ERR_OK)
-    {
-        if (Item* item = player->StoreNewItem(dest, entry, true))
-            player->SendNewItem(item, 1, true, false);
-        return;
-    }
-    Item* item = Item::CreateItem(entry, 1, player->GetObjectGuid());
-    if (!item)
-        return;
-    item->SaveToDB();
-    MailDraft(player->GetBonkPlayer()->GetItemName(proto), "")
-        .AddItem(item)
-        .SendMailTo(MailReceiver(player), MailSender(MAIL_CREATURE, BONK_REWARD_MAILER));
+    if (player)
+        sBonkTransmog.Collect(player, entry);
 }
 
 void BonkTransmog::RollTabardDrops(Player* player, std::string const& zoneKey)
@@ -281,11 +262,7 @@ void BonkTransmog::RollTabardDrops(Player* player, std::string const& zoneKey)
             continue;
         if (sBonkTransmog.IsCollected(player->GetSession()->GetAccountId(), drop.entry))
             continue;
-        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(drop.entry);
-        if (!proto)
-            continue;
-        player->GetBonkPlayer()->Notify(BONK_STRING_YOU_FOUND, { ItemLink(proto) });
-        GiveItem(player, drop.entry);
+        UnlockAppearance(player, drop.entry);
     }
 }
 
