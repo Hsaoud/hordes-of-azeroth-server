@@ -2479,6 +2479,7 @@ class BonkRun
         bool GetShamanCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind) const;
         bool IsLavaBurstOnBurning(SpellEntry const* spell, Unit const* victim) const;
         float GetShamanDamageMultiplier(SpellEntry const* spell, Unit const* victim) const;
+        float GetHunterDamageMultiplier(SpellEntry const* spell, Unit const* victim) const;
         uint32 GetShamanExtraPets(OwnedWeapon const& owned);
         bool ApplyShamanKeyword(OwnedWeapon const& owned, Creature* mob, BonkKeyword keyword, uint32 stacks);
         void BurnWithFlametongue(OwnedWeapon& owned, Creature* target, uint32 stacks);
@@ -2657,6 +2658,7 @@ class BonkRun
         void StabOffHand(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target, std::vector<Creature*> const& taken);
         void SlashOnward(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target);
         void Mutilate(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* target);
+        void ShortenEnvenom();
         bool OpenRogueWindow(OwnedWeapon& owned, uint32& untilMs, uint32 auraSpellId);
         void StartShadowDance(OwnedWeapon& owned);
         void StartKillingSpree(OwnedWeapon& owned);
@@ -2709,6 +2711,8 @@ class BonkRun
         bool GetPaladinCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind) const;
         void OnPaladinCloudPulse(OwnedWeapon const& owned, KeywordCloud const& cloud);
         bool IsStandingInConsecration() const;
+        bool IsInConsecration(Unit const* unit) const;
+        size_t CountConsecrationsAround(Unit const* unit) const;
         bool IsPaladinNear() const;
         void CastExorcism(OwnedWeapon& owned, SpellEntry const* spellInfo);
         void SpinDivineStorm(OwnedWeapon& owned, SpellEntry const* spellInfo);

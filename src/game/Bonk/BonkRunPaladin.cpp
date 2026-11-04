@@ -101,7 +101,9 @@ namespace
     uint32 const BONK_HALLOWED_GROUND_MS      = 12000;
     size_t const BONK_CONSECRATION_ALIVE      = 2;
     size_t const BONK_HALLOWED_GROUND_ALIVE   = 3;
-    float const BONK_BLESSED_GROUND_HEAL      = 0.5f;
+    float const BONK_CONSECRATION_HEAL        = 0.25f;
+    float const BONK_BLESSED_GROUND_HEAL      = 0.75f;
+    float const BONK_CONSECRATED_RETRIBUTION  = 2.0f;
     int32 const BONK_CONSECRATION_PULSE_MS    = 1000;
     float const BONK_EXORCISM_UNHOLY          = 3.0f;
     float const BONK_EXORCISM_ELITE           = 2.0f;
@@ -620,19 +622,32 @@ void BonkRun::OnPaladinCloudPulse(OwnedWeapon const& owned, KeywordCloud const& 
     for (Creature* mob : GetMobsNear(cloud.x, cloud.y, cloud.radius))
         DealShamanHit(look, owned.weapon.spellId, mob, damage);
     PulseConsecratedRetribution(cloud);
-    if (owned.weapon.id == BONK_WEAPON_BLESSED_GROUND && m_player->GetDistance2d(cloud.x, cloud.y) <= cloud.radius)
-        HealPaladin(BONK_BLESSED_GROUND_HEAL, owned.weapon.spellId);
+    if (m_player->GetDistance2d(cloud.x, cloud.y) > cloud.radius)
+        return;
+    float const heal = owned.weapon.id == BONK_WEAPON_BLESSED_GROUND ? BONK_BLESSED_GROUND_HEAL : BONK_CONSECRATION_HEAL;
+    HealPaladin(heal / std::max<size_t>(1, CountConsecrationsAround(m_player)), owned.weapon.spellId);
+}
+
+size_t BonkRun::CountConsecrationsAround(Unit const* unit) const
+{
+    size_t count = 0;
+    for (KeywordCloud const& cloud : m_keywordClouds)
+    {
+        OwnedWeapon const* owned = FindOwned(cloud.weaponId);
+        if (owned && GetRootWeapon(owned->weapon) == BONK_WEAPON_CONSECRATION && unit->GetDistance2d(cloud.x, cloud.y) <= cloud.radius)
+            ++count;
+    }
+    return count;
 }
 
 bool BonkRun::IsStandingInConsecration() const
 {
-    for (KeywordCloud const& cloud : m_keywordClouds)
-    {
-        OwnedWeapon const* owned = FindOwned(cloud.weaponId);
-        if (owned && GetRootWeapon(owned->weapon) == BONK_WEAPON_CONSECRATION && m_player->GetDistance2d(cloud.x, cloud.y) <= cloud.radius)
-            return true;
-    }
-    return false;
+    return IsInConsecration(m_player);
+}
+
+bool BonkRun::IsInConsecration(Unit const* unit) const
+{
+    return CountConsecrationsAround(unit) > 0;
 }
 
 bool BonkRun::IsPaladinNear() const
@@ -716,7 +731,7 @@ void BonkRun::PulseRetributionAura(OwnedWeapon& owned, SpellEntry const* spellIn
     owned.timer = GetWeaponCooldown(owned);
     float const damage = GetWeaponDamage(owned);
     for (Creature* mob : mobs)
-        DealShamanHit(spellInfo, owned.weapon.spellId, mob, damage);
+        DealShamanHit(spellInfo, owned.weapon.spellId, mob, IsInConsecration(mob) ? damage * BONK_CONSECRATED_RETRIBUTION : damage);
 }
 
 void BonkRun::PulseConsecratedRetribution(KeywordCloud const& cloud)

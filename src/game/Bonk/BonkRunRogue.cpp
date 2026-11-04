@@ -105,6 +105,8 @@ namespace
     float const BONK_POISON_BOMB_SPEED        = 25.0f;
     uint32 const BONK_POISON_BOMB_STACKS      = 4;
     uint32 const BONK_MUTILATE_STACKS_PER     = 5;
+    uint32 const BONK_MUTILATE_ENVENOM_POISON = 10;
+    int32 const BONK_MUTILATE_ENVENOM_CUT_MS  = 500;
     uint32 const BONK_EVISCERATE_CHAIN        = 3;
     int32 const BONK_SPREE_EVISCERATE_MS      = 500;
     float const BONK_EVISCERATE_REACH         = 8.0f;
@@ -448,10 +450,12 @@ void BonkRun::StabNearest(OwnedWeapon& owned, SpellEntry const* spellInfo)
         return;
     }
     owned.timer = GetWeaponCooldown(owned);
+    bool hastensEnvenom = false;
     for (Creature* mob : targets)
     {
         if (owned.weapon.behavior == BONK_BEHAVIOR_MUTILATE)
         {
+            hastensEnvenom |= GetKeywordStacks(mob, BONK_KEYWORD_POISON) >= BONK_MUTILATE_ENVENOM_POISON;
             Mutilate(owned, spellInfo, mob);
             continue;
         }
@@ -471,6 +475,15 @@ void BonkRun::StabNearest(OwnedWeapon& owned, SpellEntry const* spellInfo)
     SwingRogueBlades();
     if (owned.weapon.behavior == BONK_BEHAVIOR_EVISCERATE)
         ThrowDeadlyFan();
+    if (hastensEnvenom)
+        ShortenEnvenom();
+}
+
+void BonkRun::ShortenEnvenom()
+{
+    for (OwnedWeapon& owned : m_weapons)
+        if (owned.weapon.behavior == BONK_BEHAVIOR_ENVENOM)
+            owned.timer = std::max<int32>(0, owned.timer - BONK_MUTILATE_ENVENOM_CUT_MS);
 }
 
 void BonkRun::EviscerateOnward(OwnedWeapon& owned, SpellEntry const* spellInfo, Creature* slain, std::vector<Creature*> taken)

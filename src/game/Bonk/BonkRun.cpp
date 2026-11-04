@@ -411,6 +411,8 @@ float const BONK_START_POLY_REACH   = 10.0f;
     size_t const BONK_MAX_VIPER_CLOUDS     = 16;
     uint32 const BONK_WEAPON_CORROSIVE_VIPERS = 226;
     uint32 const BONK_WEAPON_VENOM_BURST   = 227;
+    uint32 const BONK_WEAPON_EXPLOSIVE_TRAP = 202;
+    float const BONK_TRAP_POISON_BONUS     = 0.05f;
     uint32 const BONK_VENOM_BURST_STACKS   = 5;
     float const BONK_VENOM_BURST_RADIUS    = 5.0f;
     uint32 const BONK_KIT_VIPER_BURST      = 6377;
@@ -4929,7 +4931,7 @@ float BonkRun::GetDamageMultiplier(SpellEntry const* spell, Unit const* victim, 
         GetCastChargePower(spell, victim));
     float const mark = GetKeywordDamageMultiplier(spell, victim) * GetMageDamageMultiplier(victim) *
         GetShamanDamageMultiplier(spell, victim) * GetPriestDamageMultiplier(victim) * GetRogueDamageMultiplier(victim) *
-        GetPaladinDamageMultiplier(victim) * GetTrinketDamageMultiplier();
+        GetPaladinDamageMultiplier(victim) * GetHunterDamageMultiplier(spell, victim) * GetTrinketDamageMultiplier();
     if (!spell)
         return std::max(0.0f, 1.0f + percent / 100.0f) * GetGearDamageScale() * mark * GetCapstoneDamageMultiplier(false, victim) * minionScale;
 
@@ -7820,6 +7822,16 @@ void BonkRun::DespawnVipers()
             if (Creature* viper = map->GetCreature(released.guid))
                 viper->DespawnOrUnsummon();
     m_vipers.clear();
+}
+
+float BonkRun::GetHunterDamageMultiplier(SpellEntry const* spell, Unit const* victim) const
+{
+    if (!spell || !victim)
+        return 1.0f;
+    auto root = m_spellRoots.find(spell->Id);
+    if (root == m_spellRoots.end() || root->second != BONK_WEAPON_EXPLOSIVE_TRAP)
+        return 1.0f;
+    return 1.0f + BONK_TRAP_POISON_BONUS * GetKeywordStacks(victim, BONK_KEYWORD_POISON);
 }
 
 bool BonkRun::GetHunterCloudKind(OwnedWeapon const& owned, KeywordCloudKind& kind) const
