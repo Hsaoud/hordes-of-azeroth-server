@@ -323,7 +323,10 @@ void BonkRun::ShortenHolyWord(uint32 ms)
         ms *= BONK_ARCHANGEL_WORD_SCALE;
     for (OwnedWeapon& owned : m_weapons)
         if (owned.weapon.behavior == BONK_BEHAVIOR_HOLY_WORD)
+        {
             owned.timer = std::max<int32>(0, owned.timer - int32(ms));
+            owned.pieResync = true;
+        }
 }
 
 Creature* BonkRun::FindPriestTarget(float range) const
