@@ -646,6 +646,20 @@ bool ChatHandler::HandleBonkGearCommand(char* args)
                 run->RollGroupTabardDrops();
         return true;
     }
+    if (tab.compare(0, 9, "testbags ") == 0 && GetAccessLevel() >= SEC_GAMEMASTER)
+    {
+        BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();
+        Creature* mob = GetSelectedCreature();
+        if (run && !mob)
+            for (ObjectGuid const& guid : run->GetMobGuids())
+                if ((mob = m_session->GetPlayer()->GetMap()->GetCreature(guid)))
+                    break;
+        if (!run || !mob)
+            SendSysMessage("Target a creature in a run.");
+        else
+            run->DropTestBags(mob, uint32(atoi(tab.c_str() + 9)));
+        return true;
+    }
     if (tab == "testvault" && GetAccessLevel() >= SEC_GAMEMASTER)
     {
         BonkRun* run = m_session->GetPlayer()->GetBonkPlayer()->GetRun();

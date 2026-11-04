@@ -435,6 +435,7 @@ class BonkRun
         void RollSandboxDrops(uint8 quality, uint32 count);
         void QueueSandboxGearOffer(uint8 quality);
         void RollGroupTabardDrops();
+        void DropTestBags(Creature const* mob, uint32 count);
         void LeaveSandbox();
         time_t GetSkyTime() const;
 
@@ -1280,6 +1281,7 @@ class BonkRun
             uint32 core = 0;
             uint32 swirl = 0;
             uint8 quality = 0;
+            std::map<ObjectGuid, uint8> memberQuality;
             std::set<ObjectGuid> takenBy;
         };
         bool MakeTierPiece(uint8 quality, PendingGear& piece) const;
@@ -1303,6 +1305,7 @@ class BonkRun
         uint32 GetScrapPoints(Item const* item) const;
         void GetOwnedTiers(uint32 entry, uint32& bestTier, bool& owned) const;
         uint8 RollGearQuality() const;
+        uint8 RollOwnBagQuality(bool boss);
         void UpdateGearDrops(uint32 diff);
         void CollectAllGear();
         void OfferGear();

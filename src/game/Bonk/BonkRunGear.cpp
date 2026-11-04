@@ -207,6 +207,14 @@ uint8 BonkRun::RollGearQuality() const
     return quality;
 }
 
+uint8 BonkRun::RollOwnBagQuality(bool boss)
+{
+    uint8 const quality = boss && roll_chance_f(m_levelRow.legendaryChance) ? uint8(ITEM_QUALITY_LEGENDARY) : RollGearQuality();
+    if (m_levelRow.epicChance > 0.0f)
+        m_player->GetBonkPlayer()->CountEpicLuck(quality >= ITEM_QUALITY_EPIC);
+    return quality;
+}
+
 void BonkRun::DropTierPiece(Creature const* mob, BonkSpawnKind kind)
 {
     if (m_sandbox || m_gearDrops.size() >= BONK_MAX_GEAR_DROPS)
@@ -444,8 +452,18 @@ bool BonkRun::PlaceGearDrop(Creature const* mob, PendingGear const& piece, uint8
     drop.quality = quality;
     drop.marker = PlaceLootBeam(go, quality, drop.core, drop.swirl);
     for (Player* member : BonkCoop::RunGroupOf(m_player))
-        if (member != m_player)
-            ShowLootBeamTo(member, go, quality, drop);
+    {
+        BonkRun* run = member == m_player ? nullptr : member->GetBonkPlayer()->GetRun();
+        if (!run || run->IsOver())
+            continue;
+        if (!drop.core)
+            drop.core = NextBonkAuraKey();
+        if (!drop.swirl)
+            drop.swirl = NextBonkAuraKey();
+        uint8 const own = run->RollOwnBagQuality(kind == BONK_SPAWN_BOSS);
+        drop.memberQuality[member->GetObjectGuid()] = own;
+        ShowLootBeamTo(member, go, own, drop);
+    }
     m_gearDrops.push_back(drop);
     return true;
 }
@@ -454,10 +472,10 @@ void BonkRun::ShowLootBeamTo(Player* viewer, GameObject const* go, uint8 quality
 {
     float const x = go->GetPositionX(), y = go->GetPositionY(), z = go->GetPositionZ();
     SendBonkAuraAt(viewer, drop.marker, GetLootBeamSpell(quality), x, y, z, BONK_LOOT_BEAM_SCALE);
-    if (drop.core)
-        SendBonkAuraAt(viewer, drop.core, GetLootCoreSpell(quality), x, y, z, BONK_LOOT_BEAM_SCALE);
-    if (drop.swirl)
-        SendBonkAuraAt(viewer, drop.swirl, GetLootSwirlSpell(quality), x, y, z, BONK_LOOT_SWIRL_SCALE);
+    if (uint32 const coreSpell = drop.core ? GetLootCoreSpell(quality) : 0)
+        SendBonkAuraAt(viewer, drop.core, coreSpell, x, y, z, BONK_LOOT_BEAM_SCALE);
+    if (uint32 const swirlSpell = drop.swirl ? GetLootSwirlSpell(quality) : 0)
+        SendBonkAuraAt(viewer, drop.swirl, swirlSpell, x, y, z, BONK_LOOT_SWIRL_SCALE);
 }
 
 void BonkRun::HideLootBagFrom(Player* viewer, GearDrop const& drop) const
@@ -492,8 +510,12 @@ void BonkRun::GiveBagTo(Player* member, GearDrop& drop)
         return;
     }
     BonkRun* run = member->GetBonkPlayer()->GetRun();
+    if (!run)
+        return;
+    auto const own = drop.memberQuality.find(member->GetObjectGuid());
+    uint8 const quality = own != drop.memberQuality.end() ? own->second : run->RollOwnBagQuality(false);
     PendingGear piece;
-    if (!run || !run->MakeBagPiece(drop.quality, piece))
+    if (!run->MakeBagPiece(quality, piece))
         return;
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Co-op: %s takes %s's loot bag, item %u", member->GetName(), m_player->GetName(), piece.entry);
     run->m_pendingGear.push_back(piece);
@@ -616,6 +638,13 @@ void BonkRun::RollGroupTabardDrops()
 {
     for (Player* member : BonkCoop::RunGroupOf(m_player))
         BonkTransmog::RollTabardDrops(member, m_map.key);
+}
+
+void BonkRun::DropTestBags(Creature const* mob, uint32 count)
+{
+    for (uint32 bag = 0; bag < count; ++bag)
+        PlaceTierPiece(mob, RollGearQuality());
+    CollectAllGear();
 }
 
 void BonkRun::DropGear(Creature const* mob, BonkSpawnKind kind)
