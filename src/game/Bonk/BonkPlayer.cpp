@@ -10,12 +10,15 @@
 #include "BonkQuests.h"
 #include "BonkRun.h"
 #include "BonkRunStats.h"
+#include "CellImpl.h"
 #include "Chat.h"
 #include "Config/Config.h"
 #include "Creature.h"
 #include "Database/DatabaseEnv.h"
 #include "DBCStores.h"
 #include "GameObject.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Log.h"
 #include "Map.h"
 #include "MasterPlayer.h"
@@ -3113,6 +3116,35 @@ void BonkPlayer::ApplyLocale(LocaleConstant locale)
 {
     m_locale = locale;
     m_player->GetSession()->SetSessionDbLocaleIndex(sObjectMgr.GetIndexForLocale(locale));
+    RefreshCreatureNames();
+}
+
+void BonkPlayer::RefreshCreatureNames() const
+{
+    if (!m_player->IsInWorld())
+        return;
+
+    float const range = m_player->GetMap()->GetVisibilityDistance();
+    std::list<Creature*> creatures;
+    MaNGOS::AnyUnitInObjectRangeCheck check(m_player, range);
+    MaNGOS::CreatureListSearcher<MaNGOS::AnyUnitInObjectRangeCheck> searcher(creatures, check);
+    Cell::VisitGridObjects(m_player, searcher, range);
+
+    std::set<uint32> sent;
+    for (Creature* creature : creatures)
+    {
+        if (!creature || !sent.insert(creature->GetEntry()).second)
+            continue;
+
+        CreatureInfo const* info = sObjectMgr.GetCreatureTemplate(creature->GetEntry());
+        if (!info)
+            continue;
+
+        auto response = std::make_unique<WorldPackets::Query::CreatureQueryResponse>();
+        response->sessionDbLocaleIndex = m_player->GetSession()->GetSessionDbLocaleIndex();
+        response->maybeCreatureInfo = info;
+        m_player->GetSession()->SendPacket(std::move(response));
+    }
 }
 
 std::string BonkPlayer::GetLocalName(WorldObject const* object) const

@@ -329,6 +329,7 @@ class BonkPlayer
         std::string JoinList(std::vector<std::string> const& items, BonkString last) const;
         std::string GetLocalName(WorldObject const* object) const;
         void SendNpcName(WorldObject const* npc) const;
+        void RefreshCreatureNames() const;
         std::string GetItemName(ItemPrototype const* proto) const;
         std::string GetCreatureName(uint32 entry, std::string const& fallback) const;
 
