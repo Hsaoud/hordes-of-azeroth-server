@@ -872,6 +872,18 @@ namespace
         return "";
     }
 
+    std::string ApplyAppearance(HomeTarget const& home, std::vector<std::string> const& fields)
+    {
+        if (fields.size() < 3 || !home.characterGuid)
+            return "appearance without a character";
+        std::unique_ptr<QueryResult> owner(CharacterDatabase.PQuery("SELECT `account` FROM `characters` WHERE `guid` = %u", home.characterGuid));
+        if (!owner)
+            return "appearance for a missing character";
+        CharacterDatabase.PExecute("INSERT IGNORE INTO `bonk_account_appearance` (`account`, `entry`) VALUES (%u, %u)",
+            owner->Fetch()[0].GetUInt32(), uint32(atoi(fields[2].c_str())));
+        return "";
+    }
+
     std::string ApplyEntry(HomeTarget const& home, std::vector<std::string> const& fields)
     {
         std::string const& kind = fields[1];
@@ -905,6 +917,8 @@ namespace
             return ApplyLevelBest(home, fields);
         if (kind == "finalebest")
             return ApplyFinaleBest(home, fields);
+        if (kind == "appearance")
+            return ApplyAppearance(home, fields);
         return "unknown entry " + kind;
     }
 

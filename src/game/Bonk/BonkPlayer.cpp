@@ -151,7 +151,7 @@ void BonkPlayer::OnLogin()
     sBonkFound.LoadCharacter(m_player->GetGUIDLow());
     sBonkTransmog.LoadAccount(m_player->GetSession()->GetAccountId());
     sBonkTransmog.LoadCharacter(m_player->GetGUIDLow());
-    sBonkTransmog.CollectWorn(m_player);
+    sBonkTransmog.CollectOwned(m_player);
     uint32 const accountId = GetProgressAccount();
     std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `gold`, `locale` FROM `bonk_account` WHERE `account` = %u", accountId));
     if (result)

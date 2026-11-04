@@ -616,7 +616,8 @@ void BonkRun::DropGear(Creature const* mob, BonkSpawnKind kind)
 {
     MaybeDropHearthstone(kind);
     if (kind == BONK_SPAWN_BOSS)
-        BonkTransmog::RollTabardDrops(m_player, m_map.key);
+        for (Player* member : BonkCoop::RunGroupOf(m_player))
+            BonkTransmog::RollTabardDrops(member, m_map.key);
     if (kind == BONK_SPAWN_ELITE)
         AddEliteScrap();
     else if (kind != BONK_SPAWN_NORMAL)
@@ -695,7 +696,6 @@ void BonkRun::OfferGear()
     m_gearOffer = m_pendingGear.front();
     m_gearOfferEntry = m_gearOffer.entry;
     m_pendingGear.erase(m_pendingGear.begin());
-    sBonkTransmog.Collect(m_player, m_gearOfferEntry);
     SetPaused(true);
     SendGearOffer();
 }
@@ -726,7 +726,8 @@ void BonkRun::SendGearOffer() const
         bonk->SendAddon("gearoffer~" + std::to_string(m_gearOfferEntry) + "~" + std::to_string(replaced) + "~" + std::to_string(valor) + "~" +
             std::to_string(proto->Quality) + "~" + std::to_string(m_gearOffer.gear.tier) + "~" +
             BonkFound::DescribeLines(m_gearOffer.gear, m_gearOffer.gear.tier) + slotChoice + "~" +
-            BonkFound::DescribeExtra(m_gearOfferEntry, m_gearOffer.gear.tier));
+            BonkFound::DescribeExtra(m_gearOfferEntry, m_gearOffer.gear.tier) + "~" +
+            (sBonkTransmog.IsNewLook(m_player, m_gearOfferEntry) ? "1" : "0"));
         return;
     }
 
@@ -756,6 +757,7 @@ bool BonkRun::ChooseGear(GearChoice choice, uint8 slot, std::string& error)
     BonkPlayer* bonk = m_player->GetBonkPlayer();
     ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
     std::string const name = proto ? m_player->GetBonkPlayer()->GetItemName(proto) : GetString(BONK_STRING_THE_GEAR);
+    sBonkTransmog.Collect(m_player, entry);
     if (choice == GEAR_CHOICE_EQUIP && slot != NULL_SLOT)
     {
         std::vector<uint8> const choices = GetGearSlotChoices(entry);

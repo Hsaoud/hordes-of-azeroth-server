@@ -10193,6 +10193,8 @@ Item* Player::StoreItem(ItemPosCountVec const& dest, Item* pItem, bool update)
 {
     if (!pItem)
         return nullptr;
+    if (IsInWorld())
+        sBonkTransmog.Collect(this, pItem->GetEntry());
 
     Item* lastItem = pItem;
 

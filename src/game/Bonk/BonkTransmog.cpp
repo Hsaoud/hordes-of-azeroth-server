@@ -3,6 +3,8 @@
 #include "BonkMgr.h"
 #include "BonkPlayer.h"
 #include "BonkStrings.h"
+#include "Bag.h"
+#include "BonkCoop.h"
 #include "BonkQuests.h"
 #include "Chat.h"
 #include "Database/DatabaseEnv.h"
@@ -274,6 +276,11 @@ bool BonkTransmog::IsTransmogSlot(uint8 slot)
     return false;
 }
 
+bool BonkTransmog::CanHide(uint8 slot)
+{
+    return slot == EQUIPMENT_SLOT_HEAD || slot == EQUIPMENT_SLOT_SHOULDERS || slot == EQUIPMENT_SLOT_BACK;
+}
+
 bool BonkTransmog::Fits(ItemPrototype const* look, ItemPrototype const* worn)
 {
     uint8 const group = GetLookGroup(worn);
@@ -336,21 +343,46 @@ void BonkTransmogStore::Collect(Player* player, uint32 entry, bool announce)
         newLook = m_looks[accountId].insert(LookKey(proto)).second;
     }
     CharacterDatabase.PExecute("INSERT IGNORE INTO `bonk_account_appearance` (`account`, `entry`) VALUES (%u, %u)", accountId, entry);
+    BonkCoop::Record(player, "appearance	" + std::to_string(entry));
     if (newLook && announce && player->IsInWorld())
         if (BonkPlayer* bonk = player->GetBonkPlayer())
-            bonk->Notify(BONK_STRING_APPEARANCE_COLLECTED, { ItemLink(proto) });
+            ChatHandler(player).SendSysMessage(bonk->GetString(BONK_STRING_APPEARANCE_COLLECTED, { ItemLink(proto) }).c_str());
 }
 
-void BonkTransmogStore::CollectWorn(Player* player)
+void BonkTransmogStore::CollectOwned(Player* player)
 {
-    for (uint8 slot = 0; slot < BONK_TRANSMOG_SLOTS; ++slot)
+    auto collectRange = [this, player](uint8 first, uint8 last)
     {
-        if (!BonkTransmog::IsTransmogSlot(slot))
-            continue;
-        if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        for (uint8 slot = first; slot < last; ++slot)
+        {
+            Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+            if (!item)
+                continue;
             Collect(player, item->GetEntry(), false);
-        RefreshSlot(player, slot);
+            if (Bag* bag = dynamic_cast<Bag*>(item))
+                for (uint32 inside = 0; inside < bag->GetBagSize(); ++inside)
+                    if (Item* held = bag->GetItemByPos(uint8(inside)))
+                        Collect(player, held->GetEntry(), false);
+        }
+    };
+    collectRange(EQUIPMENT_SLOT_START, INVENTORY_SLOT_ITEM_END);
+    collectRange(BANK_SLOT_ITEM_START, BANK_SLOT_BAG_END);
+    std::unique_ptr<QueryResult> banked(CharacterDatabase.PQuery("SELECT DISTINCT `item_id` FROM `bonk_account_bank` WHERE `account` = %u", GetAccount(player)));
+    if (banked)
+    {
+        do
+            Collect(player, banked->Fetch()[0].GetUInt32(), false);
+        while (banked->NextRow());
     }
+    for (uint8 slot = 0; slot < BONK_TRANSMOG_SLOTS; ++slot)
+        if (BonkTransmog::IsTransmogSlot(slot))
+            RefreshSlot(player, slot);
+}
+
+bool BonkTransmogStore::IsNewLook(Player const* player, uint32 entry) const
+{
+    ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
+    return BonkTransmog::GetLookGroup(proto) != BONK_LOOK_NONE && !IsCollected(GetAccount(player), entry);
 }
 
 bool BonkTransmogStore::IsCollected(uint32 accountId, uint32 entry) const
@@ -386,6 +418,8 @@ uint32 BonkTransmogStore::GetVisibleEntry(Player const* player, uint8 slot, Item
     if (!item)
         return 0;
     uint32 const choice = GetChoice(player->GetGUIDLow(), slot);
+    if (choice == BONK_HIDDEN_LOOK && BonkTransmog::CanHide(slot))
+        return 0;
     if (!choice || !IsCollected(GetAccount(player), choice))
         return item->GetEntry();
     return BonkTransmog::Fits(sObjectMgr.GetItemPrototype(choice), item->GetProto()) ? choice : item->GetEntry();
@@ -404,6 +438,13 @@ bool BonkTransmogStore::Apply(Player* player, uint8 slot, uint32 entry, std::str
     {
         error = bonk->GetString(BONK_STRING_TRANSMOG_EQUIP_FIRST);
         return false;
+    }
+    if (entry == BONK_HIDDEN_LOOK && BonkTransmog::CanHide(slot))
+    {
+        SetChoice(player->GetGUIDLow(), slot, BONK_HIDDEN_LOOK);
+        RefreshSlot(player, slot);
+        SendWindow(player);
+        return true;
     }
     if (!IsCollected(GetAccount(player), entry))
     {
@@ -431,6 +472,86 @@ void BonkTransmogStore::Clear(Player* player, uint8 slot)
     SendWindow(player);
 }
 
+std::string BonkTransmogStore::CleanOutfitName(std::string const& name)
+{
+    std::string clean;
+    for (char c : name)
+        if (c != '~' && c != ',' && c != ':' && c != '\'' && c != '\\' && c != '|' && uint8(c) >= ' ')
+            clean += c;
+    while (!clean.empty() && clean.back() == ' ')
+        clean.pop_back();
+    if (clean.size() > BONK_OUTFIT_NAME_MAX)
+        clean.resize(BONK_OUTFIT_NAME_MAX);
+    return clean;
+}
+
+void BonkTransmogStore::SaveOutfit(Player* player, uint8 outfit, std::string const& name)
+{
+    std::string const clean = CleanOutfitName(name);
+    if (outfit < 1 || outfit > BONK_OUTFITS || clean.empty())
+        return;
+    std::string looks;
+    for (uint8 slot : BONK_TRANSMOG_WINDOW_SLOTS)
+    {
+        if (!looks.empty())
+            looks += ",";
+        looks += std::to_string(slot) + ":" + std::to_string(GetChoice(player->GetGUIDLow(), slot));
+    }
+    std::string escaped = clean;
+    CharacterDatabase.escape_string(escaped);
+    CharacterDatabase.PExecute("REPLACE INTO `bonk_character_outfit` (`guid`, `outfit`, `name`, `looks`) VALUES (%u, %u, '%s', '%s')",
+        player->GetGUIDLow(), uint32(outfit), escaped.c_str(), looks.c_str());
+    SendWindow(player);
+}
+
+void BonkTransmogStore::ApplyOutfit(Player* player, uint8 outfit, std::string& error)
+{
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `looks` FROM `bonk_character_outfit` WHERE `guid` = %u AND `outfit` = %u",
+        player->GetGUIDLow(), uint32(outfit)));
+    if (!result)
+        return;
+    std::string const looks = result->Fetch()[0].GetCppString();
+    size_t start = 0;
+    while (start < looks.size())
+    {
+        size_t const end = looks.find(',', start);
+        std::string const part = looks.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        start = end == std::string::npos ? looks.size() : end + 1;
+        unsigned int slot = 0, entry = 0;
+        if (sscanf(part.c_str(), "%u:%u", &slot, &entry) != 2 || !BonkTransmog::IsTransmogSlot(uint8(slot)))
+            continue;
+        Item const* worn = player->GetItemByPos(INVENTORY_SLOT_BAG_0, uint8(slot));
+        if (!entry || !worn)
+            SetChoice(player->GetGUIDLow(), uint8(slot), 0);
+        else if (entry == BONK_HIDDEN_LOOK ? BonkTransmog::CanHide(uint8(slot)) :
+            IsCollected(GetAccount(player), entry) && BonkTransmog::Fits(sObjectMgr.GetItemPrototype(entry), worn->GetProto()))
+            SetChoice(player->GetGUIDLow(), uint8(slot), entry);
+        RefreshSlot(player, uint8(slot));
+    }
+    error.clear();
+    SendWindow(player);
+}
+
+void BonkTransmogStore::DeleteOutfit(Player* player, uint8 outfit)
+{
+    CharacterDatabase.PExecute("DELETE FROM `bonk_character_outfit` WHERE `guid` = %u AND `outfit` = %u", player->GetGUIDLow(), uint32(outfit));
+    SendWindow(player);
+}
+
+void BonkTransmogStore::SendOutfits(Player* player) const
+{
+    BonkPlayer* bonk = player->GetBonkPlayer();
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `outfit`, `name` FROM `bonk_character_outfit` WHERE `guid` = %u ORDER BY `outfit`",
+        player->GetGUIDLow()));
+    if (!result)
+        return;
+    do
+    {
+        Field* fields = result->Fetch();
+        bonk->SendAddon("mogoutfit~" + std::to_string(fields[0].GetUInt32()) + "~" + fields[1].GetCppString());
+    } while (result->NextRow());
+}
+
 std::string BonkTransmogStore::DescribeSource(BonkPlayer const* bonk, std::string const& source)
 {
     if (source.empty() || source[0] != 'Q')
@@ -451,8 +572,11 @@ void BonkTransmogStore::SendWindow(Player* player) const
         uint32 const wornEntry = worn ? worn->GetEntry() : 0;
         uint32 const shown = GetVisibleEntry(player, slot, worn);
         uint8 const group = worn ? BonkTransmog::GetLookGroup(worn->GetProto()) : BONK_LOOK_NONE;
-        bonk->SendAddon("mogslot~" + std::to_string(slot) + "~" + std::to_string(wornEntry) + "~" + std::to_string(shown != wornEntry ? shown : 0) +
-            "~" + std::to_string(group) + "~" + std::to_string(shown ? CatalogEntryFor(shown) : 0));
+        bool const hidden = worn && !shown;
+        uint32 const look = hidden ? BONK_HIDDEN_LOOK : shown != wornEntry ? shown : 0;
+        uint32 const catalogEntry = hidden ? BONK_HIDDEN_LOOK : shown ? CatalogEntryFor(shown) : 0;
+        bonk->SendAddon("mogslot~" + std::to_string(slot) + "~" + std::to_string(wornEntry) + "~" + std::to_string(look) +
+            "~" + std::to_string(group) + "~" + std::to_string(catalogEntry) + "~" + (BonkTransmog::CanHide(slot) ? "1" : "0"));
     }
     std::set<uint32> owned;
     {
@@ -476,6 +600,7 @@ void BonkTransmogStore::SendWindow(Player* player) const
     for (CatalogLook const* look : looks)
         bonk->SendAddon("moglook~" + std::to_string(look->group) + "~" + std::to_string(look->entry) + "~" + std::to_string(look->quality) + "~" +
             (owned.count(look->key) ? "1" : "0") + "~" + DescribeSource(bonk, look->source));
+    SendOutfits(player);
     bonk->SendAddon("mogend");
 }
 
@@ -497,6 +622,17 @@ bool ChatHandler::HandleBonkMogCommand(char* args)
         if (sscanf(text.c_str() + 4, "%u %u", &slot, &entry) == 2)
             sBonkTransmog.Apply(player, uint8(slot), entry, error);
     }
+    else if (text.compare(0, 12, "outfit save ") == 0)
+    {
+        unsigned int outfit = 0;
+        int consumed = 0;
+        if (sscanf(text.c_str() + 12, "%u %n", &outfit, &consumed) >= 1)
+            sBonkTransmog.SaveOutfit(player, uint8(outfit), text.substr(std::min(text.size(), size_t(12 + consumed))));
+    }
+    else if (text.compare(0, 13, "outfit apply ") == 0)
+        sBonkTransmog.ApplyOutfit(player, uint8(atoi(text.c_str() + 13)), error);
+    else if (text.compare(0, 14, "outfit delete ") == 0)
+        sBonkTransmog.DeleteOutfit(player, uint8(atoi(text.c_str() + 14)));
     if (!error.empty())
         bonk->Notify(error);
     return true;
