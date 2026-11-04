@@ -98,10 +98,10 @@ namespace
     float const BONK_EXPLODING_HAMMER_SEEK    = 30.0f;
     float const BONK_CONSECRATION_BONUS       = 1.15f;
     float const BONK_HALLOWED_GROUND_BONUS    = 1.25f;
-    uint32 const BONK_CONSECRATION_MS         = 8000;
-    uint32 const BONK_HALLOWED_GROUND_MS      = 12000;
-    size_t const BONK_CONSECRATION_ALIVE      = 2;
-    size_t const BONK_HALLOWED_GROUND_ALIVE   = 3;
+    uint32 const BONK_CONSECRATION_MS         = 12000;
+    uint32 const BONK_HALLOWED_GROUND_MS      = 18000;
+    size_t const BONK_CONSECRATION_ALIVE      = 4;
+    size_t const BONK_HALLOWED_GROUND_ALIVE   = 5;
     float const BONK_CONSECRATION_HEAL        = 0.25f;
     float const BONK_BLESSED_GROUND_HEAL      = 0.75f;
     float const BONK_CONSECRATED_RETRIBUTION  = 2.0f;
