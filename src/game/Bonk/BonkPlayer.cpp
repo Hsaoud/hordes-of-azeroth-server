@@ -2267,6 +2267,7 @@ void BonkPlayer::Update(uint32 diff)
         if (m_run->IsFinished())
         {
             m_run.reset();
+            SendNoEnchants();
             SendStats();
             SendDash();
         }
@@ -3304,11 +3305,14 @@ void BonkPlayer::SendGearInfo() const
     if (m_run)
         m_run->SendEnchants();
     else
-    {
-        SendAddon("enchantclear");
-        SendAddon("enchantend");
-    }
+        SendNoEnchants();
     SendStats();
+}
+
+void BonkPlayer::SendNoEnchants() const
+{
+    SendAddon("enchantclear");
+    SendAddon("enchantend");
 }
 
 void BonkPlayer::SendStats() const

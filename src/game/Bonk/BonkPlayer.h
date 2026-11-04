@@ -383,6 +383,7 @@ class BonkPlayer
         void SendUpdateNotices();
         void SeeGearNotice();
         void SendStats() const;
+        void SendNoEnchants() const;
         void SendMasteryShop(bool open, bool inspect) const;
         std::map<uint32, uint8> ReadMasteryPreset(uint8 slot) const;
         void LoadMasteryPresets();
