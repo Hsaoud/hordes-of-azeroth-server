@@ -913,6 +913,7 @@ bool ChatHandler::HandleBonkHelloCommand(char* args)
     bonk->SetAddonReady();
     SendAddonData(player);
     bonk->SendUpdateNotices();
+    bonk->SendUnannouncedFall();
     return true;
 }
 

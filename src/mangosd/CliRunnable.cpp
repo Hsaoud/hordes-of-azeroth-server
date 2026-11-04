@@ -159,7 +159,8 @@ void CliRunnable::operator()()
         }
         else if (feof(stdin))
         {
-            World::StopNow(SHUTDOWN_EXIT_CODE);
+            sWorld.QueueCliCommand(new CliCommandHolder(0, SEC_CONSOLE, nullptr, "server shutdown 0", &utf8print, &commandFinished));
+            break;
         }
     }
 

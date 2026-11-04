@@ -23,6 +23,8 @@ namespace
     uint32 const PAGE_ROWS = 50;
     uint32 const SOLO_VIEW = 1;
     uint32 const LAST_GROUP_VIEW = 4;
+    uint32 const HARDCORE_VIEW = 5;
+    uint32 const LAST_HARDCORE_VIEW = 8;
     uint32 const FREE_CLIMB_LEVEL = 49;
 
     struct Row
@@ -31,6 +33,7 @@ namespace
         uint32 classId = 0;
         uint32 level = 0;
         uint32 ms = 0;
+        bool ranked = true;
     };
 
     struct Board
@@ -41,6 +44,8 @@ namespace
         std::map<uint32, std::vector<Row>> solo;
         std::vector<Row> soloAll;
         std::map<uint32, std::vector<Row>> groups;
+        std::map<uint32, std::vector<Row>> hard;
+        std::vector<Row> hardAll;
     };
 
     std::mutex s_boardLock;
@@ -58,7 +63,7 @@ namespace
         for (char c : line)
             if (static_cast<unsigned char>(c) < 0x20)
                 return false;
-        for (char const* kind : { "updated~", "season~", "solo~", "group~", "mine~", "local~", "cutoff~", "sync~", "climb~" })
+        for (char const* kind : { "updated~", "season~", "solo~", "group~", "mine~", "local~", "cutoff~", "sync~", "climb~", "hard~" })
             if (StartsWith(line, kind))
                 return true;
         return false;
@@ -88,6 +93,11 @@ namespace
         return a.level != b.level ? a.level > b.level : a.ms < b.ms;
     }
 
+    bool HardAhead(Row const& a, Row const& b)
+    {
+        return a.ranked != b.ranked ? a.ranked : Ahead(a, b);
+    }
+
     void Load(Board& board)
     {
         board = Board();
@@ -110,10 +120,17 @@ namespace
             }
             else if (StartsWith(line, "group~"))
                 board.groups[Number(fields, 1)].push_back(Row{ line, 0, Number(fields, 3), Number(fields, 4) });
+            else if (StartsWith(line, "hard~"))
+            {
+                Row row{ line, Number(fields, 1), Number(fields, 4), Number(fields, 5), Number(fields, 2) > 0 };
+                board.hard[row.classId].push_back(row);
+                board.hardAll.push_back(row);
+            }
             else
                 board.header.push_back(line);
         }
         std::stable_sort(board.soloAll.begin(), board.soloAll.end(), Ahead);
+        std::stable_sort(board.hardAll.begin(), board.hardAll.end(), HardAhead);
     }
 
     void Refresh()
@@ -150,23 +167,31 @@ namespace
         return false;
     }
 
-    std::vector<Row const*> ViewRows(uint32 view, uint32 classId)
+    std::vector<Row const*> ClassRows(std::vector<Row> const& all, std::map<uint32, std::vector<Row>> const& byClass, uint32 classId)
     {
         std::vector<Row const*> rows;
-        if (view == SOLO_VIEW)
+        if (!classId)
         {
-            if (!classId)
-            {
-                for (Row const& row : s_board.soloAll)
-                    rows.push_back(&row);
-                return rows;
-            }
-            auto found = s_board.solo.find(classId);
-            if (found != s_board.solo.end())
-                for (Row const& row : found->second)
-                    rows.push_back(&row);
+            for (Row const& row : all)
+                rows.push_back(&row);
             return rows;
         }
+        auto found = byClass.find(classId);
+        if (found != byClass.end())
+            for (Row const& row : found->second)
+                rows.push_back(&row);
+        return rows;
+    }
+
+    std::vector<Row const*> ViewRows(uint32 view, uint32 classId)
+    {
+        if (view == HARDCORE_VIEW)
+            return ClassRows(s_board.hardAll, s_board.hard, classId);
+        if (view > HARDCORE_VIEW)
+            return {};
+        if (view == SOLO_VIEW)
+            return ClassRows(s_board.soloAll, s_board.solo, classId);
+        std::vector<Row const*> rows;
         auto found = s_board.groups.find(view);
         if (found == s_board.groups.end())
             return rows;
@@ -195,7 +220,7 @@ namespace BonkLeaderboard
 
     void SendPage(Player* player, uint32 view, uint32 classId, uint32 offset)
     {
-        if (view < SOLO_VIEW || view > LAST_GROUP_VIEW)
+        if (view < SOLO_VIEW || view > LAST_HARDCORE_VIEW)
             return;
         BonkPlayer* bonk = player->GetBonkPlayer();
         std::lock_guard<std::mutex> guard(s_boardLock);

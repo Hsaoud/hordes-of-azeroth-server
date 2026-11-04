@@ -163,6 +163,7 @@ class BonkRun
         void Update(uint32 diff);
         void Abort();
         void Surrender();
+        void SetConnectionLost(bool lost);
         bool SkipTime(uint32 seconds, std::string& error);
         bool StartMiniEventNow(BonkMiniEventType type, std::string& error);
         bool PlaceShrineNow(BonkShrineType type, std::string& error);
@@ -1444,6 +1445,8 @@ class BonkRun
         void LogMinute();
         void LogDeath();
         void LogLoadout() const;
+        void BeginHardcoreRun();
+        void EndHardcoreRunOnAbort();
         void LogBuild() const;
         void LogRunEnd(bool wentHome, std::string const& build) const;
         void LogLevelClear() const;
@@ -1530,10 +1533,11 @@ class BonkRun
         bool m_ownPaused = false;
         bool m_groupHeld = false;
         bool m_away = false;
+        bool m_connectionLost = false;
         bool m_followPending = false;
         BonkMap m_followMap;
         uint32 m_followStage = 0;
-        bool WantsPause() const { return (m_ownPaused && (!m_coopNoPause || (m_menuOpen && m_coopPlayers <= 1))) || m_groupHeld || m_away; }
+        bool WantsPause() const { return !m_connectionLost && ((m_ownPaused && (!m_coopNoPause || (m_menuOpen && m_coopPlayers <= 1))) || m_groupHeld || m_away); }
         void ApplyPause(bool paused);
         bool m_wentHome = false;
 

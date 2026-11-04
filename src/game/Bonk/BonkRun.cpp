@@ -1237,7 +1237,10 @@ bool BonkRun::Begin(std::string& error)
     m_player->RemoveAurasDueToSpell(BONK_SPELL_MAX_HEALTH);
     m_player->RemoveAurasDueToSpell(BONK_SPELL_DODGE);
 
-    return m_sandbox ? TeleportToSandbox(error) : TeleportToStage(m_map, error);
+    if (!(m_sandbox ? TeleportToSandbox(error) : TeleportToStage(m_map, error)))
+        return false;
+    BeginHardcoreRun();
+    return true;
 }
 
 std::string BonkRun::DescribeForLobby() const
@@ -2847,6 +2850,33 @@ void BonkRun::LogLoadout() const
         m_player->GetBonkPlayer()->DescribeLoadout().c_str(), m_difficultyLevel);
 }
 
+void BonkRun::BeginHardcoreRun()
+{
+    if (m_sandbox || IsCoopGuest())
+        return;
+    BonkPlayer* bonk = m_player->GetBonkPlayer();
+    uint32 const run = bonk->BeginHardcoreRun(m_map.name);
+    if (!run)
+        return;
+    sLog.Player(m_player->GetSession(), LOG_LEVELUP, LOG_LVL_BASIC,
+        "Bonk hardcore: %s starts hardcore run %u (class %u, %s, crashes %u): %s",
+        m_player->GetName(), run, uint32(m_player->GetClass()), bonk->IsIronman() ? "ironman" : "hardcore", bonk->GetHardcoreCrashes(),
+        DescribeBoardEntry().c_str());
+}
+
+void BonkRun::EndHardcoreRunOnAbort()
+{
+    BonkPlayer* bonk = m_player->GetBonkPlayer();
+    if (!bonk->GetHardcoreRun())
+        return;
+    bool const inFight = m_state == STATE_RUNNING || m_state == STATE_PORTAL;
+    if (inFight && !m_player->IsAlive())
+        bonk->OnHardcoreDeath(m_lastStriker, m_map.name, m_player->GetLevel() + m_overcapLevel, m_kills);
+    if (inFight || m_state == STATE_ENTERING)
+        LogRunEnd(false, DescribeBuildTotals());
+    bonk->EndHardcoreRun();
+}
+
 void BonkRun::LogBuild() const
 {
     sLog.Player(m_player->GetSession(), LOG_LEVELUP, LOG_LVL_BASIC,
@@ -2873,7 +2903,9 @@ std::string BonkRun::DescribeBoardEntry() const
     char text[96];
     snprintf(text, sizeof(text), "coop %u, gm %u, board %d, gear %u", coop ? 1u : 0u, bonk->IsBoardGameMaster() ? 1u : 0u,
         bonk->GetBoardChoice(), bonk->HasBoardGear(m_difficultyLevel) ? 1u : 0u);
-    std::string const entry = std::string(text) + (BonkIntegrity::IsServerModified() ? ", modified 1" : "");
+    uint32 const hardcoreRun = bonk->GetHardcoreRun();
+    std::string const entry = std::string(text) + (BonkIntegrity::IsServerModified() ? ", modified 1" : "") +
+        (hardcoreRun ? ", hardcore " + std::to_string(hardcoreRun) : "");
     return coop ? entry + ", party " + DescribeBoardParty() : entry;
 }
 
@@ -14336,6 +14368,7 @@ void BonkRun::Finish(bool wentHome)
         LogRunEnd(wentHome, build);
 
     m_player->GetBonkPlayer()->RecordRun(m_victory ? m_difficultyLevel : 0, m_totalMs / IN_MILLISECONDS, m_kills, m_goldEarned);
+    m_player->GetBonkPlayer()->EndHardcoreRun();
     AwardMastery();
     m_endTimer = BONK_END_DELAY_MS;
 
@@ -14446,6 +14479,14 @@ void BonkRun::SetAway(bool away)
         m_followPending = false;
         FollowToStage(m_followMap, m_followStage);
     }
+}
+
+void BonkRun::SetConnectionLost(bool lost)
+{
+    if (m_connectionLost == lost)
+        return;
+    m_connectionLost = lost;
+    ApplyPause(WantsPause());
 }
 
 void BonkRun::ResolveChoiceForGroup()
@@ -14719,6 +14760,7 @@ void BonkRun::Abort()
     if (!IsCoopGuest() && BonkCoop::InGroupRun(m_player))
         BonkCoop::OnHostFinished(m_player);
 
+    EndHardcoreRunOnAbort();
     if (m_state == STATE_RUNNING || m_state == STATE_PORTAL || (m_state == STATE_ENTERING && m_stage > 1))
     {
         m_player->GetBonkPlayer()->RecordRun(0, m_totalMs / IN_MILLISECONDS, m_kills, m_goldEarned);

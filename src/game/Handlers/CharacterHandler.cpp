@@ -755,6 +755,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder *holder)
         if (pCurrChar->GetDeathState() == CORPSE)
             pCurrChar->KillPlayer();
         BonkCoop::OnReconnected(pCurrChar);
+        pCurrChar->GetBonkPlayer()->OnHardcoreReconnected();
     }
     pCurrChar->RestorePendingTeleport();
 

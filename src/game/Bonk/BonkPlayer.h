@@ -186,6 +186,17 @@ class BonkPlayer
         bool IsHardcore() const;
         bool HasFallenInHardcore() const { return m_fellInHardcore; }
         void OnHardcoreDeath(std::string const& killer, std::string const& mapName, uint32 level, uint32 kills);
+        uint32 BeginHardcoreRun(std::string const& mapName);
+        void EndHardcoreRun();
+        uint32 GetHardcoreRun() const { return m_hardcoreRun; }
+        uint32 GetHardcoreCrashes() const { return m_hardcoreCrashes; }
+        bool HoldsAfterDisconnect() const;
+        void OnHardcoreDisconnected();
+        void OnHardcoreReconnected();
+        void SendUnannouncedFall();
+        static uint32 HardcoreHoldMs();
+        static uint32 HardcoreShutdownHoldSeconds();
+        static uint32 OpenHardcoreRuns();
         bool RequestRest();
         static bool TakeRestRequest(uint32 guidLow);
         uint32 GetProgressAccount() const;
@@ -525,8 +536,13 @@ class BonkPlayer
         mutable int8 m_hardcore = -1;
         uint32 m_poolBestLevel = 0;
         bool m_fellInHardcore = false;
+        bool m_mayRest = false;
+        uint32 m_hardcoreRun = 0;
+        uint32 m_hardcoreCrashes = 0;
         bool UsesHardcorePool() const;
-        void SendFallenRecord(uint32 level, uint32 bestLevel, uint32 mastery, std::string const& killer, std::string const& mapName, uint32 kills);
+        void SettleLeftHardcoreRun();
+        void SendFallenRecord(uint32 level, uint32 bestLevel, uint32 mastery, uint32 played, uint32 runs, uint32 kills, std::string const& killer,
+            std::string const& mapName, bool ironman);
         struct LevelRecord
         {
             uint32 best = 0;

@@ -238,6 +238,7 @@ void BonkPlayer::OnLogin()
     ResetReworkedTrinkets();
     TeachWeaponSkills();
     m_player->GetCamera().UpdateVisibilityForOwner();
+    SettleLeftHardcoreRun();
     BonkCoop::JoinHostGroup(m_player);
 }
 

@@ -444,13 +444,16 @@ bool WorldSession::ForcePlayerLogoutDelay()
         {
             GetPlayer()->RemoveFromGroup();
         }
-        else if (sWorld.getConfig(CONFIG_BOOL_FORCE_LOGOUT_DELAY) || BonkCoop::KeepsAfterDisconnect(GetPlayer()))
+        else if (sWorld.getConfig(CONFIG_BOOL_FORCE_LOGOUT_DELAY) || BonkCoop::KeepsAfterDisconnect(GetPlayer()) ||
+            GetPlayer()->GetBonkPlayer()->HoldsAfterDisconnect())
         {
             sLog.Player(this, LOG_CHAR, "LostSocket", LOG_LVL_BASIC, "");
             SetDisconnectedSession();
-            m_disconnectTimer = BonkCoop::KeepsAfterDisconnect(GetPlayer()) ? BonkCoop::RejoinWaitMs() : 120000;
+            m_disconnectTimer = BonkCoop::KeepsAfterDisconnect(GetPlayer()) ? BonkCoop::RejoinWaitMs() :
+                GetPlayer()->GetBonkPlayer()->HoldsAfterDisconnect() ? BonkPlayer::HardcoreHoldMs() : 120000;
             GetPlayer()->OnDisconnected();
             BonkCoop::OnDisconnected(GetPlayer());
+            GetPlayer()->GetBonkPlayer()->OnHardcoreDisconnected();
             GetPlayer()->SaveToDB();
             return true;
         }

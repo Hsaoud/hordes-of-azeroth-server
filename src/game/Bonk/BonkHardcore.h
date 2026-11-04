@@ -27,3 +27,4 @@ struct BonkFallenRecord
 std::vector<BonkFallenRecord> LoadBonkFallenRecords(uint32 accountId);
 std::string DescribeBonkFallenForGlue(BonkFallenRecord const& record);
 std::vector<std::string> BonkParkBankStatements(uint32 guidLow, uint32 poolAccount, bool takeFromCharacter);
+void SettleBonkHardcoreRuns();
