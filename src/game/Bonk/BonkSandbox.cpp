@@ -1541,6 +1541,15 @@ bool BonkRun::OfferSandboxGear(uint32 entry, std::string& error)
     return true;
 }
 
+void BonkRun::QueueSandboxGearOffer(uint8 quality)
+{
+    PendingGear piece;
+    if (!MakeBagPiece(quality, piece))
+        return;
+    m_pendingGear.push_back(piece);
+    UpdateOffers();
+}
+
 void BonkRun::RollSandboxDrops(uint8 quality, uint32 count)
 {
     for (uint32 roll = 0; roll < count; ++roll)
@@ -1571,6 +1580,8 @@ bool BonkRun::RunSandboxVerb(std::string const& verb, uint32 first, uint32 secon
         m_dungeonId = first;
     else if (verb == "droptest")
         RollSandboxDrops(uint8(first), std::max(1u, std::min(second, 20u)));
+    else if (verb == "gearoffer")
+        QueueSandboxGearOffer(uint8(first));
     else if (verb == "tabardroll")
         for (uint32 roll = 0; roll < first; ++roll)
             BonkTransmog::RollTabardDrops(m_player, m_map.key);
