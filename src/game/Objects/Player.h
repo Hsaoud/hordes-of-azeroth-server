@@ -750,6 +750,7 @@ struct QuestShareInfo
 class Player final: public Unit
 {
     friend class WorldSession;
+    friend class BonkTransmogStore;
     friend void Item::AddToUpdateQueueOf(Player* player);
     friend void Item::RemoveFromUpdateQueueOf(Player* player);
     public:

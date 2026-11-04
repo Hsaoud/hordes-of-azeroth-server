@@ -74,6 +74,7 @@ set (game_SRCS
     Bonk/BonkSpawnPoints.cpp
     Bonk/BonkStrings.cpp
     Bonk/BonkTelegraph.cpp
+    Bonk/BonkTransmog.cpp
     Camera.cpp
     Conditions.cpp
     CreatureGroups.cpp
@@ -323,6 +324,7 @@ set (game_SRCS
     Bonk/BonkSpawnPoints.h
     Bonk/BonkStrings.h
     Bonk/BonkTelegraph.h
+    Bonk/BonkTransmog.h
     Camera.h
     ClientDefines.h
     Conditions.h

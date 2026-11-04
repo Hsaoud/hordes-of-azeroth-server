@@ -1007,6 +1007,12 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_BOARD_MISS_CLIMB,                            "This clear will appear on the leaderboard once you clear {1} this season." },
         { BONK_STRING_BOARD_MISS_MODIFIED_SERVER,                  "This clear won't be listed on the leaderboard because another program changed the game while it was running." },
         { BONK_STRING_SERVER_CODE_MODIFIED,                        "Another program changed the game while it was running, so your runs won't count for the leaderboard until you restart the game." },
+        { BONK_STRING_APPEARANCE_COLLECTED,                        "{1} has been added to your appearance collection." },
+        { BONK_STRING_TRANSMOG_EQUIP_FIRST,                        "Equip an item in that slot first." },
+        { BONK_STRING_TRANSMOG_NOT_COLLECTED,                      "You haven't collected that appearance." },
+        { BONK_STRING_TRANSMOG_DOESNT_FIT,                         "That appearance can't be used on the item in that slot." },
+        { BONK_STRING_BLANK_TABARD_COSTS,                          "A Blank Tabard costs {1}." },
+        { BONK_STRING_TRANSMOG_ONLY_IN_TOWN,                       "You can change your appearance only in town." },
     };
     return texts;
 }

@@ -6,6 +6,7 @@
 #include "BonkMobAI.h"
 #include "BonkObjectives.h"
 #include "BonkPlayer.h"
+#include "BonkTransmog.h"
 #include "Chat.h"
 #include "Creature.h"
 #include "Database/DatabaseEnv.h"
@@ -680,6 +681,7 @@ void BonkRun::OfferGear()
     m_gearOffer = m_pendingGear.front();
     m_gearOfferEntry = m_gearOffer.entry;
     m_pendingGear.erase(m_pendingGear.begin());
+    sBonkTransmog.Collect(m_player, m_gearOfferEntry);
     SetPaused(true);
     SendGearOffer();
 }

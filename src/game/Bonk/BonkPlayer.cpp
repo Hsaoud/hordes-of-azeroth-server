@@ -4,6 +4,7 @@
 #include "Bag.h"
 #include "BonkEnchant.h"
 #include "BonkFoundGear.h"
+#include "BonkTransmog.h"
 #include "BonkLeaderboard.h"
 #include "BonkLocale.h"
 #include "BonkMastery.h"
@@ -45,7 +46,7 @@ namespace
 {
     char const* const BONK_ACCOUNT_TABLES[] = { "bonk_account", "bonk_account_mastery", "bonk_account_mastery_node", "bonk_account_quest",
         "bonk_account_starter", "bonk_account_talent", "bonk_account_level", "bonk_account_level_best", "bonk_account_kept_talents", "bonk_account_epic_luck", "bonk_account_board", "bonk_account_upgrade",
-        "bonk_account_mastery_preset", "bonk_account_mastery_preset_active" };
+        "bonk_account_mastery_preset", "bonk_account_mastery_preset_active", "bonk_account_appearance" };
     uint8 const BONK_MASTERY_PRESET_SLOTS = 3;
     char const* const BONK_PROGRESS_ONLY_TABLES[] = { "bonk_account_disabled", "bonk_account_unlock" };
     uint32 const BONK_IRONMAN_ACCOUNT_BIT = 0x80000000;
@@ -147,6 +148,9 @@ BonkPlayer::~BonkPlayer() = default;
 void BonkPlayer::OnLogin()
 {
     sBonkFound.LoadCharacter(m_player->GetGUIDLow());
+    sBonkTransmog.LoadAccount(m_player->GetSession()->GetAccountId());
+    sBonkTransmog.LoadCharacter(m_player->GetGUIDLow());
+    sBonkTransmog.CollectWorn(m_player);
     uint32 const accountId = GetProgressAccount();
     std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `gold`, `locale` FROM `bonk_account` WHERE `account` = %u", accountId));
     if (result)
@@ -941,6 +945,7 @@ bool BonkPlayer::RefundMastery(uint32 nodeId, std::string& message)
 
 void BonkPlayer::OnLogout()
 {
+    sBonkTransmog.ForgetCharacter(m_player->GetGUIDLow());
     m_previewTelegraphs.Dismiss(m_player);
     if (m_run)
     {

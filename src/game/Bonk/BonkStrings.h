@@ -1010,6 +1010,12 @@ enum BonkString : uint32
     BONK_STRING_BOARD_MISS_CLIMB                        = 1129,
     BONK_STRING_BOARD_MISS_MODIFIED_SERVER              = 1130,
     BONK_STRING_SERVER_CODE_MODIFIED                    = 1131,
+    BONK_STRING_APPEARANCE_COLLECTED                    = 1134,
+    BONK_STRING_TRANSMOG_EQUIP_FIRST                    = 1135,
+    BONK_STRING_TRANSMOG_NOT_COLLECTED                  = 1136,
+    BONK_STRING_TRANSMOG_DOESNT_FIT                     = 1137,
+    BONK_STRING_BLANK_TABARD_COSTS                      = 1138,
+    BONK_STRING_TRANSMOG_ONLY_IN_TOWN                   = 1139,
 };
 
 struct BonkStringText
