@@ -1002,6 +1002,12 @@ enum BonkString : uint32
     BONK_STRING_COOP_TRANSFER_OTHER_ACCOUNT             = 1121,
     BONK_STRING_COOP_TRANSFER_OLD_COPY                  = 1122,
     BONK_STRING_COOP_TRANSFER_UNKNOWN_REQUEST           = 1123,
+    BONK_STRING_BOARD_MISS_GAME_MASTER                  = 1124,
+    BONK_STRING_BOARD_MISS_LEGACY_GEAR                  = 1125,
+    BONK_STRING_BOARD_MISS_GEAR_ABOVE_LEVEL             = 1126,
+    BONK_STRING_BOARD_MISS_PARTY_GAME_MASTER            = 1127,
+    BONK_STRING_BOARD_MISS_PARTY_GEAR                   = 1128,
+    BONK_STRING_BOARD_MISS_CLIMB                        = 1129,
 };
 
 struct BonkStringText

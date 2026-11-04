@@ -215,7 +215,14 @@ class BonkPlayer
         uint32 GetBoardClimb() const;
         void SetBoardChoice(bool show);
         void SendBoardChoice() const;
+        struct OffBoardGear
+        {
+            Item const* item = nullptr;
+            bool legacy = false;
+        };
         bool HasBoardGear(uint32 level) const;
+        OffBoardGear FindOffBoardGear(uint32 level) const;
+        bool IsBoardGameMaster() const;
         void CountEpicLuck(bool epicDropped);
         void SendEpicLuck() const;
         void TakeTalentResetNotice();
