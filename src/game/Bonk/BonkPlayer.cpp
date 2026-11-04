@@ -1591,6 +1591,11 @@ bool BonkPlayer::BuyTalent(uint32 talentId, std::string& message)
     if (talent->IsToggle())
         m_enabledTalents.insert(talentId);
     SaveTalent(talentId);
+    if (talent->effect == BONK_TALENT_ITEM)
+    {
+        BonkTransmog::GiveItem(m_player, uint32(talent->valuePerRank));
+        return true;
+    }
     message = talent->IsToggle() ? GetString(BONK_STRING_LEARNED_AND_SWITCHED_ON, { name }) :
         GetString(BONK_STRING_NOW_RANK, { name, std::to_string(rank + 1) });
     return true;
@@ -1643,14 +1648,27 @@ bool BonkPlayer::ResetTalents(std::string& message)
     }
 
     uint32 refunded = 0;
+    std::map<uint32, uint8> kept;
     for (auto const& itr : m_talentRanks)
         if (BonkTalent const* talent = sBonkMgr.GetTalent(itr.first))
+        {
+            if (talent->effect == BONK_TALENT_ITEM)
+            {
+                kept[itr.first] = itr.second;
+                continue;
+            }
             for (uint8 rank = 0; rank < itr.second; ++rank)
                 refunded += talent->GetCost(rank);
+        }
 
     m_talentRanks.clear();
     m_enabledTalents.clear();
     CharacterDatabase.PExecute("DELETE FROM `bonk_account_talent` WHERE `account` = %u", GetProgressAccount());
+    for (auto const& itr : kept)
+    {
+        m_talentRanks[itr.first] = itr.second;
+        SaveTalent(itr.first);
+    }
     AddShards(refunded);
     message = GetString(BONK_STRING_YOU_REFUNDED_ALL_YOUR_FORTUNES, { FormatBonkShards(refunded, m_locale) });
     return true;
@@ -1753,6 +1771,12 @@ bool BonkPlayer::RefundTalent(uint32 talentId, std::string& message)
     if (!rank)
     {
         message = GetString(BONK_STRING_YOU_HAVE_NOT_BOUGHT, { name });
+        return false;
+    }
+
+    if (talent->effect == BONK_TALENT_ITEM)
+    {
+        message = GetString(BONK_STRING_CANT_BE_REFUNDED, { name });
         return false;
     }
 

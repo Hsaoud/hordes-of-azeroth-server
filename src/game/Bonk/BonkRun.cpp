@@ -5863,6 +5863,8 @@ void BonkRun::RewardLevelClear()
         run.name = m_player->GetName();
         bonk->RecordLevelBest(run);
         BonkCoop::RecordLevelBest(m_player, m_player->GetClass(), run);
+        if (IsChallenge())
+            sBonkQuests.OnDungeonCleared(m_player, m_dungeonId ? m_dungeonId : m_invaderId);
     }
     if (!bonk->RecordLevelClear(m_difficultyLevel, m_totalMs))
         return;

@@ -9,6 +9,7 @@
 #include "GossipDef.h"
 #include "Map.h"
 #include "ObjectMgr.h"
+#include "BonkTransmog.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "TemporarySummon.h"
@@ -1570,6 +1571,9 @@ bool BonkRun::RunSandboxVerb(std::string const& verb, uint32 first, uint32 secon
         m_dungeonId = first;
     else if (verb == "droptest")
         RollSandboxDrops(uint8(first), std::max(1u, std::min(second, 20u)));
+    else if (verb == "tabardroll")
+        for (uint32 roll = 0; roll < first; ++roll)
+            BonkTransmog::RollTabardDrops(m_player, m_map.key);
     else if (verb == "crowddummies")
         SpawnSandboxDummies(std::max(1u, std::min(first, BONK_CROWD_DUMMY_MAX)), BONK_SPAWN_NORMAL, -1.0f);
     else if (verb == "spell")

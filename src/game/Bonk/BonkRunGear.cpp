@@ -615,6 +615,8 @@ bool BonkRun::PlaceChestLooksNow(std::string& error)
 void BonkRun::DropGear(Creature const* mob, BonkSpawnKind kind)
 {
     MaybeDropHearthstone(kind);
+    if (kind == BONK_SPAWN_BOSS)
+        BonkTransmog::RollTabardDrops(m_player, m_map.key);
     if (kind == BONK_SPAWN_ELITE)
         AddEliteScrap();
     else if (kind != BONK_SPAWN_NORMAL)

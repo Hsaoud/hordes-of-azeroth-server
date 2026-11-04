@@ -13,10 +13,12 @@
 
 class Item;
 class Player;
+class BonkPlayer;
 struct ItemPrototype;
 
 uint32 const BONK_TRANSMOGRIFIER_ENTRY = 900170;
 uint32 const BONK_BLANK_TABARD_ENTRY = 939000;
+uint32 const BONK_LAST_TABARD_ENTRY = 939007;
 uint8 const BONK_TRANSMOG_SLOTS = 19;
 
 class BonkTransmogStore
@@ -34,6 +36,7 @@ class BonkTransmogStore
         bool Apply(Player* player, uint8 slot, uint32 entry, std::string& error);
         void Clear(Player* player, uint8 slot);
         void SendWindow(Player* player) const;
+        static std::string DescribeSource(BonkPlayer const* bonk, std::string const& source);
 
     private:
         mutable std::mutex m_lock;
@@ -53,6 +56,8 @@ namespace BonkTransmog
     uint8 GetLookGroup(ItemPrototype const* proto);
     bool IsTransmogSlot(uint8 slot);
     bool Fits(ItemPrototype const* look, ItemPrototype const* worn);
+    void GiveItem(Player* player, uint32 entry);
+    void RollTabardDrops(Player* player, std::string const& zoneKey);
 }
 
 #endif

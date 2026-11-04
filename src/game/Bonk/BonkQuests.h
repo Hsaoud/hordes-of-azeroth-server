@@ -57,6 +57,7 @@ enum BonkQuestType : uint8
     BONK_QUEST_DOT_KILLS      = 38,
     BONK_QUEST_DASHES         = 39,
     BONK_QUEST_VETERAN        = 40,
+    BONK_QUEST_CLEAR_DUNGEON  = 41,
     MAX_BONK_QUEST_TYPE
 };
 
@@ -77,6 +78,7 @@ enum BonkQuestReward : uint8
     BONK_REWARD_GLYPH     = 12,
     BONK_REWARD_CARD_BAN  = 13,
     BONK_REWARD_GLYPH_BAN = 14,
+    BONK_REWARD_ITEM      = 15,
     MAX_BONK_REWARD
 };
 
@@ -152,6 +154,7 @@ class BonkQuests
         void OnKill(Player* player, BonkSpawnKind kind, uint32 killingSpell, uint32 creatureType, uint32 entry, bool standing);
         void OnBossFight(Player* player, BonkSpawnKind kind, uint32 seconds, bool unhurt, uint32 healthPercent);
         void OnLevelCleared(Player* player, uint32 classLevel, uint32 accountLevel);
+        void OnDungeonCleared(Player* player, uint32 mapId);
         void OnBossKilled(Player* player, uint32 tierId, uint32 stage, uint32 second);
         void OnShards(Player* player, uint32 count);
         void OnProgress(Player* player, BonkQuestType type, uint32 target, uint32 value, bool absolute = false);

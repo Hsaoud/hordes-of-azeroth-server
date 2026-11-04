@@ -1014,6 +1014,7 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_TRANSMOG_NOT_COLLECTED,                      "You haven't collected that appearance." },
         { BONK_STRING_TRANSMOG_DOESNT_FIT,                         "That appearance can't be used on the item in that slot." },
         { BONK_STRING_TRANSMOG_ONLY_IN_TOWN,                       "You can change your appearance only in town." },
+        { BONK_STRING_CANT_BE_REFUNDED,                            "{1} can't be refunded." },
     };
     return texts;
 }

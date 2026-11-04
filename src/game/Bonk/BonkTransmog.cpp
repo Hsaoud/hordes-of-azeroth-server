@@ -1,14 +1,18 @@
 #include "BonkTransmog.h"
+#include "BonkLocale.h"
 #include "BonkMgr.h"
 #include "BonkPlayer.h"
 #include "BonkStrings.h"
+#include "BonkQuests.h"
 #include "Chat.h"
+#include "Mail.h"
 #include "Database/DatabaseEnv.h"
 #include "Item.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "Policies/SingletonImp.h"
 #include "SharedDefines.h"
+#include "Utilities/Random.h"
 #include "WorldSession.h"
 
 #include <algorithm>
@@ -93,6 +97,41 @@ namespace
         return player->GetSession()->GetAccountId();
     }
 
+    uint32 const BONK_REWARD_MAILER = 900009;
+
+    struct TabardSource
+    {
+        uint32 entry;
+        char const* source;
+    };
+
+    TabardSource const BONK_TABARD_SOURCES[] =
+    {
+        { 939000, "V" },
+        { 939001, "S" },
+        { 939002, "Q577" },
+        { 939003, "Q578" },
+        { 939004, "Q579" },
+        { 939005, "Zwesternplaguelands" },
+        { 939006, "Zeasternplaguelands" },
+        { 939007, "Rarathi" },
+    };
+
+    struct TabardDrop
+    {
+        uint32 entry;
+        char const* zone;
+        float homeChance;
+        float elsewhereChance;
+    };
+
+    TabardDrop const BONK_TABARD_DROPS[] =
+    {
+        { 939005, "westernplaguelands", 3.0f, 0.0f },
+        { 939006, "easternplaguelands", 3.0f, 0.0f },
+        { 939007, "arathi",             3.0f, 0.5f },
+    };
+
     uint32 LookKey(ItemPrototype const* proto)
     {
         return proto ? (uint32(BonkTransmog::GetLookGroup(proto)) << 24) | (proto->DisplayInfoID & 0xFFFFFF) : 0;
@@ -138,8 +177,11 @@ namespace
             order = (entry - BONK_LEGENDARY_FIRST) % BONK_GEAR_TIERS + 1;
             return "L";
         }
-        order = 0;
-        return entry == BONK_BLANK_TABARD_ENTRY ? "V" : "";
+        order = entry;
+        for (TabardSource const& tabard : BONK_TABARD_SOURCES)
+            if (tabard.entry == entry)
+                return tabard.source;
+        return "";
     }
 
     std::vector<CatalogLook> BuildCatalog()
@@ -166,7 +208,8 @@ namespace
             add(entry);
         for (uint32 entry = BONK_LEGENDARY_FIRST; entry < BONK_LEGENDARY_FIRST + BONK_LEGENDARY_KINDS * BONK_GEAR_TIERS; ++entry)
             add(entry);
-        add(BONK_BLANK_TABARD_ENTRY);
+        for (uint32 entry = BONK_BLANK_TABARD_ENTRY; entry <= BONK_LAST_TABARD_ENTRY; ++entry)
+            add(entry);
         return catalog;
     }
 
@@ -205,6 +248,45 @@ uint8 BonkTransmog::GetLookGroup(ItemPrototype const* proto)
     if (proto->Class == ITEM_CLASS_ARMOR)
         return GetArmorGroup(proto->InventoryType);
     return BONK_LOOK_NONE;
+}
+
+void BonkTransmog::GiveItem(Player* player, uint32 entry)
+{
+    ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
+    if (!player || !proto)
+        return;
+    sBonkTransmog.Collect(player, entry);
+    ItemPosCountVec dest;
+    if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, entry, 1) == EQUIP_ERR_OK)
+    {
+        if (Item* item = player->StoreNewItem(dest, entry, true))
+            player->SendNewItem(item, 1, true, false);
+        return;
+    }
+    Item* item = Item::CreateItem(entry, 1, player->GetObjectGuid());
+    if (!item)
+        return;
+    item->SaveToDB();
+    MailDraft(player->GetBonkPlayer()->GetItemName(proto), "")
+        .AddItem(item)
+        .SendMailTo(MailReceiver(player), MailSender(MAIL_CREATURE, BONK_REWARD_MAILER));
+}
+
+void BonkTransmog::RollTabardDrops(Player* player, std::string const& zoneKey)
+{
+    for (TabardDrop const& drop : BONK_TABARD_DROPS)
+    {
+        float const chance = zoneKey == drop.zone ? drop.homeChance : drop.elsewhereChance;
+        if (chance <= 0.0f || !roll_chance_f(chance))
+            continue;
+        if (sBonkTransmog.IsCollected(player->GetSession()->GetAccountId(), drop.entry))
+            continue;
+        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(drop.entry);
+        if (!proto)
+            continue;
+        player->GetBonkPlayer()->Notify(BONK_STRING_YOU_FOUND, { ItemLink(proto) });
+        GiveItem(player, drop.entry);
+    }
 }
 
 bool BonkTransmog::IsTransmogSlot(uint8 slot)
@@ -372,6 +454,14 @@ void BonkTransmogStore::Clear(Player* player, uint8 slot)
     SendWindow(player);
 }
 
+std::string BonkTransmogStore::DescribeSource(BonkPlayer const* bonk, std::string const& source)
+{
+    if (source.empty() || source[0] != 'Q')
+        return source;
+    BonkQuest const* quest = sBonkQuests.FindQuest(uint32(atoi(source.c_str() + 1)));
+    return quest ? "Q" + bonk->Localize(BONK_FIELD_QUEST_NAME, quest->id, quest->name) : std::string();
+}
+
 void BonkTransmogStore::SendWindow(Player* player) const
 {
     BonkPlayer* bonk = player->GetBonkPlayer();
@@ -408,7 +498,7 @@ void BonkTransmogStore::SendWindow(Player* player) const
     });
     for (CatalogLook const* look : looks)
         bonk->SendAddon("moglook~" + std::to_string(look->group) + "~" + std::to_string(look->entry) + "~" + std::to_string(look->quality) + "~" +
-            (owned.count(look->key) ? "1" : "0") + "~" + look->source);
+            (owned.count(look->key) ? "1" : "0") + "~" + DescribeSource(bonk, look->source));
     bonk->SendAddon("mogend");
 }
 

@@ -1148,6 +1148,7 @@ enum BonkTalentEffect : uint8
     BONK_TALENT_MIGHT        = 19,
     BONK_TALENT_FORTUNE      = 20,
     BONK_TALENT_GLYPH_REROLL = 21,
+    BONK_TALENT_ITEM         = 22,
     MAX_BONK_TALENT_EFFECT
 };
 
