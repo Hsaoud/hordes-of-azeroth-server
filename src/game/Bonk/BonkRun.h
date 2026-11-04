@@ -652,6 +652,8 @@ class BonkRun
         bool IsMythic() const { return m_tier.key == "mythic"; }
         float GetScrapMultiplier() const;
         void PlacePortal(float x, float y, float baseZ);
+        bool HasPortalRoom(float x, float y, float z) const;
+        bool IsAboveTerrain(float x, float y, float z) const;
 
         void PruneMobs();
         BonkMapCreature const* PickCreature(BonkSpawnKind kind, int32 archetype = -1) const;

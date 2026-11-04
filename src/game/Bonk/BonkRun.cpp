@@ -71,6 +71,11 @@ namespace
     float const BONK_PORTAL_DISTANCE       = 6.0f;
     float const BONK_PORTAL_MAX_DETOUR     = 1.5f;
     float const BONK_PORTAL_DETOUR_SLACK   = 10.0f;
+    float const BONK_PORTAL_ROOM_RADIUS    = 2.5f;
+    float const BONK_PORTAL_ROOM_HEIGHT    = 4.5f;
+    float const BONK_PORTAL_ROOM_STEP      = 1.5f;
+    float const BONK_PORTAL_ABOVE_TERRAIN  = 1.5f;
+    uint32 const BONK_PORTAL_ROOM_SPOKES   = 8;
     float const BONK_POWERUP_MIN_DISTANCE  = 20.0f;
     float const BONK_POWERUP_MAX_DISTANCE  = 50.0f;
     float const BONK_POWERUP_PICKUP_RANGE  = 3.0f;
@@ -6000,6 +6005,7 @@ void BonkRun::PlacePortal(float x, float y, float baseZ)
     float heroZ = m_player->GetMap()->GetHeight(heroX, heroY, m_player->GetPositionZ() + 2.0f, true, 2.0f * BONK_SPAWN_MAX_HEIGHT_DIFF);
     if (heroZ <= INVALID_HEIGHT)
         heroZ = m_player->GetPositionZ();
+    bool const heroAboveTerrain = IsAboveTerrain(heroX, heroY, heroZ);
 
     auto walkable = [&](float& spotX, float& spotY, float& spotZ, float heightFrom)
     {
@@ -6022,6 +6028,8 @@ void BonkRun::PlacePortal(float x, float y, float baseZ)
         float const straight = Vector3(end.x - heroX, end.y - heroY, end.z - heroZ).length();
         if (walked > straight * BONK_PORTAL_MAX_DETOUR + BONK_PORTAL_DETOUR_SLACK)
             return false;
+        if (!HasPortalRoom(end.x, end.y, end.z) || (IsAboveTerrain(end.x, end.y, end.z) && !heroAboveTerrain))
+            return false;
         spotX = end.x;
         spotY = end.y;
         spotZ = end.z;
@@ -6030,11 +6038,12 @@ void BonkRun::PlacePortal(float x, float y, float baseZ)
 
     float z = baseZ;
     bool placed = walkable(x, y, z, baseZ);
-    for (uint32 step = 0; !placed && step < 8; ++step)
+    for (uint32 step = 0; !placed && step < 16; ++step)
     {
         float const angle = m_player->GetOrientation() + step * M_PI_F / 4.0f;
-        x = heroX + BONK_PORTAL_DISTANCE * std::cos(angle);
-        y = heroY + BONK_PORTAL_DISTANCE * std::sin(angle);
+        float const distance = BONK_PORTAL_DISTANCE * (step < 8 ? 1.0f : 2.0f);
+        x = heroX + distance * std::cos(angle);
+        y = heroY + distance * std::sin(angle);
         placed = walkable(x, y, z, heroZ);
     }
     if (!placed)
@@ -6046,6 +6055,33 @@ void BonkRun::PlacePortal(float x, float y, float baseZ)
 
     if (GameObject* portal = PlaceObject(BONK_GO_PORTAL, x, y, z, BONK_OBJECT_LIFETIME_SEC))
         m_portalGuid = portal->GetObjectGuid();
+}
+
+bool BonkRun::IsAboveTerrain(float x, float y, float z) const
+{
+    float const terrain = m_player->GetMap()->GetTerrain()->GetHeightStatic(x, y, z, false);
+    return terrain > INVALID_HEIGHT && z - terrain > BONK_PORTAL_ABOVE_TERRAIN;
+}
+
+bool BonkRun::HasPortalRoom(float x, float y, float z) const
+{
+    Map const* map = m_player->GetMap();
+    if (!map->isInLineOfSight(x, y, z + 0.5f, x, y, z + BONK_PORTAL_ROOM_HEIGHT, true, false))
+        return false;
+    float const middle = z + BONK_PORTAL_ROOM_HEIGHT / 2.0f;
+    for (uint32 spoke = 0; spoke < BONK_PORTAL_ROOM_SPOKES; ++spoke)
+    {
+        float const angle = spoke * 2.0f * M_PI_F / BONK_PORTAL_ROOM_SPOKES;
+        float const edgeX = x + BONK_PORTAL_ROOM_RADIUS * std::cos(angle);
+        float const edgeY = y + BONK_PORTAL_ROOM_RADIUS * std::sin(angle);
+        float const ground = map->GetHeight(edgeX, edgeY, z + BONK_PORTAL_ROOM_STEP + 1.0f, true, 2.0f * BONK_PORTAL_ROOM_STEP + 1.0f);
+        if (ground <= INVALID_HEIGHT || std::fabs(ground - z) > BONK_PORTAL_ROOM_STEP)
+            return false;
+        if (!map->isInLineOfSight(x, y, z + 1.0f, edgeX, edgeY, ground + 1.0f, true, false) ||
+            !map->isInLineOfSight(x, y, middle, edgeX, edgeY, middle, true, false))
+            return false;
+    }
+    return true;
 }
 
 void BonkRun::EnterNextStage()
