@@ -3372,7 +3372,12 @@ void BonkPlayer::SetBoardChoice(bool show)
 
 void BonkPlayer::SendBoardChoice() const
 {
-    SendAddon("boardchoice~" + std::to_string(m_boardChoice) + "~" + std::to_string(GetBoardClimb()));
+    SendAddon("boardchoice~" + std::to_string(m_boardChoice) + "~" + std::to_string(GetBoardClimb()) + "~" + (IsBoardGameMaster() ? "1" : "0"));
+}
+
+bool BonkPlayer::IsBoardGameMaster() const
+{
+    return m_player->GetSession()->GetSecurity() > SEC_PLAYER;
 }
 
 uint32 BonkPlayer::GetBoardClimb() const
@@ -3387,6 +3392,11 @@ uint32 BonkPlayer::GetBoardClimb() const
 
 bool BonkPlayer::HasBoardGear(uint32 level) const
 {
+    return !FindOffBoardGear(level).item;
+}
+
+BonkPlayer::OffBoardGear BonkPlayer::FindOffBoardGear(uint32 level) const
+{
     for (uint32 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
     {
         Item const* item = m_player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
@@ -3395,10 +3405,12 @@ bool BonkPlayer::HasBoardGear(uint32 level) const
             continue;
         BonkFoundGear gear;
         sBonkFound.Get(item->GetGUIDLow(), gear);
-        if (gear.season != BONK_LEADERBOARD_SEASON || tier > level)
-            return false;
+        if (gear.season != BONK_LEADERBOARD_SEASON)
+            return { item, true };
+        if (tier > level)
+            return { item, false };
     }
-    return true;
+    return {};
 }
 
 void BonkPlayer::SendLevelPreview(BonkTier const& tier, BonkRunBonuses const& bonuses) const

@@ -999,6 +999,12 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_COOP_TRANSFER_OTHER_ACCOUNT,                 "That character belongs to another account." },
         { BONK_STRING_COOP_TRANSFER_OLD_COPY,                      "The old copy of the character couldn't be removed." },
         { BONK_STRING_COOP_TRANSFER_UNKNOWN_REQUEST,               "Unknown request." },
+        { BONK_STRING_BOARD_MISS_GAME_MASTER,                      "Game Master characters don't appear on the leaderboard, so this clear won't be listed." },
+        { BONK_STRING_BOARD_MISS_LEGACY_GEAR,                      "This clear won't be listed on the leaderboard because {1} is legacy gear." },
+        { BONK_STRING_BOARD_MISS_GEAR_ABOVE_LEVEL,                 "This clear won't be listed on the leaderboard because {1} is above {2}." },
+        { BONK_STRING_BOARD_MISS_PARTY_GAME_MASTER,                "This group clear won't be listed on the leaderboard because {1} is a Game Master." },
+        { BONK_STRING_BOARD_MISS_PARTY_GEAR,                       "This group clear won't be listed on the leaderboard because {1} wears legacy gear or gear above this level." },
+        { BONK_STRING_BOARD_MISS_CLIMB,                            "This clear will appear on the leaderboard once you clear {1} this season." },
     };
     return texts;
 }
