@@ -67,7 +67,8 @@ namespace
     uint32 const BONK_CRUSADER_COMMAND_EVERY  = 1;
     uint32 const BONK_STORM_COMMAND_BURSTS    = 4;
     int32 const BONK_SEAL_OF_JUSTICE_STUN_MS  = 1000;
-    float const BONK_TEMPLAR_SHARE_FACTOR     = 2.0f;
+    float const BONK_TEMPLAR_SHARE_FACTOR     = 1.8f;
+    float const BONK_VENGEANCE_SHARE_FACTOR   = 0.9f;
     uint32 const BONK_VENGEANCE_MAX_STACKS    = 5;
     float const BONK_VENGEANCE_PER_STACK      = 0.2f;
     uint32 const BONK_JUDGED_MS               = 6000;
@@ -886,7 +887,8 @@ float BonkRun::GetSealOfLightHeal(float damageBonus) const
 
 float BonkRun::GetRighteousShare(BonkWeapon const& weapon, float damageBonus) const
 {
-    float const factor = weapon.id == BONK_WEAPON_SEAL_OF_THE_TEMPLAR ? BONK_TEMPLAR_SHARE_FACTOR : 1.0f;
+    float const factor = weapon.id == BONK_WEAPON_SEAL_OF_THE_TEMPLAR ? BONK_TEMPLAR_SHARE_FACTOR :
+        weapon.id == BONK_WEAPON_SEAL_OF_VENGEANCE ? BONK_VENGEANCE_SHARE_FACTOR : 1.0f;
     return std::min(BONK_RIGHTEOUS_SHARE * (1.0f + damageBonus / 100.0f), BONK_MAX_RIGHTEOUS_SHARE) * factor;
 }
 
