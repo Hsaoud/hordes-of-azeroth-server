@@ -1540,6 +1540,19 @@ bool BonkRun::OfferSandboxGear(uint32 entry, std::string& error)
     return true;
 }
 
+void BonkRun::RollSandboxDrops(uint8 quality, uint32 count)
+{
+    for (uint32 roll = 0; roll < count; ++roll)
+    {
+        PendingGear piece;
+        if (!MakeBagPiece(quality, piece))
+            continue;
+        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(piece.entry);
+        m_player->GetBonkPlayer()->Notify("droptest " + std::to_string(piece.entry) + " " + (proto ? proto->Name1 : "?") +
+            " challenge " + GetChallengeMapKey());
+    }
+}
+
 bool BonkRun::RunSandboxVerb(std::string const& verb, uint32 first, uint32 second, std::string& error)
 {
     if (m_state != STATE_RUNNING)
@@ -1553,6 +1566,10 @@ bool BonkRun::RunSandboxVerb(std::string const& verb, uint32 first, uint32 secon
         QueueSandboxPack(first ? first : BONK_SANDBOX_DEFAULT_PACK, second != 0);
     else if (verb == "dummies")
         SpawnSandboxDummies(std::max(1u, std::min(first, 20u)), BONK_SPAWN_NORMAL, float(second));
+    else if (verb == "challenge")
+        m_dungeonId = first;
+    else if (verb == "droptest")
+        RollSandboxDrops(uint8(first), std::max(1u, std::min(second, 20u)));
     else if (verb == "crowddummies")
         SpawnSandboxDummies(std::max(1u, std::min(first, BONK_CROWD_DUMMY_MAX)), BONK_SPAWN_NORMAL, -1.0f);
     else if (verb == "spell")

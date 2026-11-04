@@ -133,6 +133,7 @@ class BonkRun
         bool IsDungeon() const { return m_dungeonId != 0; }
         bool IsChallenge() const { return m_dungeonId != 0 || m_invaderId != 0; }
         bool IsInvasion() const { return m_invaderId != 0; }
+        std::string GetChallengeMapKey() const;
         std::string DescribeForLobby() const;
         void FollowToPortal();
 
@@ -431,6 +432,7 @@ class BonkRun
         void ShowSandboxMenu(Creature* keeper, uint32 menu);
         void SelectSandboxOption(Creature* keeper, uint32 sender, uint32 action);
         bool RunSandboxVerb(std::string const& verb, uint32 first, uint32 second, std::string& error);
+        void RollSandboxDrops(uint8 quality, uint32 count);
         void LeaveSandbox();
         time_t GetSkyTime() const;
 

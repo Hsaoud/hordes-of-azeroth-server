@@ -230,14 +230,26 @@ void BonkRun::DropTierPiece(Creature const* mob, BonkSpawnKind kind)
         m_player->GetBonkPlayer()->CountEpicLuck(quality >= ITEM_QUALITY_EPIC);
 }
 
+std::string BonkRun::GetChallengeMapKey() const
+{
+    uint32 const mapId = m_dungeonId ? m_dungeonId : m_invaderId;
+    BonkMap const* map = mapId ? sBonkMgr.GetMap(mapId) : nullptr;
+    return map ? map->key : std::string();
+}
+
 bool BonkRun::MakeTierPiece(uint8 quality, PendingGear& piece) const
 {
     piece.gear = BonkFound::Roll(GetDropTier(), quality, m_levelRow.rollFloor);
     std::vector<uint32> choices, weapons, trinkets;
-    uint32 const look = BonkMgr::PickGearLook(quality, piece.gear.tier);
+    std::string const challenge = GetChallengeMapKey();
+    bool const epic = quality == ITEM_QUALITY_EPIC;
+    uint32 const look = epic && challenge == BONK_MOLTEN_CORE_MAP_KEY ? BonkMgr::PickMoltenCoreLook() : BonkMgr::PickGearLook(quality, piece.gear.tier);
+    int32 const dungeonBand = epic ? BonkMgr::GetDungeonLookBand(challenge) : -1;
     for (uint32 kind : BonkMgr::GetGearKindsFor(m_player->GetClassMask()))
     {
-        uint32 const entry = BonkMgr::GetGearEntry(kind, quality, look);
+        uint32 entry = dungeonBand >= 0 ? BonkMgr::PickDungeonLookEntry(uint32(dungeonBand), kind) : 0;
+        if (!entry)
+            entry = BonkMgr::GetGearEntry(kind, quality, look);
         if (!entry)
             continue;
         if (kind >= BONK_GEAR_FIRST_TRINKET)

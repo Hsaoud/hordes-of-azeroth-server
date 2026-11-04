@@ -120,8 +120,18 @@ namespace
                 case ITEM_QUALITY_NORMAL:   return "N";
                 case ITEM_QUALITY_UNCOMMON: return "H";
                 case ITEM_QUALITY_RARE:     return "M";
-                default:                    return "E" + std::to_string(BonkMgr::GetEpicLookMythic(look));
+                default:
+                {
+                    uint32 const mythic = BonkMgr::GetEpicLookMythic(look);
+                    return "E" + std::to_string(mythic) + (mythic == 1 ? std::string(",D") + BONK_MOLTEN_CORE_MAP_KEY : std::string());
+                }
             }
+        }
+        uint32 band = 0;
+        if (BonkMgr::ReadDungeonLookEntry(entry, band, kind, look))
+        {
+            order = BONK_GEAR_TIERS + band * BONK_DUNGEON_LOOKS + look;
+            return band == 0 ? "Dzulgurub" : "Druinsaq";
         }
         if (entry >= BONK_LEGENDARY_FIRST && entry < BONK_LEGENDARY_FIRST + BONK_LEGENDARY_KINDS * BONK_GEAR_TIERS)
         {
@@ -151,6 +161,8 @@ namespace
             catalog.push_back(look);
         };
         for (uint32 entry = BONK_GEAR_FIRST; entry < BONK_GEAR_FIRST + BONK_GEAR_KINDS * BONK_GEAR_QUALITIES * BONK_GEAR_TIERS; ++entry)
+            add(entry);
+        for (uint32 entry = BONK_DUNGEON_LOOK_FIRST; entry < BONK_DUNGEON_LOOK_FIRST + BONK_DUNGEON_LOOK_BANDS * BONK_GEAR_KINDS * BONK_DUNGEON_LOOKS; ++entry)
             add(entry);
         for (uint32 entry = BONK_LEGENDARY_FIRST; entry < BONK_LEGENDARY_FIRST + BONK_LEGENDARY_KINDS * BONK_GEAR_TIERS; ++entry)
             add(entry);

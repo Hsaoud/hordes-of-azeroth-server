@@ -1062,6 +1062,10 @@ uint32 const BONK_GEAR_FIRST_TRINKET = 36;
 uint32 const BONK_GEAR_KINDS = 44;
 uint32 const BONK_LEGENDARY_FIRST = 932000;
 uint32 const BONK_LEGENDARY_KINDS = 8;
+uint32 const BONK_DUNGEON_LOOK_FIRST = 933000;
+uint32 const BONK_DUNGEON_LOOK_BANDS = 2;
+uint32 const BONK_DUNGEON_LOOKS = 3;
+char const* const BONK_MOLTEN_CORE_MAP_KEY = "moltencore";
 
 enum BonkTrinketEffect : uint8
 {
@@ -1411,6 +1415,10 @@ class BonkMgr
         static uint32 GetGearEntry(uint32 kind, uint8 quality, uint32 tier);
         static bool ReadGearEntry(uint32 entry, uint32& kind, uint8& quality, uint32& tier);
         static uint32 GetEpicLookMythic(uint32 look);
+        static uint32 PickMoltenCoreLook();
+        static int32 GetDungeonLookBand(std::string const& mapKey);
+        static uint32 PickDungeonLookEntry(uint32 band, uint32 kind);
+        static bool ReadDungeonLookEntry(uint32 entry, uint32& band, uint32& kind, uint32& look);
         static std::vector<uint32> GetGearKindsFor(uint32 classMask);
         static bool ReadTrinketEffect(uint32 entry, BonkTrinketEffect& effect);
         static BonkTrinket const& GetTrinket(BonkTrinketEffect effect);
