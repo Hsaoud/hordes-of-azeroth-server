@@ -21,6 +21,7 @@ struct BonkFallenRecord
     uint32 diedAt = 0;
     bool ironman = false;
     uint32 crashes = 0;
+    bool rested = false;
 };
 
 std::vector<BonkFallenRecord> LoadBonkFallenRecords(uint32 accountId);

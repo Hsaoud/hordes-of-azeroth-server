@@ -174,10 +174,20 @@ class BonkPlayer
         static uint32 GetHardcoreAccount(uint32 accountId);
         static uint32 GetProgressAccountOf(uint32 guidLow, uint32 accountId);
         static void ParkFallenBanks(uint32 accountId);
+        static uint32 GetCharacterAccountOf(uint32 guidLow);
+        static uint32 GetPlainCharacterAccount(uint32 guidLow);
+        static uint32 GetStagedCharacterAccount(uint32 accountId);
+        void ClaimStagedCharacterRows();
+        static void AdoptClassProgress(uint32 guidLow);
+        static void DeleteCharacterProgress(uint32 guidLow);
+        static void RaisePoolBestLevel(uint32 poolAccount, uint32 level);
+        uint32 GetCharacterAccount() const;
         bool IsIronman() const;
         bool IsHardcore() const;
         bool HasFallenInHardcore() const { return m_fellInHardcore; }
         void OnHardcoreDeath(std::string const& killer, std::string const& mapName, uint32 level, uint32 kills);
+        bool RequestRest();
+        static bool TakeRestRequest(uint32 guidLow);
         uint32 GetProgressAccount() const;
 
         void RecordRun(uint32 level, uint32 seconds, uint32 kills, uint32 goldEarned);
@@ -513,6 +523,7 @@ class BonkPlayer
         bool m_goldLoaded = false;
         mutable int8 m_ironman = -1;
         mutable int8 m_hardcore = -1;
+        uint32 m_poolBestLevel = 0;
         bool m_fellInHardcore = false;
         bool UsesHardcorePool() const;
         void SendFallenRecord(uint32 level, uint32 bestLevel, uint32 mastery, std::string const& killer, std::string const& mapName, uint32 kills);

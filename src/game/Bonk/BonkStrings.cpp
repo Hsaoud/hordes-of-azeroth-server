@@ -1016,6 +1016,7 @@ std::vector<BonkStringText> const& GetBonkStringTexts()
         { BONK_STRING_TRANSMOG_ONLY_IN_TOWN,                       "You can change your appearance only in town." },
         { BONK_STRING_CANT_BE_REFUNDED,                            "{1} can't be refunded." },
         { BONK_STRING_REWARD_APPEARANCE,                           "{1} appearance" },
+        { BONK_STRING_HARDCORE_REST_ONLY_FALLEN,                   "Only a character that just fell in Hardcore can be laid to rest." },
     };
     return texts;
 }

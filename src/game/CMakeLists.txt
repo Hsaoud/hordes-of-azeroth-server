@@ -29,6 +29,7 @@ set (game_SRCS
     Bonk/BonkEnchant.cpp
     Bonk/BonkFoundGear.cpp
     Bonk/BonkHardcore.cpp
+    Bonk/BonkCharacterProgress.cpp
     Bonk/BonkKeywords.cpp
     Bonk/BonkIntegrity.cpp
     Bonk/BonkLeaderboard.cpp
@@ -311,6 +312,7 @@ set (game_SRCS
     AutoBroadCastMgr.h
     Bonk/BonkCodex.h
     Bonk/BonkHardcore.h
+    Bonk/BonkCharacterProgress.h
     Bonk/BonkIntegrity.h
     Bonk/BonkLeaderboard.h
     Bonk/BonkLocale.h

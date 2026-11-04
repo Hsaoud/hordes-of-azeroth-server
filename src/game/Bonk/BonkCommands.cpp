@@ -873,6 +873,17 @@ bool ChatHandler::HandleBonkCodexCommand(char*)
     return true;
 }
 
+bool ChatHandler::HandleBonkRestCommand(char* /*args*/)
+{
+    Player* player = m_session->GetPlayer();
+    if (!player->GetBonkPlayer()->RequestRest())
+    {
+        SendSysMessage(player->GetBonkPlayer()->GetString(BONK_STRING_HARDCORE_REST_ONLY_FALLEN).c_str());
+        return true;
+    }
+    return true;
+}
+
 bool ChatHandler::HandleBonkHelloCommand(char* args)
 {
     Player* player = m_session->GetPlayer();

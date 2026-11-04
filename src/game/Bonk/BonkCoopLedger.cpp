@@ -41,24 +41,31 @@ namespace
     uint32 const HOME_MAIL_SENDER = 900009;
     time_t const AWAY_FRESH_SECONDS = 30;
 
+    enum MirrorOwner
+    {
+        MIRROR_POOL,
+        MIRROR_CHARACTER_PROGRESS,
+        MIRROR_CHARACTER_GUID,
+    };
+
     struct MirroredTable
     {
         char const* name;
-        bool perCharacter;
+        MirrorOwner owner;
         uint32 columns;
     };
 
     MirroredTable const MIRRORED_TABLES[] = {
-        { "bonk_account_upgrade", false, 3 },
-        { "bonk_account_talent", false, 4 },
-        { "bonk_account_mastery_node", false, 3 },
-        { "bonk_account_mastery_preset", false, 5 },
-        { "bonk_account_mastery_preset_active", false, 3 },
-        { "bonk_account_starter", false, 3 },
-        { "bonk_account_disabled", false, 3 },
-        { "bonk_account_epic_luck", false, 2 },
-        { "bonk_account_board", false, 2 },
-        { "bonk_character_title", true, 2 },
+        { "bonk_account_upgrade", MIRROR_POOL, 3 },
+        { "bonk_account_talent", MIRROR_POOL, 4 },
+        { "bonk_account_mastery_node", MIRROR_CHARACTER_PROGRESS, 3 },
+        { "bonk_account_mastery_preset", MIRROR_CHARACTER_PROGRESS, 5 },
+        { "bonk_account_mastery_preset_active", MIRROR_CHARACTER_PROGRESS, 3 },
+        { "bonk_account_starter", MIRROR_CHARACTER_PROGRESS, 3 },
+        { "bonk_account_disabled", MIRROR_POOL, 3 },
+        { "bonk_account_epic_luck", MIRROR_POOL, 2 },
+        { "bonk_account_board", MIRROR_POOL, 2 },
+        { "bonk_character_title", MIRROR_CHARACTER_GUID, 2 },
     };
 
     struct GuestTotals
@@ -83,6 +90,7 @@ namespace
     {
         uint32 accountId = 0;
         uint32 characterGuid = 0;
+        uint32 characterAccount = 0;
         std::string game;
     };
 
@@ -152,7 +160,8 @@ namespace
 
     uint32 TierCap(HomeTarget const& home)
     {
-        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT MAX(`best_level`) FROM `bonk_account_level` WHERE `account` = %u", home.accountId));
+        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT MAX(`best_level`) FROM `bonk_account_level` WHERE `account` IN (%u, %u)",
+            home.accountId, home.characterAccount));
         return std::max(1u, result ? result->Fetch()[0].GetUInt32() : 0u);
     }
 
@@ -289,11 +298,13 @@ namespace
         int64 delta = 0;
         if (!ReadCount(fields, 2, classId) || !ReadSigned(fields, 3, delta))
             return "broken mastery entry";
+        if (!home.characterAccount)
+            return "no home character";
         if (!Spend(home, "mastery", MASTERY_ALLOWANCE, delta))
             return OverLimit("mastery");
         CharacterDatabase.PExecute("INSERT INTO `bonk_account_mastery` (`account`, `class`, `xp`) VALUES (%u, %u, %u) "
             "ON DUPLICATE KEY UPDATE `xp` = GREATEST(0, CAST(`xp` AS SIGNED) + %lld)",
-            home.accountId, classId, uint32(std::max<int64>(0, delta)), (long long)delta);
+            home.characterAccount, classId, uint32(std::max<int64>(0, delta)), (long long)delta);
         return "";
     }
 
@@ -325,12 +336,15 @@ namespace
             return "broken level entry";
         if (!classId || classId >= MAX_CLASSES)
             return "unknown class " + std::to_string(classId);
+        if (!home.characterAccount)
+            return "no home character";
+        BonkPlayer::RaisePoolBestLevel(home.accountId, bestLevel);
         CharacterDatabase.PExecute("INSERT INTO `bonk_account_level` (`account`, `class`, `best_level`, `best_ms`, `best_finale`) VALUES (%u, %u, %u, %u, %u) "
             "ON DUPLICATE KEY UPDATE "
             "`best_ms` = CASE WHEN VALUES(`best_level`) > `best_level` THEN VALUES(`best_ms`) "
             "WHEN VALUES(`best_level`) = `best_level` AND VALUES(`best_ms`) > 0 AND (`best_ms` = 0 OR VALUES(`best_ms`) < `best_ms`) THEN VALUES(`best_ms`) ELSE `best_ms` END, "
             "`best_level` = GREATEST(`best_level`, VALUES(`best_level`)), `best_finale` = GREATEST(`best_finale`, VALUES(`best_finale`))",
-            home.accountId, classId, bestLevel, bestMs, finale);
+            home.characterAccount, classId, bestLevel, bestMs, finale);
         return "";
     }
 
@@ -353,7 +367,7 @@ namespace
         if (!home.characterGuid)
             return "no home character";
         run.name = HomeCharacterName(home);
-        BonkPlayer::ApplyLevelBest(home.accountId, uint8(classId), run);
+        BonkPlayer::ApplyLevelBest(home.characterAccount, uint8(classId), run);
         return "";
     }
 
@@ -367,7 +381,9 @@ namespace
             return "broken finalebest entry";
         if (!classId || classId >= MAX_CLASSES)
             return "unknown class " + std::to_string(classId);
-        BonkPlayer::ApplyFinaleBest(home.accountId, uint8(classId), level, score, seconds);
+        if (!home.characterAccount)
+            return "no home character";
+        BonkPlayer::ApplyFinaleBest(home.characterAccount, uint8(classId), level, score, seconds);
         return "";
     }
 
@@ -599,7 +615,7 @@ namespace
         MirroredTable const* table = FindMirroredTable(fields[2]);
         if (!table)
             return "unknown table " + fields[2];
-        uint32 const owner = table->perCharacter ? home.characterGuid : home.accountId;
+        uint32 const owner = table->owner == MIRROR_CHARACTER_GUID ? home.characterGuid : table->owner == MIRROR_CHARACTER_PROGRESS ? home.characterAccount : home.accountId;
         if (!owner)
             return "no home character";
         std::vector<std::string> statements;
@@ -622,7 +638,7 @@ namespace
                 statements.push_back(std::string("INSERT INTO `") + table->name + "` VALUES (" + list + ")");
             }
         }
-        CharacterDatabase.PExecute("DELETE FROM `%s` WHERE `%s` = %u", table->name, table->perCharacter ? "guid" : "account", owner);
+        CharacterDatabase.PExecute("DELETE FROM `%s` WHERE `%s` = %u", table->name, table->owner == MIRROR_CHARACTER_GUID ? "guid" : "account", owner);
         for (std::string const& statement : statements)
             CharacterDatabase.Execute(statement.c_str());
         return "";
@@ -631,7 +647,7 @@ namespace
     std::string ReadTableRows(MirroredTable const& table, uint32 owner)
     {
         std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT * FROM `%s` WHERE `%s` = %u",
-            table.name, table.perCharacter ? "guid" : "account", owner));
+            table.name, table.owner == MIRROR_CHARACTER_GUID ? "guid" : "account", owner));
         std::vector<std::string> rows;
         if (result)
         {
@@ -934,7 +950,8 @@ namespace
         bonk->GetRunRecord(totals.runs, totals.bestLevel, totals.bestSeconds, totals.kills, totals.goldEarned);
         totals.quests = sBonkQuests.GetAllProgress(bonk->GetProgressAccount());
         for (MirroredTable const& table : MIRRORED_TABLES)
-            totals.tables[table.name] = ReadTableRows(table, table.perCharacter ? guest->GetGUIDLow() : bonk->GetProgressAccount());
+            totals.tables[table.name] = ReadTableRows(table, table.owner == MIRROR_CHARACTER_GUID ? guest->GetGUIDLow() :
+                table.owner == MIRROR_CHARACTER_PROGRESS ? bonk->GetCharacterAccount() : bonk->GetProgressAccount());
         totals.inRun = bonk->GetRun() != nullptr;
         if (!totals.inRun)
             totals.inventory = DescribeInventory(guest);
@@ -988,6 +1005,7 @@ namespace
         if (!result)
             return home;
         home.characterGuid = result->Fetch()[0].GetUInt32();
+        home.characterAccount = BonkPlayer::GetCharacterAccountOf(home.characterGuid);
         home.accountId = BonkPlayer::GetProgressAccountOf(home.characterGuid, home.accountId);
         return home;
     }

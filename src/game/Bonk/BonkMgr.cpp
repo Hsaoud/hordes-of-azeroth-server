@@ -4,6 +4,7 @@
 #include "BonkFoundGear.h"
 #include "BonkLocale.h"
 #include "BonkRun.h"
+#include "BonkCharacterProgress.h"
 #include "BonkMastery.h"
 #include "BonkQuests.h"
 #include "Database/DatabaseEnv.h"
@@ -308,6 +309,7 @@ void BonkMgr::Load()
     LoadBoltLooks();
     sBonkQuests.Load();
     sBonkMastery.Load();
+    BonkCharacterProgress::MoveClassProgressToCharacters();
     LoadPetFamilies();
     sBonkLocale.Load();
 

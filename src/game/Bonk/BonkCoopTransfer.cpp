@@ -117,28 +117,51 @@ namespace
         return false;
     }
 
-    std::string ExportAccountRows(uint32 accountId)
+    char const* const CHARACTER_ROW_PREFIX = "character:";
+
+    bool IsCharacterRow(std::string const& table, Field* fields)
+    {
+        if (table == "bonk_account_mastery_node")
+            return true;
+        if (table == "bonk_account_level")
+            return fields[1].GetUInt32() != 0;
+        for (char const* classTable : { "bonk_account_mastery", "bonk_account_mastery_preset", "bonk_account_mastery_preset_active", "bonk_account_starter",
+            "bonk_account_level_best", "bonk_account_kept_talents" })
+            if (table == classTable)
+                return true;
+        return false;
+    }
+
+    void ExportRows(std::ostringstream& out, char const* table, uint32 account, bool characterRows)
+    {
+        std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT * FROM `%s` WHERE `account` = %u", table, account));
+        if (!result)
+            return;
+        uint32 const columns = result->GetFieldCount();
+        do
+        {
+            Field* fields = result->Fetch();
+            if (IsCharacterRow(table, fields) != characterRows)
+                continue;
+            out << (characterRows ? CHARACTER_ROW_PREFIX : "") << table;
+            for (uint32 i = 1; i < columns; ++i)
+                out << '\t' << (fields[i].IsNULL() ? std::string("\\N") : Escape(fields[i].GetCppString()));
+            out << '\n';
+        } while (result->NextRow());
+    }
+
+    std::string ExportAccountRows(uint32 accountId, uint32 characterAccount)
     {
         std::ostringstream out;
         for (char const* table : ACCOUNT_TABLES)
         {
-            std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT * FROM `%s` WHERE `account` = %u", table, accountId));
-            if (!result)
-                continue;
-            uint32 const columns = result->GetFieldCount();
-            do
-            {
-                Field* fields = result->Fetch();
-                out << table;
-                for (uint32 i = 1; i < columns; ++i)
-                    out << '\t' << (fields[i].IsNULL() ? std::string("\\N") : Escape(fields[i].GetCppString()));
-                out << '\n';
-            } while (result->NextRow());
+            ExportRows(out, table, accountId, false);
+            ExportRows(out, table, characterAccount, true);
         }
         return out.str();
     }
 
-    bool ImportAccountRows(std::string const& text, uint32 accountId)
+    bool ImportAccountRows(std::string const& text, uint32 accountId, uint32 characterAccount)
     {
         std::istringstream in(text);
         std::string line;
@@ -148,9 +171,12 @@ namespace
             if (line.empty())
                 continue;
             std::vector<std::string> fields = SplitTabs(line);
+            bool const characterRow = fields[0].compare(0, strlen(CHARACTER_ROW_PREFIX), CHARACTER_ROW_PREFIX) == 0;
+            if (characterRow)
+                fields[0] = fields[0].substr(strlen(CHARACTER_ROW_PREFIX));
             if (!IsAccountTable(fields[0]))
                 return false;
-            std::string values = std::to_string(accountId);
+            std::string values = std::to_string(characterRow ? characterAccount : accountId);
             for (size_t i = 1; i < fields.size(); ++i)
             {
                 if (fields[i] == "\\N")
@@ -166,7 +192,7 @@ namespace
         }
         CharacterDatabase.BeginTransaction();
         for (char const* table : ACCOUNT_TABLES)
-            CharacterDatabase.PExecute("DELETE FROM `%s` WHERE `account` = %u", table, accountId);
+            CharacterDatabase.PExecute("DELETE FROM `%s` WHERE `account` IN (%u, %u)", table, accountId, characterAccount);
         for (std::string const& statement : statements)
             CharacterDatabase.Execute(statement.c_str());
         return CharacterDatabase.CommitTransaction();
@@ -484,7 +510,7 @@ namespace
         uint32 const accountId = AccountOfCharacter(low);
         PlayerDumpWriter writer;
         WriteFile(DUMP_FILE, writer.GetDump(low));
-        WriteFile(ACCOUNT_FILE, ExportAccountRows(ProgressAccountOf(low, accountId)));
+        WriteFile(ACCOUNT_FILE, ExportAccountRows(ProgressAccountOf(low, accountId), BonkPlayer::GetCharacterAccountOf(low)));
         return "ok " + std::to_string(low) + " " + std::to_string(accountId);
     }
 
@@ -516,7 +542,7 @@ namespace
             std::lock_guard<std::mutex> guard(s_pendingMailLock);
             s_pendingMail[name] = ReadHomeMail(dump);
         }
-        if (!ImportAccountRows(ReadFile(ACCOUNT_FILE), accountId))
+        if (!ImportAccountRows(ReadFile(ACCOUNT_FILE), accountId, BonkPlayer::GetStagedCharacterAccount(accountId)))
             return Error(accountId, BONK_STRING_COOP_TRANSFER_PROGRESS_FAILED);
         return "ok 0 " + name;
     }

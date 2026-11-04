@@ -19,6 +19,7 @@ namespace
 
     std::mutex s_hardcoreRequestsLock;
     std::set<uint32> s_hardcoreRequests;
+    std::set<uint32> s_restRequests;
 
     std::string GlueString(std::string text)
     {
@@ -81,7 +82,7 @@ std::vector<BonkFallenRecord> LoadBonkFallenRecords(uint32 accountId)
 {
     std::vector<BonkFallenRecord> records;
     std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `guid`, `name`, `class`, `level`, `best_level`, `mastery`, `played`, `runs`, `kills`, "
-        "`killer`, `map`, `died_at`, `ironman`, `crashes` FROM `bonk_hardcore_fallen` WHERE `account` = %u ORDER BY `died_at` DESC, `id` DESC LIMIT %u",
+        "`killer`, `map`, `died_at`, `ironman`, `crashes`, `rested` FROM `bonk_hardcore_fallen` WHERE `account` = %u ORDER BY `died_at` DESC, `id` DESC LIMIT %u",
         accountId, FALLEN_LIST_SIZE));
     if (!result)
         return records;
@@ -103,6 +104,7 @@ std::vector<BonkFallenRecord> LoadBonkFallenRecords(uint32 accountId)
         record.diedAt = fields[11].GetUInt32();
         record.ironman = fields[12].GetUInt8() != 0;
         record.crashes = fields[13].GetUInt32();
+        record.rested = fields[14].GetUInt8() != 0;
         records.push_back(record);
     } while (result->NextRow());
     return records;
@@ -125,6 +127,8 @@ std::string DescribeBonkFallenForGlue(BonkFallenRecord const& record)
         << ", crashes = " << record.crashes;
     if (record.ironman)
         lua << ", ironman = true";
+    if (record.rested)
+        lua << ", rested = true";
     lua << " }";
     return lua.str();
 }
@@ -228,9 +232,31 @@ void BonkPlayer::OnHardcoreDeath(std::string const& killer, std::string const& m
 
     m_hardcore = 0;
     m_fellInHardcore = true;
+    if (!ironman)
+        RaisePoolBestLevel(accountId, bestLevel);
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Bonk: %s fell in Hardcore (level %u, best level %u, killed by %s on %s)",
         m_player->GetName(), level, bestLevel, killer.c_str(), mapName.c_str());
     SendFallenRecord(level, bestLevel, mastery, killer, mapName, totalKills);
+}
+
+bool BonkPlayer::RequestRest()
+{
+    if (!m_fellInHardcore)
+        return false;
+    uint32 const guidLow = m_player->GetGUIDLow();
+    CharacterDatabase.DirectPExecute("UPDATE `bonk_hardcore_fallen` SET `rested` = 1 WHERE `guid` = %u ORDER BY `id` DESC LIMIT 1", guidLow);
+    {
+        std::lock_guard<std::mutex> guard(s_hardcoreRequestsLock);
+        s_restRequests.insert(guidLow);
+    }
+    SendAddon("hardcorerested");
+    return true;
+}
+
+bool BonkPlayer::TakeRestRequest(uint32 guidLow)
+{
+    std::lock_guard<std::mutex> guard(s_hardcoreRequestsLock);
+    return s_restRequests.erase(guidLow) > 0;
 }
 
 void BonkPlayer::SendFallenRecord(uint32 level, uint32 bestLevel, uint32 mastery, std::string const& killer, std::string const& mapName, uint32 kills)

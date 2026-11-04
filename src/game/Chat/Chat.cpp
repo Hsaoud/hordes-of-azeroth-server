@@ -278,6 +278,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "respec",         SEC_PLAYER,         false, &ChatHandler::HandleBonkRespecCommand,          "", nullptr },
         { "preset",         SEC_PLAYER,         false, &ChatHandler::HandleBonkPresetCommand,          "", nullptr },
         { "hello",         SEC_PLAYER,         false, &ChatHandler::HandleBonkHelloCommand,           "", nullptr },
+        { "rest",           SEC_PLAYER,         false, &ChatHandler::HandleBonkRestCommand,            "", nullptr },
         { "lang",           SEC_PLAYER,         false, &ChatHandler::HandleBonkLangCommand,            "", nullptr },
         { "effects",        SEC_PLAYER,         false, &ChatHandler::HandleBonkEffectsCommand,         "", nullptr },
         { "ring",           SEC_PLAYER,         false, &ChatHandler::HandleBonkRingCommand,            "", nullptr },

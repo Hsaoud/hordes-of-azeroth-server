@@ -36,7 +36,7 @@ void BonkPlayer::LoadStarter()
 {
     m_starterChoice = 0;
     std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery("SELECT `weapon` FROM `bonk_account_starter` WHERE `account` = %u AND `class` = %u",
-        m_player->GetBonkPlayer()->GetProgressAccount(), uint32(m_player->GetClass())));
+        m_player->GetBonkPlayer()->GetCharacterAccount(), uint32(m_player->GetClass())));
     if (result)
         m_starterChoice = result->Fetch()[0].GetUInt32();
 }
@@ -103,7 +103,7 @@ bool BonkPlayer::ChooseStarter(uint32 weaponId, std::string& error)
         }
         m_starterChoice = weaponId;
         CharacterDatabase.PExecute("REPLACE INTO `bonk_account_starter` (`account`, `class`, `weapon`) VALUES (%u, %u, %u)",
-            m_player->GetBonkPlayer()->GetProgressAccount(), uint32(m_player->GetClass()), weaponId);
+            m_player->GetBonkPlayer()->GetCharacterAccount(), uint32(m_player->GetClass()), weaponId);
         SendStarters();
         return true;
     }

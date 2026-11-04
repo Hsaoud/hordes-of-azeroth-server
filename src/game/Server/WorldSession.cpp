@@ -687,6 +687,14 @@ void WorldSession::LogoutPlayer(bool Save)
     m_playerLogout = true;
     m_playerSave = Save;
 
+    ObjectGuid restGuid;
+    if (_player && BonkPlayer::TakeRestRequest(_player->GetGUIDLow()))
+    {
+        restGuid = _player->GetObjectGuid();
+        Save = false;
+        m_playerSave = false;
+    }
+
     if (_player)
     {
         bool inWorld = _player->IsInWorld() && _player->FindMap();
@@ -866,7 +874,8 @@ void WorldSession::LogoutPlayer(bool Save)
             m_masterPlayer->SetSocial(nullptr);
         }
 
-        m_masterPlayer->SaveToDB();
+        if (restGuid.IsEmpty())
+            m_masterPlayer->SaveToDB();
         delete m_masterPlayer;
         m_masterPlayer = nullptr;
     }
@@ -876,6 +885,12 @@ void WorldSession::LogoutPlayer(bool Save)
     m_playerSave = false;
     m_playerRecentlyLogout = true;
     LogoutRequest(0);
+
+    if (!restGuid.IsEmpty())
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "Bonk: character %u laid to rest and deleted", restGuid.GetCounter());
+        Player::DeleteFromDB(restGuid, GetAccountId(), true, true);
+    }
 }
 
 // Kick a player out of the World
