@@ -206,7 +206,7 @@ bool BonkRun::SpawnHorde()
                 SpawnMobAt(*elite, x, y, z);
         }
 
-    m_player->GetBonkPlayer()->Notify("You are surrounded!");
+    NotifyMiniEvent("You are surrounded!");
     return true;
 }
 
@@ -247,7 +247,7 @@ bool BonkRun::SpawnTreasureGoblin()
     StartMiniEventTarget(mob, "Treasure Goblin", seconds);
     m_miniEvent.objectiveId = m_objectives.Follow(m_player, BONK_OBJECTIVE_EVENT, mob, "Treasure Goblin", seconds,
         BONK_GOBLIN_ICON, "Catch it before it gets away to get Valor and a chest.");
-    m_player->GetBonkPlayer()->Notify("A treasure goblin appeared! Catch it before it gets away!");
+    NotifyMiniEvent("A treasure goblin appeared! Catch it before it gets away!");
     return true;
 }
 
@@ -270,7 +270,7 @@ bool BonkRun::SpawnBounty()
     std::string const name = mob->GetName();
     uint32 const seconds = BONK_BOUNTY_SECONDS + uint32(GetUtility(BONK_UTILITY_EVENT_TIME));
     StartMiniEventTarget(mob, "Bounty: " + name, seconds);
-    m_player->GetBonkPlayer()->Notify("A bounty is out on " + name + "! Kill it within " + std::to_string(seconds) + " seconds to earn a chest.");
+    NotifyMiniEvent("A bounty is out on " + name + "! Kill it within " + std::to_string(seconds) + " seconds to earn a chest.");
     return true;
 }
 
@@ -301,13 +301,39 @@ void BonkRun::UpdateMiniEventTarget(uint32 diff)
     }
 
     BonkPlayer* bonk = m_player->GetBonkPlayer();
-    bonk->Notify(m_miniEvent.type == BONK_MINI_EVENT_GOBLIN ? std::string("The treasure goblin got away!") :
+    NotifyMiniEvent(m_miniEvent.type == BONK_MINI_EVENT_GOBLIN ? std::string("The treasure goblin got away!") :
         std::string(target->GetName()) + " slipped away.");
     bonk->SendAddon("mobdead~" + std::string(target->GetName()) + "~" + std::to_string(target->GetPlateId()) + "~" +
         BonkMobAI::GetUnitGuidText(target));
     target->CastSpell(target, BONK_SPELL_SPAWN_SMOKE, true);
     target->DespawnOrUnsummon(500);
     EndMiniEvent();
+}
+
+void BonkRun::CreditMiniEvent()
+{
+    auto runs = GetCoopRuns();
+    if (runs.empty()) runs.push_back(this);
+    for (BonkRun* run : runs)
+        sBonkQuests.OnProgress(run->m_player, BONK_QUEST_MINI_EVENTS, m_miniEvent.type, 1);
+}
+
+void BonkRun::RewardMiniEventValor(uint32 valor)
+{
+    auto runs = GetCoopRuns();
+    if (runs.empty()) runs.push_back(this);
+    for (BonkRun* run : runs)
+    {
+        run->m_coins += valor;
+        run->SendState();
+    }
+}
+
+void BonkRun::NotifyMiniEvent(std::string const& text) const
+{
+    auto runs = GetCoopRuns();
+    if (runs.empty()) m_player->GetBonkPlayer()->Notify(text);
+    else for (BonkRun* run : runs) run->m_player->GetBonkPlayer()->Notify(text);
 }
 
 void BonkRun::OnMiniEventTargetKilled(Creature* mob)
@@ -321,20 +347,20 @@ void BonkRun::OnMiniEventTargetKilled(Creature* mob)
         return;
 
     BonkPlayer* bonk = m_player->GetBonkPlayer();
-    sBonkQuests.OnProgress(m_player, BONK_QUEST_MINI_EVENTS, m_miniEvent.type, 1);
+    CreditMiniEvent();
     float const x = mob->GetPositionX(), y = mob->GetPositionY(), z = mob->GetPositionZ();
     if (m_miniEvent.type == BONK_MINI_EVENT_GOBLIN)
     {
         uint32 const valor = GetChestCost();
-        m_coins += valor;
+        RewardMiniEventValor(valor);
         SpawnChest(true, x, y, z);
-        bonk->Notify("You caught the treasure goblin! It drops " + std::to_string(valor) + " Valor and a chest.");
+        NotifyMiniEvent("You caught the treasure goblin! It drops " + std::to_string(valor) + " Valor and a chest.");
     }
     else
     {
         BonkMobAI const* ai = dynamic_cast<BonkMobAI const*>(mob->AI());
         SpawnChest(true, x, y, z, 3 + (ai ? ai->GetAffixCount() : 0));
-        bonk->Notify("You claimed the bounty on " + std::string(mob->GetName()) + " and earned a chest!");
+        NotifyMiniEvent("You claimed the bounty on " + std::string(mob->GetName()) + " and earned a chest!");
     }
     EndMiniEvent();
     SendState();
@@ -478,7 +504,7 @@ bool BonkRun::SpawnKoboldThieves()
         return false;
 
     StartMiniEventGroup("Kobold Thieves", seconds);
-    m_player->GetBonkPlayer()->Notify("Kobold thieves stole your experience! Kill them to get it back.");
+    NotifyMiniEvent("Kobold thieves stole your experience! Kill them to get it back.");
     return true;
 }
 
@@ -538,7 +564,7 @@ bool BonkRun::SpawnScourgeInvasion()
 
     m_miniEvent.spawnMs = BONK_SHARD_SPAWN_MS / 2;
     StartMiniEventGroup("Scourge Invasion", seconds);
-    m_player->GetBonkPlayer()->Notify("The Scourge invades! Destroy the Necrotic Shards.");
+    NotifyMiniEvent("The Scourge invades! Destroy the Necrotic Shards.");
     return true;
 }
 
@@ -567,7 +593,7 @@ bool BonkRun::SpawnDemonPortal()
         BONK_PORTAL_ICON, "Demons pour out of it until you destroy it. Destroy it for a chest.");
     m_miniEvent.spawnMs = 0;
     StartMiniEventGroup("Demon Portal", seconds);
-    m_player->GetBonkPlayer()->Notify("A demon portal opens! Destroy it before it closes.");
+    NotifyMiniEvent("A demon portal opens! Destroy it before it closes.");
     return true;
 }
 
@@ -613,7 +639,7 @@ bool BonkRun::SpawnStampede()
     }
     if (!spawned)
         return false;
-    m_player->GetBonkPlayer()->Notify("A stampede is coming! Get out of the way!");
+    NotifyMiniEvent("A stampede is coming! Get out of the way!");
     return true;
 }
 
@@ -736,9 +762,9 @@ void BonkRun::UpdateMiniEventGroup(uint32 diff)
     BonkPlayer* bonk = m_player->GetBonkPlayer();
     switch (m_miniEvent.type)
     {
-        case BONK_MINI_EVENT_KOBOLDS: bonk->Notify("The kobolds got away with your experience!"); break;
-        case BONK_MINI_EVENT_SCOURGE: bonk->Notify("The Scourge invasion moves on."); break;
-        case BONK_MINI_EVENT_PORTAL:  bonk->Notify("The demon portal closes."); break;
+        case BONK_MINI_EVENT_KOBOLDS: NotifyMiniEvent("The kobolds got away with your experience!"); break;
+        case BONK_MINI_EVENT_SCOURGE: NotifyMiniEvent("The Scourge invasion moves on."); break;
+        case BONK_MINI_EVENT_PORTAL:  NotifyMiniEvent("The demon portal closes."); break;
         default: break;
     }
     for (ObjectGuid const& guid : m_miniEvent.targets)
@@ -775,22 +801,22 @@ void BonkRun::OnMiniEventGroupKilled(Creature* mob)
             auto const loot = m_miniEvent.stolen.find(mob->GetObjectGuid());
             if (loot != m_miniEvent.stolen.end() && loot->second)
                 SpawnOrb(x, y, z, loot->second, BONK_ORB_RED);
-            bonk->Notify("You caught a kobold thief (" + std::to_string(done) + "/" + std::to_string(m_miniEvent.total) + ")!");
+            NotifyMiniEvent("You caught a kobold thief (" + std::to_string(done) + "/" + std::to_string(m_miniEvent.total) + ")!");
             break;
         }
         case BONK_MINI_EVENT_SCOURGE:
         {
             uint32 const valor = std::max(1u, uint32(GetChestCost() * BONK_SHARD_VALOR + 0.5f));
-            m_coins += valor;
+            RewardMiniEventValor(valor);
             SpawnOrb(x, y, z, uint32(GetNextLevelXp() * BONK_SHARD_EXPERIENCE), BONK_ORB_RED);
-            bonk->Notify("You destroyed a Necrotic Shard (" + std::to_string(done) + "/" + std::to_string(m_miniEvent.total) + ") and earned " +
+            NotifyMiniEvent("You destroyed a Necrotic Shard (" + std::to_string(done) + "/" + std::to_string(m_miniEvent.total) + ") and earned " +
                 std::to_string(valor) + " Valor!");
             SendState();
             break;
         }
         case BONK_MINI_EVENT_PORTAL:
             SpawnChest(true, x, y, z, BONK_PORTAL_CHEST_CHOICES);
-            bonk->Notify("The demon portal is destroyed, leaving a chest behind!");
+            NotifyMiniEvent("The demon portal is destroyed, leaving a chest behind!");
             break;
         default:
             break;
@@ -798,11 +824,11 @@ void BonkRun::OnMiniEventGroupKilled(Creature* mob)
 
     if (!m_miniEvent.targets.empty())
         return;
-    sBonkQuests.OnProgress(m_player, BONK_QUEST_MINI_EVENTS, m_miniEvent.type, 1);
+    CreditMiniEvent();
     if (m_miniEvent.type == BONK_MINI_EVENT_SCOURGE)
-        bonk->Notify("You turned back the Scourge invasion!");
+        NotifyMiniEvent("You turned back the Scourge invasion!");
     else if (m_miniEvent.type == BONK_MINI_EVENT_KOBOLDS)
-        bonk->Notify("You caught every kobold thief!");
+        NotifyMiniEvent("You caught every kobold thief!");
     EndMiniEvent();
 }
 
@@ -876,7 +902,7 @@ bool BonkRun::SpawnCaravan()
     m_miniEvent.objectives[caravan->GetObjectGuid()] = m_objectives.Follow(m_player, BONK_OBJECTIVE_EVENT, caravan, "Kodo Caravan", seconds,
         BONK_CARAVAN_ICON, "Keep the raiders off it until it gets across, and it will leave you a chest with extra choices.");
     StartMiniEventGroup("Kodo Caravan", seconds);
-    m_player->GetBonkPlayer()->Notify("A kodo caravan is passing through! Keep the raiders off it until it gets across.");
+    NotifyMiniEvent("A kodo caravan is passing through! Keep the raiders off it until it gets across.");
     return true;
 }
 
@@ -969,7 +995,7 @@ bool BonkRun::UpdateCaravan(uint32 diff)
     if (mark > m_miniEvent.warned)
     {
         m_miniEvent.warned = mark;
-        m_player->GetBonkPlayer()->Notify(mark == 2 ? "The caravan is about to fall!" : "The caravan is under attack!");
+        NotifyMiniEvent(mark == 2 ? "The caravan is about to fall!" : "The caravan is under attack!");
     }
     return false;
 }
@@ -1012,20 +1038,20 @@ void BonkRun::EndCaravan(bool arrived)
             if (z <= INVALID_HEIGHT)
                 z = m_miniEvent.path.empty() ? caravan->GetPositionZ() : m_miniEvent.path.back().z;
             SpawnChest(true, x, y, z, BONK_CARAVAN_CHEST_CHOICES + GetDifficultyStep());
-            sBonkQuests.OnProgress(m_player, BONK_QUEST_MINI_EVENTS, BONK_MINI_EVENT_CARAVAN, 1);
-            bonk->Notify("The caravan made it across and left you a chest!");
+            CreditMiniEvent();
+            NotifyMiniEvent("The caravan made it across and left you a chest!");
         }
         else
         {
             caravan->CastSpell(caravan, BONK_SPELL_SPAWN_SMOKE, true);
-            bonk->Notify("The caravan is lost.");
+            NotifyMiniEvent("The caravan is lost.");
         }
         caravan->DespawnOrUnsummon(arrived ? 3000 : 500);
     }
     else
     {
         bonk->SendAddon("allydone");
-        bonk->Notify("The caravan is lost.");
+        NotifyMiniEvent("The caravan is lost.");
     }
     EndMiniEvent();
 }

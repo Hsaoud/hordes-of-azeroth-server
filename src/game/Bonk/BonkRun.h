@@ -117,7 +117,7 @@ class BonkRun
         void RefreshCoopPause();
         void SetPausedLocal(bool paused);
         void EndCoop(bool wentHome, bool abort = false);
-        void CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer);
+        void CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer, bool eventPaysChest);
         void Update(uint32 diff);
         void Abort();
         void Surrender();
@@ -156,7 +156,7 @@ class BonkRun
         void BringBossEarlier();
         uint32 GetStage() const { return m_stage; }
 
-        void OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer = nullptr);
+        void OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer = nullptr, bool sharedEventReward = false);
         void OnMobStuck(Creature* mob);
         void OnWeaponDamage(uint32 damage);
         void OnHeroHealed(uint32 amount) { m_healedUnreported += amount; m_minuteHealed += amount; }
@@ -370,6 +370,9 @@ class BonkRun
         void UpdateMiniEvents(uint32 diff);
         BonkMiniEventType PickMiniEvent(uint32 allowed) const;
         bool StartMiniEvent(BonkMiniEventType type);
+        void CreditMiniEvent();
+        void RewardMiniEventValor(uint32 valor);
+        void NotifyMiniEvent(std::string const& text) const;
         bool SpawnHorde();
         bool SpawnTreasureGoblin();
         bool SpawnBounty();

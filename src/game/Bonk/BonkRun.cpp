@@ -9739,7 +9739,7 @@ void BonkRun::GiveGold(uint32 copper)
     m_goldEarned += copper;
 }
 
-void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer)
+void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer, bool sharedEventReward)
 {
     if (m_state != STATE_RUNNING)
         return;
@@ -9749,7 +9749,7 @@ void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer)
 
     bool const eventGroup = m_miniEventActive &&
         std::find(m_miniEvent.targets.begin(), m_miniEvent.targets.end(), mob->GetObjectGuid()) != m_miniEvent.targets.end();
-    bool const eventPaysChest = eventGroup || (m_miniEventActive && mob->GetObjectGuid() == m_miniEvent.target);
+    bool const eventPaysChest = sharedEventReward || eventGroup || (m_miniEventActive && mob->GetObjectGuid() == m_miniEvent.target);
     OnMiniEventTargetKilled(mob);
 
     ++m_kills;
@@ -9846,7 +9846,7 @@ void BonkRun::OnMobKilled(Creature* mob, BonkSpawnKind kind, Unit* killer)
             QueueGlyphPick();
         OpenPortal(mob);
     }
-    CreditCoopKill(mob, kind, killer);
+    CreditCoopKill(mob, kind, killer, eventPaysChest);
 }
 
 BonkRun::OwnedWeapon* BonkRun::FindOwned(uint32 weaponId)

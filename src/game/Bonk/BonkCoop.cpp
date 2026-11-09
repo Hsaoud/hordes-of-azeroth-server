@@ -346,7 +346,7 @@ void BonkRun::RefreshCoopPause()
 {
     bool paused = false;
     auto runs = GetCoopRuns();
-    for (BonkRun* run : runs) paused |= (run->m_player->IsAlive() && run->m_coopPauseWanted) || run->m_state == STATE_ENTERING;
+    for (BonkRun* run : runs) paused |= run->m_coopPauseWanted || run->m_state == STATE_ENTERING;
     for (BonkRun* run : runs) run->SetPausedLocal(paused);
 }
 
@@ -498,7 +498,7 @@ void BonkRun::EndCoop(bool, bool)
     }
 }
 
-void BonkRun::CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer)
+void BonkRun::CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer, bool eventPaysChest)
 {
     if (IsCoopFollower()) return;
     for (BonkRun* member : GetCoopRuns())
@@ -506,7 +506,7 @@ void BonkRun::CreditCoopKill(Creature* mob, BonkSpawnKind kind, Unit* killer)
         {
             member->m_bossGuid = kind == BONK_SPAWN_BOSS && m_state == STATE_PORTAL ? mob->GetObjectGuid() : m_bossGuid;
             member->m_bossArrivals = m_bossArrivals;
-            member->OnMobKilled(mob, kind, killer);
+            member->OnMobKilled(mob, kind, killer, eventPaysChest);
         }
 }
 
